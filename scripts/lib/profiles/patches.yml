@@ -460,6 +460,40 @@ patches:
       drop_when: "the APEX GGUF ships a corrected default chat template, OR the override is re-vendored (the same drift_guard must clear the next re-vendor)"
     status: unverified
 
+  - id: deepseek-v4-dsml-chat-template
+    model: [deepseek-v4-flash-0731]
+    files:
+      - models/deepseek-v4-flash-0731/llama-cpp/patches/deepseek-v4-chat-template/chat_template.jinja
+    load_bearing_when:
+      - composes:
+          - llamacpp/deepseek-flash-multi4-antirez-iq2-fast-prefill
+        reason: "DeepSeek V4 Flash 0731 publishes Python encoding/parsing helpers, not a Jinja template. This minja transcription supplies native DSML tool calls, reasoning separation, reasoning-effort prefixes, and assistant/tool replay for the OpenAI-compatible llama.cpp endpoint."
+        evidence: "models/deepseek-v4-flash-0731/llama-cpp/patches/deepseek-v4-chat-template/README.md; verify-full ordinary + streaming tools and separated reasoning passed on the pinned image 2026-08-09"
+    delivery:
+      dockerfile_bake: false
+      entrypoint_invoke: false
+      genesis: false
+    delivery_gaps: []
+    delivery_mechanism: chat_template
+    delivery_spec:
+      jinja: models/deepseek-v4-flash-0731/llama-cpp/patches/deepseek-v4-chat-template/chat_template.jinja
+      mounted_at: /templates/deepseek-v4-flash-0731.jinja
+      mount_mode: ro
+      invoke: "--chat-template-file /templates/deepseek-v4-flash-0731.jinja"
+      wired_at: [volumes, command]
+      note: "Locally maintained minja transcription of the official DeepSeek V4 0731 encoding protocol; sha256 b8755094c6bfa409f97ac1adc39a98cbdf2435ef777a5d7ce94be1a00747600f."
+    drift_guard:
+      kind: behavioral
+      check: "On the pinned engine image, ordinary and streaming get_weather-class requests produce parsed tool_calls with valid JSON arguments and no raw DSML leakage; tool-result replay stays coherent; reasoning_content remains separated from content. Any behavioral/TPS comparison MUST use the SELF-CONTAINED symmetric restart+settle protocol: identical docker restart on BOTH arms -> healthy -> fixed 60s settle -> >=3 bench.sh runs/arm -> compare the GRAND MEAN of the SAME canonical segment; flag ONLY a deterministic regression reproduced across ALL 3 runs."
+      on_fail: capability-degraded
+    capability: chat-template-override
+    foundational: false
+    upstream:
+      ref: "deepseek-ai/DeepSeek-V4-Flash-0731 encoding/ (0731 release)"
+      status: local-vendored
+      drop_when: "DeepSeek publishes a Jinja/minja template with equivalent DSML, reasoning, and replay behavior and it passes this drift guard on the pinned engine image."
+    status: verified
+
   - id: gemma-vllm-pr41800-truncate-prompt-tokens
     deprecated_on: "2026-06-05"
     deprecation_reason: "merged upstream + redundant on stock v0.22.0 (#254)."

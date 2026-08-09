@@ -22,6 +22,10 @@
 #                calibration factor, not measured. They may be optimistic.
 #   Best for:  4-card owners who want the QUALITY tier. ⭐
 # ---------------------------------------------------------------------------
+# Sibling comparison:
+#   unsloth-q8-kxl/offload.yml  · mainline b10236 · FP16 KV · 200K · CPU offload
+#   antirez-iq2-xxs/fast-prefill.yml · external fork · Q8 KV · 430K · all-GPU
+#
 # ⭐ WHY MULTI4 IS WORTH SHIPPING, and it is not "more cards = more speed":
 #
 # Every layer whose experts are pinned to a GPU is a layer whose experts are NOT in

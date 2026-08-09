@@ -579,10 +579,16 @@ def _current_pin(slug: str, compose_path: str):
     the compose's image default."""
     try:
         exports = resolve_variant_pin(profiles, slug)
-        # Nightly pins export a bare SHA (VLLM_NIGHTLY_SHA) — not comparable to
-        # an image string; fall through to the compose default for those.
-        if "VLLM_NIGHTLY_SHA" not in exports:
-            return next(iter(exports.values()))
+        # Read only a full image export. Mainline llama.cpp deliberately returns
+        # no profile injection, and readiness/hardware exports are not engine
+        # pins. Nightly SHAs remain incomparable to full image strings and fall
+        # through to the compose default below.
+        image_pin = next(
+            (value for key, value in exports.items() if key.endswith("_IMAGE")),
+            None,
+        )
+        if image_pin and "VLLM_NIGHTLY_SHA" not in exports:
+            return image_pin
     except ProfileError:
         pass
     return _compose_image_default(compose_path)

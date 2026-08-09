@@ -81,6 +81,9 @@ def _entry(
     mem_util,
     compose_path,
     default_port,
+    # Optional launcher readiness timeout for profiles with a load-bearing
+    # startup phase after engine boot (DeepSeek V4 full-context graph warm-up).
+    ready_timeout_s=None,
     kvcalc_key=None,
     requires_nvlink=False,
     # True when the slug has an ARCH-GATED kernel path that torch.compile (or a
@@ -119,6 +122,12 @@ def _entry(
         raise ValueError(
             f"{compose_path}: status={status!r} not in {STATUS_VALUES}"
         )
+    if ready_timeout_s is not None and (
+        not isinstance(ready_timeout_s, int) or ready_timeout_s <= 0
+    ):
+        raise ValueError(
+            f"{compose_path}: ready_timeout_s must be a positive integer"
+        )
     entry = {
         "model": model,
         "weights_variant": weights_variant,
@@ -151,6 +160,8 @@ def _entry(
         # slug actually serves.  Bare keys, scoped to this entry's model.
         "weights_companions": list(weights_companions or []),
     }
+    if ready_timeout_s is not None:
+        entry["ready_timeout_s"] = ready_timeout_s
     if recommended_engine_features:
         entry["recommended_engine_features"] = list(recommended_engine_features)
     if required_sm is not None:
@@ -1029,6 +1040,23 @@ COMPOSE_REGISTRY = {
         required_sm=8.6,
         status="incubating",
         status_note="4-card QUALITY tier. NEVER BOOTED BY US. 2026-08-07: a 4x3090 + 128 GB owner (@milano, Discord) BOOTED it after correcting two constants this compose had COPIED from the dual file and never re-derived for four cards -- reserve 18000 (a 2-way dense split) granted 1 bundle/card where 2 fit, and the 146 GB gate then REFUSED the 128 GB box this slug exists to serve. Reserve now 14500 (additive #931 recalibration; the interim x0.55-era value was 12000); host_ram_gb=120 HERE is the nominal 4x24 figure (what the catalog displays -- @milano measured it), while the COMPOSE HEADER carries the 146 all-experts-on-CPU worst case and preflight computes the rig-specific need by subtracting detected residency (~121 at 4x24; 4x16 GB fits zero bundles and correctly gates at ~146). The mismatch is deliberate -- do not 'fix' either number to match the other. STILL UNVALIDATED BEYOND BOOT: no real prefill probe yet, and on this model boot is NOT sufficient -- the 262K config booted, passed a trivial decode, then died on the first ~15.7K prefill. Prefill probe requested. The argument is NOT throughput: every layer pinned to a GPU is a layer NOT in host RAM, so host RAM FALLS with card count -- **120 GB MEASURED** at 4x24 GB (was ~113 est.) vs ~146 at 2x24 -- first 4-card boot by @milano 2026-08-07. 128 GB is a very common host config, which the 2-card Q8 slug EXCLUDES and this one FITS, so multi4 is what puts the quality tier inside a mainstream RAM budget. Residency should also be at its best here (~23% of expert traffic on GPU vs 4.7% on two cards). No IQ2 multi slug: on four cards Q8 itself drops into a 128 GB budget, so a low-bit tier is not needed to fit.",
+        category="frontier",
+    ),
+
+    "llamacpp/deepseek-flash-multi4-antirez-iq2-fast-prefill": _entry(
+        model="deepseek-v4-flash-0731", weights_variant="antirez-iq2-xxs", workload="long-ctx-single",
+        engine="llama-cpp-ds4-longctx", drafter=None, kv_format="q8_0",
+        chat_template="deepseek-v4-dsml",
+        tp=4, max_ctx=430080, max_num_seqs=1, mem_util=None,
+        compose_path="models/deepseek-v4-flash-0731/llama-cpp/compose/multi4/antirez-iq2-xxs/fast-prefill.yml",
+        default_port=8033,
+        ready_timeout_s=2400,
+        kvcalc_key="SKIP",
+        required_engine_features=("deepseek4_q8_kv", "dsv4_prefill_graphs"),
+        required_sm=8.6,
+        requires_homogeneous_arch=True,
+        status="incubating",
+        status_note="4x RTX 3090 resident fast-prefill specialist: Antirez IQ2_XXS + matching q8_0 K/V on the separately pinned alesha-pro ds4-longctx engine with Whamp's validated Q8 repair. Full graph warm-up is automatic and keeps the public endpoint closed for ~26 minutes at the 430080 default. Exact recall passed at 395282 tokens; minimum observed free VRAM was 794 MiB, below the repo's normal 1024 MiB production guard but above the accepted 750 MiB experiment floor. Full 200K operational gate passed (verify-full, verify-stress, quality, agentic, soak); 430K passed verify-full and the fast stress ceiling ladder. sm_86 and this exact Antirez quant only. No DEFAULTS row.",
         category="frontier",
     ),
 

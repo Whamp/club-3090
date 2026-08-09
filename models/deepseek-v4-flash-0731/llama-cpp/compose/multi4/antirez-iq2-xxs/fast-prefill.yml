@@ -1,0 +1,128 @@
+# ===========================================================================
+# Profile (at-a-glance):
+#   Model:     DeepSeek-V4-Flash-0731 (Antirez IQ2_XXS, 80.8 GiB)
+#   Engine:    alesha-pro/ds4-longctx b001c8cd7 + Q8 repair 0379cf4bf
+#   Topology:  4× RTX 3090 PCIe (layer split 1,1,0.95,1.05; no NVLink)
+#   Drafter:   none
+#   KV:        q8_0 K + q8_0 V (matching types required)
+#   Vision:    no
+#   Max ctx:   430080 reserved · 395282 exact-recall validated
+#   Genesis:   N/A — Genesis is Qwen3-Next-specific
+#   Status:    🐣 Incubating
+#   Caveats:   External DeepSeek-only fork; sm_86 image; requires
+#              LLAMA_ATTN_ROT_DISABLE=1 and a ~26-minute full-context warm-up.
+#              Minimum observed free VRAM was 794 MiB, below the repo's usual
+#              1024 MiB production guard but above the validated 750 MiB floor.
+#   Quality:   ToolCall 12/15 · InstructFollow 15/15 · StructOutput 14/15
+#              · DataExtract 12/15 · ReasonMath 14/15 (--medium, 2026-08-09)
+#   Best for:  One persistent coding-agent session with deep repeated prefill
+# Requires-homogeneous-arch: true
+# ---------------------------------------------------------------------------
+# Sibling comparison:
+#   unsloth-q8-kxl/offload.yml  · mainline b10236 · FP16 KV · 200K · CPU offload
+#   antirez-iq2-xxs/fast-prefill.yml · external fork · Q8 KV · 430K · all-GPU
+#
+# The entrypoint keeps :8080 CLOSED until one synthetic context_size-512 prefill
+# completes on internal :8081. That warm-up prepares the allocator and CUDA
+# graphs; without it the first deep request pays setup itself and can run at
+# less than half the steady-state rate. switch.sh receives READY_TIMEOUT=2400
+# from the registry so its readiness probe covers the ~26-minute default warm-up.
+#
+# Validated on Whamp's 4× RTX 3090 rig at an unchanged 230 W/card:
+#   warm-up 429568 tokens @ 276.4 tok/s (~26 min)
+#   exact recall 263K @ 1056 tok/s · 395282 @ 913 tok/s
+#   verify-full 9/9 · verify-stress-fast PASS at 430K
+#   earlier 200K gate: verify-stress 8/8 · soak 25/25 · quality 67/75
+#   bench-agentic: 40× context growth -> 4.2× TTFT growth, 33–38 decode tok/s
+# Full evidence and rejected paths: models/deepseek-v4-flash-0731/INTERNALS.md
+# Source/pin retirement: docs/UPSTREAM.md — alesha-pro ds4-longctx + Q8 repair
+# ===========================================================================
+
+services:
+  llama-cpp-deepseek-v4-fast-prefill:
+    image: ${LLAMACPP_DSV4_LONGCTX_IMAGE:-ghcr.io/whamp/llama-cpp-ds4-longctx@sha256:a96bd947d63eb81d8baf9f6f5ecb26669476383976717237450fbb5727b03745}
+    container_name: "${ESTATE_CONTAINER:-llama-cpp-deepseek-v4-fast-prefill}"
+    restart: "no"
+    ports:
+      - "${BIND_HOST:-0.0.0.0}:${ESTATE_PORT:-${PORT:-8033}}:8080"
+    environment:
+      NVIDIA_VISIBLE_DEVICES: ${ESTATE_GPUS:-all}
+      GGML_CUDA_P2P: "1"
+      LLAMA_ATTN_ROT_DISABLE: "1"
+      DSV4_CONSTANT_SHAPE: "1"
+      DSV4_SPARSE_FA: "1"
+      DSV4_FA_UNION: "1"
+      DSV4_IDX_SKIP: "1"
+      DSV4_MOE_TILE: "1"
+      DSV4_MOE_RESIDENT: "1"
+      DSV4_GLU_FUSE: "1"
+      DSV4_MOE_FUSE: "1"
+      DSV4_DECODE_FUSED_IDX: "1"
+      DSV4_DECODE_RADIX_TOPK: "1"
+      DSV4_PREFILL_RADIX_TOPK: "1"
+      DSV4_MMVQ_SMALLK: "1"
+      DSV4_STABLE_TOPO: "1"
+      GGML_GALLOC_STICKY: "1"
+      DSV4_PREFILL_GRAPHS: "1"
+      DSV4_AGENT_CKPT_TAIL: "1"
+      FAST_PREFILL_CONTEXT_SIZE: ${CTX_SIZE:-430080}
+      FAST_PREFILL_INTERNAL_PORT: "8081"
+      FAST_PREFILL_PUBLIC_PORT: "8080"
+      FAST_PREFILL_BOOT_TIMEOUT: "600"
+      FAST_PREFILL_WARMUP_TIMEOUT: "3600"
+    volumes:
+      - "${MODEL_DIR:-../../../../../../models-cache}:/models:ro"
+      - "../../../patches/deepseek-v4-chat-template/chat_template.jinja:/templates/deepseek-v4-flash-0731.jinja:ro"
+      - "../../../recipes/serve-fast-prefill.sh:/opt/club3090/serve-fast-prefill.sh:ro"
+      - "../../../recipes/tcp-forward.pl:/opt/club3090/tcp-forward.pl:ro"
+    entrypoint: ["/opt/club3090/serve-fast-prefill.sh"]
+    command:
+      - '--model'
+      - '/models/deepseek-v4-antirez-iq2-xxs/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf'
+      - '--alias'
+      - 'deepseek-v4-flash-0731-q8-fast-prefill'
+      - '--ctx-size'
+      - '${CTX_SIZE:-430080}'
+      - '--batch-size'
+      - '8192'
+      - '--ubatch-size'
+      - '${UBATCH_SIZE:-384}'
+      - '--ctx-checkpoints'
+      - '1'
+      - '--checkpoint-every-n-tokens'
+      - '-1'
+      - '--n-gpu-layers'
+      - '999'
+      - '--split-mode'
+      - 'layer'
+      - '--tensor-split'
+      - '1,1,0.95,1.05'
+      - '--flash-attn'
+      - 'on'
+      - '--no-repack'
+      - '--cache-type-k'
+      - 'q8_0'
+      - '--cache-type-v'
+      - 'q8_0'
+      - '--threads'
+      - '8'
+      - '--poll'
+      - '100'
+      - '--parallel'
+      - '1'
+      - '--jinja'
+      - '--chat-template-file'
+      - '/templates/deepseek-v4-flash-0731.jinja'
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 2400s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

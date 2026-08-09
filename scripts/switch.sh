@@ -114,6 +114,7 @@ fi
 # wrong-image boot is never silent).  Fires only when actually set.
 [[ -n "${IK_LLAMA_IMAGE:-}" ]] && echo "[switch] ik-llama image pinned: ${IK_LLAMA_IMAGE}"
 [[ -n "${LLAMACPP_IMAGE:-}" ]] && echo "[switch] llama.cpp image pinned: ${LLAMACPP_IMAGE}"
+[[ -n "${LLAMACPP_DSV4_LONGCTX_IMAGE:-}" ]] && echo "[switch] DeepSeek V4 long-context image pinned: ${LLAMACPP_DSV4_LONGCTX_IMAGE}"
 
 # Surface the resolved MODEL_DIR + its source so the precedence is unambiguous
 # (the exact confusion behind #425 / #187). Unset → the compose's built-in
@@ -924,7 +925,7 @@ gpu_preflight() {
 
 export_variant_engine_pin() {
   local variant="$1" output line key value gpu_spec
-  [[ "$variant" == vllm/* || "$variant" == beellama/* ]] || return 0
+  [[ "$variant" == vllm/* || "$variant" == beellama/* || "$variant" == llamacpp/* ]] || return 0
   gpu_spec="$(switch_gpu_profile_spec 2>/dev/null || true)"
   if ! output="$(python3 "$LAUNCH_PROFILE" resolve-variant-pin --variant "$variant" --format shell --gpu-spec "$gpu_spec" 2>&1)"; then
     echo "$output" >&2
@@ -936,6 +937,8 @@ export_variant_engine_pin() {
       VLLM_NIGHTLY_SHA) export VLLM_NIGHTLY_SHA="$value" ;;
       VLLM_IMAGE) export VLLM_IMAGE="$value" ;;
       BEELLAMA_IMAGE) export BEELLAMA_IMAGE="$value" ;;
+      LLAMACPP_DSV4_LONGCTX_IMAGE) export LLAMACPP_DSV4_LONGCTX_IMAGE="$value" ;;
+      READY_TIMEOUT) export READY_TIMEOUT="$value" ;;
       # #246 arch-aware env (pilot slugs; hardware-profile balanced default)
       KV_CACHE_DTYPE)
         export KV_CACHE_DTYPE="$value"
@@ -960,7 +963,10 @@ export_variant_engine_pin() {
       *) echo "[switch] ERROR: unexpected engine pin export: $key" >&2; exit 2 ;;
     esac
   done <<< "$output"
-  if [[ -n "${BEELLAMA_IMAGE:-}" ]]; then
+  if [[ -n "${LLAMACPP_DSV4_LONGCTX_IMAGE:-}" ]]; then
+    echo "[switch] DeepSeek V4 long-context image: ${LLAMACPP_DSV4_LONGCTX_IMAGE}"
+    echo "[switch] DeepSeek V4 warm-up readiness timeout: ${READY_TIMEOUT}s"
+  elif [[ -n "${BEELLAMA_IMAGE:-}" ]]; then
     echo "[switch] beellama image: ${BEELLAMA_IMAGE}"
   elif [[ -n "${VLLM_IMAGE:-}" ]]; then
     if [[ -n "${VLLM_NIGHTLY_SHA:-}" ]]; then
@@ -968,8 +974,8 @@ export_variant_engine_pin() {
     else
       echo "[switch] vLLM image: ${VLLM_IMAGE}"
     fi
-  else
-    echo "[switch] vLLM nightly SHA: ${VLLM_NIGHTLY_SHA:-unset}"
+  elif [[ -n "${VLLM_NIGHTLY_SHA:-}" ]]; then
+    echo "[switch] vLLM nightly SHA: ${VLLM_NIGHTLY_SHA}"
   fi
 }
 

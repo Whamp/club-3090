@@ -16,6 +16,7 @@ GPU_3090='0|RTX_3090|24576|8.6'
 MTP_SHA="01d4d1ad375dc5854779c593eee093bcebb0cada"
 CLEAN_SHA="bf610c2f56764e1b30bc6065f4ceace3d6e59036"
 DFLASH_SHA="e47c98ef7a38792996e452ef53914e21e41928e9"
+DSV4_FAST_PREFILL_IMAGE="ghcr.io/whamp/llama-cpp-ds4-longctx@sha256:a96bd947d63eb81d8baf9f6f5ecb26669476383976717237450fbb5727b03745"
 
 assert_contains() {
   local haystack="$1"
@@ -118,6 +119,17 @@ assert_contains "$out" "VLLM_IMAGE=vllm/vllm-openai:v0.25.1"
 
 out="$(python3 "$HELPER" resolve-variant-pin --variant vllm/gemma-int8-mtp --format shell)"
 assert_contains "$out" "VLLM_IMAGE=vllm/vllm-openai:v0.22.0"
+
+# The DeepSeek V4 fast-prefill path is a separately named, compiled external
+# engine. Both direct engine resolution and the public catalog slug must inject
+# the digest-pinned image instead of falling through to mainline llama.cpp.
+out="$(python3 "$HELPER" resolve-engine-pin --engine-id llama-cpp-ds4-longctx --format shell)"
+assert_contains "$out" "LLAMACPP_DSV4_LONGCTX_IMAGE=${DSV4_FAST_PREFILL_IMAGE}"
+out="$(python3 "$HELPER" resolve-variant-pin --variant llamacpp/deepseek-flash-multi4-antirez-iq2-fast-prefill --format shell)"
+assert_contains "$out" "LLAMACPP_DSV4_LONGCTX_IMAGE=${DSV4_FAST_PREFILL_IMAGE}"
+assert_contains "$out" "READY_TIMEOUT=2400"
+out="$(READY_TIMEOUT=3000 python3 "$HELPER" resolve-variant-pin --variant llamacpp/deepseek-flash-multi4-antirez-iq2-fast-prefill --format shell)"
+assert_not_contains "$out" "READY_TIMEOUT="
 
 # --- #246 arch-aware KV injection matrix (resolve-variant-pin --gpu-spec) ----
 GPU_4090='0|NVIDIA GeForce RTX 4090|24564|8.9'

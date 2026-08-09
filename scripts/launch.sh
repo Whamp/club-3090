@@ -94,9 +94,9 @@ if [[ -f "${ROOT_DIR}/.env" ]]; then
     # docker compose.  IK_LLAMA_IMAGE/LLAMACPP_IMAGE were silently dropped here
     # (only CLUB3090_DEFAULT_* passed), so a .env cu12 pin never reached the
     # ik-llama/llama.cpp composes.  Shell env still wins (checked below); the
-    # vllm/beellama images get profile-injected later regardless.
+    # vLLM/beellama/DeepSeek-fork images get profile-injected later regardless.
     case "$_env_line" in
-      CLUB3090_DEFAULT_*|VLLM_IMAGE=*|BEELLAMA_IMAGE=*|IK_LLAMA_IMAGE=*|LLAMACPP_IMAGE=*|VLLM_NIGHTLY_SHA=*) ;;
+      CLUB3090_DEFAULT_*|VLLM_IMAGE=*|BEELLAMA_IMAGE=*|IK_LLAMA_IMAGE=*|LLAMACPP_IMAGE=*|LLAMACPP_DSV4_LONGCTX_IMAGE=*|VLLM_NIGHTLY_SHA=*) ;;
       *) continue ;;
     esac
     _env_key="${_env_line%%=*}"
@@ -1182,7 +1182,7 @@ validate_selected_variant() {
 
 export_variant_engine_pin() {
   local variant="$1" output line key value gpu_spec
-  [[ "$variant" == vllm/* || "$variant" == beellama/* ]] || return 0
+  [[ "$variant" == vllm/* || "$variant" == beellama/* || "$variant" == llamacpp/* ]] || return 0
   # detected-GPU spec enables the #246 arch-aware env for pilot variants;
   # empty (no selection yet / no nvidia-smi) -> pin exports only.
   gpu_spec="$(selected_gpu_profile_spec 2>/dev/null || true)"
@@ -1196,6 +1196,8 @@ export_variant_engine_pin() {
       VLLM_NIGHTLY_SHA) export VLLM_NIGHTLY_SHA="$value" ;;
       VLLM_IMAGE) export VLLM_IMAGE="$value" ;;
       BEELLAMA_IMAGE) export BEELLAMA_IMAGE="$value" ;;
+      LLAMACPP_DSV4_LONGCTX_IMAGE) export LLAMACPP_DSV4_LONGCTX_IMAGE="$value" ;;
+      READY_TIMEOUT) export READY_TIMEOUT="$value" ;;
       # #246 arch-aware env (pilot slugs; hardware-profile balanced default)
       KV_CACHE_DTYPE)
         export KV_CACHE_DTYPE="$value"

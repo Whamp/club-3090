@@ -163,7 +163,16 @@ def _entry_objects(entry: dict, profiles):
 
 # Non-vLLM docker-image engines → the compose env var their image is injected as.
 # (vLLM is special-cased above: VLLM_IMAGE / VLLM_NIGHTLY_SHA.)
-_ENGINE_IMAGE_ENV = {"beellama-local": "BEELLAMA_IMAGE"}
+_ENGINE_IMAGE_ENV = {
+    "beellama-local": "BEELLAMA_IMAGE",
+    "llama-cpp-ds4-longctx": "LLAMACPP_DSV4_LONGCTX_IMAGE",
+}
+
+# Mainline llama.cpp historically takes its image only from the compose fallback
+# or an explicit user LLAMACPP_IMAGE override. Calling resolve-variant-pin for
+# every llamacpp/* slug must preserve that behavior while allowing separately
+# named profile-injected fork engines.
+_COMPOSE_FALLBACK_IMAGE_ENGINES = frozenset({"llama-cpp-local"})
 
 
 # --- #246 Phase 1: arch-aware KV dtype injection (pilot) ---------------------
@@ -350,10 +359,20 @@ def resolve_engine_pin(profiles, engine_id: str) -> dict[str, str]:
     # ${<ENGINE>_IMAGE:-…} literal is then just a fallback for direct `docker compose`.
     env_key = _ENGINE_IMAGE_ENV.get(engine_id)
     if not env_key:
+        if engine_id in _COMPOSE_FALLBACK_IMAGE_ENGINES:
+            return {}
         raise ProfileError(f"engine {engine_id!r} install.spec is not a docker image: {spec!r}")
     if not spec or any(char.isspace() for char in spec):
         raise ProfileError(f"engine {engine_id!r} has an invalid docker image in install.spec: {spec!r}")
     return {env_key: spec}
+
+
+def _ready_timeout_env(entry: dict) -> dict[str, str]:
+    """Export a profile-specific readiness timeout without overriding the user."""
+    if os.environ.get("READY_TIMEOUT"):
+        return {}
+    timeout = entry.get("ready_timeout_s")
+    return {"READY_TIMEOUT": str(timeout)} if isinstance(timeout, int) and timeout > 0 else {}
 
 
 def resolve_variant_pin(profiles, variant: str, gpu_spec: str = "") -> dict[str, str]:
@@ -361,6 +380,7 @@ def resolve_variant_pin(profiles, variant: str, gpu_spec: str = "") -> dict[str,
     if not entry:
         raise ProfileError(f"unknown compose variant `{variant}`")
     exports = resolve_engine_pin(profiles, entry["engine"])
+    exports.update(_ready_timeout_env(entry))
     # #246: arch-aware env rides the same export channel as the image pin.
     # Only emitted when a gpu_spec is passed (launchers do; the registry-emit
     # baselines join calls without one and sees pins only).

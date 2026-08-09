@@ -130,6 +130,18 @@ weights:
       - UD-IQ2_XXS/DeepSeek-V4-Flash-0731-UD-IQ2_XXS-00003-of-00003.gguf   # whole repo
     verify_glob: "UD-IQ2_XXS/*.gguf"
     manual_note: "Reach tier — substantially lower host-RAM requirement than Q8 (~86 vs ~146 GB worst case), which is what makes the model fit a constrained box. NO published perf/quality numbers — incubating. ⚠️ ~2.6-bit experts; quality is the open question on this tier."
+  antirez-iq2-xxs:
+    path: deepseek-v4-antirez-iq2-xxs
+    local_subdir: deepseek-v4-antirez-iq2-xxs
+    size_gb: 87
+    format: gguf
+    status: incubating
+    hf_repo: antirez/deepseek-v4-gguf
+    revision: e7f04037032990db0346398d249baf9fb9df1ccc
+    files:
+      - DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf
+    verify_glob: "DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf"
+    manual_note: "Fully GPU-resident fast-prefill tier for 4x24 GB only. Validated with the separately pinned llama-cpp-ds4-longctx engine, matching q8_0 K/V, 430080 reserved context, and a mandatory full-context warm-up. The old fork's MMQ capture path is quant-sensitive: Unsloth IQ1_M and the role-splice IQ1_M expert layers are not substitutes for this artifact."
   dspark:
     path: deepseek-v4-flash-0731-gguf/dspark
     local_subdir: deepseek-v4-flash-0731-gguf/dspark

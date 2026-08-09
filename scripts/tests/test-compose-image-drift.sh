@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
-# Drift guard (Codex review, #254/#324): every vLLM compose whose
-# `image: ${VLLM_IMAGE:-<literal>}` default is a FIXED docker image must match the
-# install.spec of the engine its registry slug resolves to. This catches the
-# "bump the engine spec but forget the compose literal" drift that would silently
-# feed direct `docker compose` users a stale image (the launcher injects VLLM_IMAGE
-# from the engine and is fine; the compose literal is the unguarded path).
+# Drift guard (Codex review, #254/#324): every profile-managed compose whose
+# fixed image fallback is covered below must match the install.spec of the engine
+# its registry slug resolves to. This catches the "bump the engine spec but forget
+# the compose literal" drift that would silently feed direct `docker compose`
+# users a stale image while launcher users receive the new profile-injected pin.
+#
+# Covered image variables:
+#   - VLLM_IMAGE
+#   - LLAMACPP_DSV4_LONGCTX_IMAGE
 #
 # Skipped (by design):
 #   - templated literals like `…:nightly-${VLLM_NIGHTLY_SHA}` — self-sync via the
 #     launcher-injected var, so the literal is always in step with the engine.
 #   - pip-method engines (vllm-pip-baseline) — no docker image to match.
+#   - BEELLAMA_IMAGE — several retired composes intentionally keep a different
+#     direct-Compose fallback from the launcher-injected engine pin.
 set -euo pipefail
 
 # Force Python's UTF-8 mode (PEP 540) for every python3 this script runs.
@@ -39,7 +44,9 @@ from scripts.lib.profiles.compat import load_profiles
 PENDING_254 = set()
 
 profiles = load_profiles()
-pat = re.compile(r'image:\s*\$\{VLLM_IMAGE:-([^}]+)\}')
+IMAGE_ENV_BY_ENGINE = {
+    "llama-cpp-ds4-longctx": "LLAMACPP_DSV4_LONGCTX_IMAGE",
+}
 drift, checked, pending, deprecated = [], 0, [], 0
 for slug, entry in COMPOSE_REGISTRY.items():
     if entry.get("status") == "deprecated":
@@ -55,6 +62,13 @@ for slug, entry in COMPOSE_REGISTRY.items():
     install = getattr(eng, "install", None) or {}
     if install.get("method") != "docker_image":
         continue  # pip baseline etc. — no docker image to compare against
+    image_env = (
+        "VLLM_IMAGE"
+        if getattr(eng, "type", None) == "vllm"
+        else IMAGE_ENV_BY_ENGINE.get(eng_id)
+    )
+    if not image_env:
+        continue
     spec = install.get("spec", "")
     cpath = entry.get("compose_path")
     if not cpath:
@@ -62,7 +76,8 @@ for slug, entry in COMPOSE_REGISTRY.items():
     p = ROOT / cpath
     if not p.exists():
         continue
-    m = pat.search(p.read_text())
+    pat = re.compile(rf'image:\s*\$\{{{re.escape(image_env)}:-([^}}]+)\}}')
+    m = pat.search(p.read_text(encoding="utf-8"))
     if not m:
         continue
     literal = m.group(1).strip()
@@ -76,15 +91,15 @@ for slug, entry in COMPOSE_REGISTRY.items():
         )
 
 if drift:
-    print("IMAGE DRIFT — a fixed compose `${VLLM_IMAGE:-…}` default disagrees with the")
-    print("engine its slug resolves to (direct `docker compose` would serve a stale image):")
+    print("IMAGE DRIFT — a fixed compose image fallback disagrees with the engine")
+    print("its slug resolves to (direct `docker compose` would serve a stale image):")
     print("\n".join(drift))
     print("Fix: bump the compose literal to the engine install.spec (or vice-versa).")
     sys.exit(1)
 if pending:
     print(f"NOTE: {len(pending)} slug(s) exempt pending #254 engine migration: {', '.join(sorted(pending))}")
 print(
-    f"test-compose-image-drift: ok ({checked} fixed-image vLLM composes match their engine spec; "
+    f"test-compose-image-drift: ok ({checked} fixed-image composes match their engine spec; "
     f"{deprecated} deprecated skipped, {len(pending)} pending-#254 exempt)"
 )
 PY
