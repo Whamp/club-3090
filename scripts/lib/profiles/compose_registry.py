@@ -75,6 +75,12 @@ def _entry(
     # discovering it at launch refusal. None = fully VRAM-resident, nothing to warn about.
     host_ram_gb=None,
     chat_template="native",
+    # Optional graded reasoning controls exposed by this exact serving profile.
+    # Empty means the usual binary thinking on/off contract. Keep this variant-
+    # scoped: model support alone is insufficient when an engine or chat
+    # template drops the requested effort level.
+    reasoning_effort_levels=None,
+    reasoning_effort_default=None,
     tp,
     max_ctx,
     max_num_seqs,
@@ -128,6 +134,25 @@ def _entry(
         raise ValueError(
             f"{compose_path}: ready_timeout_s must be a positive integer"
         )
+    effort_levels = list(reasoning_effort_levels or [])
+    if any(not isinstance(level, str) or not level for level in effort_levels):
+        raise ValueError(
+            f"{compose_path}: reasoning_effort_levels must contain non-empty strings"
+        )
+    if len(effort_levels) != len(set(effort_levels)):
+        raise ValueError(
+            f"{compose_path}: reasoning_effort_levels must not contain duplicates"
+        )
+    if bool(effort_levels) != (reasoning_effort_default is not None):
+        raise ValueError(
+            f"{compose_path}: reasoning_effort_levels and reasoning_effort_default "
+            "must be declared together"
+        )
+    if reasoning_effort_default is not None and reasoning_effort_default not in effort_levels:
+        raise ValueError(
+            f"{compose_path}: reasoning_effort_default must be one of "
+            f"{effort_levels!r}"
+        )
     entry = {
         "model": model,
         "weights_variant": weights_variant,
@@ -140,6 +165,8 @@ def _entry(
         "offload": offload,
         "host_ram_gb": host_ram_gb,
         "chat_template": chat_template,
+        "reasoning_effort_levels": effort_levels,
+        "reasoning_effort_default": reasoning_effort_default,
         "tp": tp,
         "pp": 1,
         "max_ctx": max_ctx,
@@ -1047,6 +1074,8 @@ COMPOSE_REGISTRY = {
         model="deepseek-v4-flash-0731", weights_variant="antirez-iq2-xxs", workload="long-ctx-single",
         engine="llama-cpp-ds4-longctx", drafter=None, kv_format="q8_0",
         chat_template="deepseek-v4-dsml",
+        reasoning_effort_levels=("low", "high", "max"),
+        reasoning_effort_default="low",
         tp=4, max_ctx=430080, max_num_seqs=1, mem_util=None,
         compose_path="models/deepseek-v4-flash-0731/llama-cpp/compose/multi4/antirez-iq2-xxs/fast-prefill.yml",
         default_port=8033,
@@ -1056,7 +1085,7 @@ COMPOSE_REGISTRY = {
         required_sm=8.6,
         requires_homogeneous_arch=True,
         status="incubating",
-        status_note="4x RTX 3090 resident fast-prefill specialist: Antirez IQ2_XXS + matching q8_0 K/V on the separately pinned alesha-pro ds4-longctx engine with Whamp's validated Q8 repair. Full graph warm-up is automatic and keeps the public endpoint closed for ~26 minutes at the 430080 default. Exact recall passed at 395282 tokens; minimum observed free VRAM was 794 MiB, below the repo's normal 1024 MiB production guard but above the accepted 750 MiB experiment floor. Full 200K operational gate passed (verify-full, verify-stress, quality, agentic, soak); 430K passed verify-full and the fast stress ceiling ladder. sm_86 and this exact Antirez quant only. No DEFAULTS row.",
+        status_note="4x RTX 3090 resident fast-prefill specialist: Antirez IQ2_XXS + matching q8_0 K/V on the separately pinned alesha-pro ds4-longctx engine with Whamp's validated Q8 repair. Full graph warm-up is automatic and keeps the public endpoint closed for ~26 minutes at the 430080 default. Exact recall passed at 395282 tokens; minimum observed free VRAM was 794 MiB, below the repo's normal 1024 MiB production guard but above the accepted 750 MiB experiment floor. Full 8-pack quality: 109/150 thinking-off; thinking-on scored 121/150 at low, 121/150 at high, and 123/150 at max. The same Antirez Q8 weights on stock b10200 scored 111/150 thinking-off and 122/150 at default-low thinking-on, supporting serving/quantization parity. The max run used a 65536-token output cap and 4 of 226 API responses hit it. These scores are regression evidence, not an intelligence ceiling; several failures overlap open benchlocal-cli benchmark-definition problems. This is the first catalog profile with graded reasoning effort: low (default when thinking is enabled), high, and max. Full 200K operational gate passed (verify-full, verify-stress, quality, agentic, soak); 430K passed verify-full and the fast stress ceiling ladder. sm_86 and this exact Antirez quant only. No DEFAULTS row.",
         category="frontier",
     ),
 

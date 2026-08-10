@@ -8,6 +8,7 @@
 #   Vision:    no
 #   Max ctx:   430080 reserved · 395282 exact-recall validated
 #   Genesis:   N/A — Genesis is Qwen3-Next-specific
+#   Reasoning: off · low (default when enabled) · high · max
 #   Status:    🐣 Incubating
 #   Caveats:   External DeepSeek-only fork; sm_86 image; requires
 #              LLAMA_ATTN_ROT_DISABLE=1 and a ~26-minute full-context warm-up.
@@ -28,12 +29,21 @@
 # less than half the steady-state rate. switch.sh receives READY_TIMEOUT=2400
 # from the registry so its readiness probe covers the ~26-minute default warm-up.
 #
+# Reasoning effort is a profile capability, not an output budget. Use nested
+# chat_template_kwargs: {enable_thinking: true, reasoning_effort: low|high|max}.
+# The current llama-server ignores a top-level reasoning_effort field.
+#
 # Validated on Whamp's 4× RTX 3090 rig at an unchanged 230 W/card:
-#   warm-up 429568 tokens @ 276.4 tok/s (~26 min)
-#   exact recall 263K @ 1056 tok/s · 395282 @ 913 tok/s
+#   warm-up 429568 tokens @ 276.4 prefill tokens/s (~26 min)
+#   exact recall 263K @ 1056 prefill tokens/s · 395282 @ 913 prefill tokens/s
 #   verify-full 9/9 · verify-stress-fast PASS at 430K
+#   quality: 109/150 thinking-off · low 121/150 · high 121/150
+#            · max 123/150* thinking-on
+#   * max used a 65536-token output cap; 4 of 226 API responses hit the cap
+#   Scores check serving/quantization parity; known benchmark-definition issues
+#   prevent treating the aggregate as an intelligence ceiling.
 #   earlier 200K gate: verify-stress 8/8 · soak 25/25 · quality 67/75
-#   bench-agentic: 40× context growth -> 4.2× TTFT growth, 33–38 decode tok/s
+#   bench-agentic: 40× context growth -> 4.2× TTFT growth, 33–38 decode tokens/s
 # Full evidence and rejected paths: models/deepseek-v4-flash-0731/INTERNALS.md
 # Source/pin retirement: docs/UPSTREAM.md — alesha-pro ds4-longctx + Q8 repair
 # ===========================================================================

@@ -114,6 +114,7 @@ Plain-language definitions for terms used throughout the docs. Roughly grouped b
 |---|---|
 | **Tool calling** | The model emits structured calls to external functions you define (e.g., `get_weather(...)`); your code runs them and feeds results back. |
 | **Reasoning / thinking mode** | The model emits intermediate reasoning steps before its final answer. Set `chat_template_kwargs.enable_thinking=true`. |
+| **Reasoning effort** | An optional level inside thinking mode. Most catalog profiles are on/off only. DeepSeek V4 Flash exposes `low`, `high`, and `max` through `chat_template_kwargs.reasoning_effort`; the effort level and output-token budget are separate controls. |
 | **Streaming** | Tokens arrive incrementally via Server-Sent Events. Faster perceived UX. |
 | **Vision** | The model can accept images alongside text. Powered by an integrated vision tower. |
 | **Tool prefill** | When an agent calls a tool and feeds the (potentially huge) tool response back, the next inference call has to "prefill" all that history. Big tool returns can OOM if context tier isn't set right. |

@@ -18,11 +18,61 @@ profiles.
 | Context | 430,080 tokens reserved; 395,282-token exact-recall validation |
 | Split | layer, `1,1,0.95,1.05` |
 | Power | observed at the rig's unchanged 230 W/card setting |
+| Reasoning controls | off, or thinking at `low` (default), `high`, or `max` effort |
 
 The engine image is separately named and digest-pinned in
 `scripts/lib/profiles/engines/llama-cpp-ds4-longctx.yml`. It does not replace
 `llama-cpp-local`. See [`docs/UPSTREAM.md`](../../docs/UPSTREAM.md) for the pin,
 source dependency, and retirement trigger.
+
+## Graded reasoning is a profile capability
+
+Most club-3090 profiles expose reasoning as a binary on/off choice. This
+profile also preserves DeepSeek V4 Flash 0731's three official thinking levels:
+`low`, `high`, and `max`. The registry exports those levels and identifies
+`low` as the local default when thinking is enabled.
+
+Pass both controls through `chat_template_kwargs`:
+
+```json
+{
+  "chat_template_kwargs": {
+    "enable_thinking": true,
+    "reasoning_effort": "max"
+  }
+}
+```
+
+The current llama-server ignores a top-level `reasoning_effort` field. Clients
+must use the nested form above. A live prompt-rendering probe on the published
+image measured 11 prompt tokens for off and low, 90 for high, and 103 for max.
+The distinct high/max lengths confirm that the endpoint injects both official
+prefixes instead of silently collapsing the levels.
+
+The effort setting and output budget are separate. `low` adds no prefix;
+`high` and `max` prepend different instructions before the system message.
+Full 8-pack runs exercised all three levels:
+
+| Effort | Output cap | Pass@1 | Pass@3 | Cap audit |
+|---|---:|---:|---:|---|
+| `low` | 16,384 | 121/150 | 131/150 | no cap hits |
+| `high` | 65,536 | 121/150 | 132/150 | no cap hits |
+| `max` | 65,536 | 123/150\* | 130/150 | 4 of 226 API responses hit the cap |
+
+\* The four capped `max` responses ended with `finish_reason=length`; all were
+in CLI-40. The score is retained with this limitation rather than rerunning at
+an even larger budget.
+
+These scores are regression evidence for the quantized serving path, not a
+measure of DeepSeek V4 Flash's intelligence ceiling. The same Antirez weights
+and Q8 cache scored 122/150 at stock `b10200`'s default `low` effort, one point
+above the fork. The thinking-off comparison was similarly close: 111/150 on
+stock versus 109/150 on the fork. Several failed cases also overlap open
+benchlocal-cli benchmark-definition problems in DataExtract, StructOutput, and
+ReasonMath. DeepSeek's [official model
+card](https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-0731) documents the
+three effort levels and reports its code-agent evaluations at `max` with
+temperature 1.0 and top-p 0.95.
 
 ## Why this fork is faster
 
@@ -81,8 +131,9 @@ allocator and CUDA graphs at the deepest configured shape. Without it, the first
 request reaching a new depth pays allocation and graph setup and can run at less
 than half the steady-state rate.
 
-At the 430,080-token default, warm-up processed 429,568 tokens at 276.4 tok/s and
-took about 26 minutes. A 200K configuration warmed in about eight minutes.
+At the 430,080-token default, warm-up processed 429,568 tokens at 276.4 prefill
+tokens/s and took about 26 minutes. A 200K configuration warmed in about eight
+minutes.
 
 The profile-local `serve-fast-prefill.sh` supervisor starts llama-server on a
 private internal port, performs the warm-up, and only then starts the TCP
@@ -102,9 +153,9 @@ All measurements below came from the same 4× RTX 3090 rig at its unchanged
 
 | Probe | Result |
 |---|---:|
-| Warm-up | 429,568 tokens at 276.4 tok/s |
-| Fresh prompt at 263K | 1,056 tok/s, exact needle recall |
-| Fresh prompt at 395,282 | 913 tok/s, exact needle recall |
+| Warm-up | 429,568 tokens at 276.4 prefill tokens/s |
+| Fresh prompt at 263K | 1,056 prefill tokens/s, exact needle recall |
+| Fresh prompt at 395,282 | 913 prefill tokens/s, exact needle recall |
 | Minimum observed free VRAM | 794 MiB |
 
 The 794 MiB floor is 44 MiB above the experiment's accepted 750 MiB floor but
@@ -114,12 +165,12 @@ fallback.
 
 ### Q8 versus F16 at 200K
 
-| Fresh prompt depth | Repaired Q8 | F16 | Q8 difference |
+| Fresh prompt depth | Repaired Q8 prefill | F16 prefill | Q8 difference |
 |---:|---:|---:|---:|
-| 98K | 1,538 tok/s | 1,414 tok/s | +8.8% |
-| 130K | 1,475 tok/s | 1,360 tok/s | +8.5% |
-| 180K | 1,374 tok/s | 1,334 tok/s | +3.0% |
-| 195K | 1,341 tok/s | 1,306 tok/s | +2.7% |
+| 98K | 1,538 tokens/s | 1,414 tokens/s | +8.8% |
+| 130K | 1,475 tokens/s | 1,360 tokens/s | +8.5% |
+| 180K | 1,374 tokens/s | 1,334 tokens/s | +3.0% |
+| 195K | 1,341 tokens/s | 1,306 tokens/s | +2.7% |
 
 Q8 recovered the full graph path and was 3–9% faster than F16 at depth. The
 stock `b10200` Q8 router was much slower on repeated deep prefill; in the
@@ -129,7 +180,8 @@ measured agent loop it took 21.8 seconds to first token at 33K, versus about
 ### Coding-agent loop
 
 A 15-turn fixture grew from 1,140 to 54,146 prompt tokens. Time to first token
-grew from the shallow start to 9.5 seconds at 54K while decode held 33–38 tok/s.
+grew from the shallow start to 9.5 seconds at 54K while decode held 33–38
+tokens/s.
 Across the measured curve, context grew about 40× while TTFT grew 4.2×. The
 stock Q8 baseline's measured TTFT grew nearly linearly with context.
 
@@ -139,7 +191,7 @@ The clean image built from `0379cf4bf` passed:
 
 - the final catalog launch through `switch.sh --force` pulled the published
   digest, kept its public port closed during warm-up, processed 429,568 tokens
-  at 276.28 tok/s, became ready after 1,628 seconds, and passed `verify-full.sh`
+  at 276.28 prefill tokens/s, became ready after 1,628 seconds, and passed `verify-full.sh`
   9/9 on port 8033;
 - `verify-full.sh`: 9/9 at 200K and 430K on the pre-publication validation builds;
 - `verify-stress.sh`: 8/8 at 200K, including exact recall at 9K, 27K, 55K,
@@ -148,8 +200,17 @@ The clean image built from `0379cf4bf` passed:
   with 796 MiB free throughout the ceiling ladder;
 - `quality-test.sh --medium`: 67/75 pass@1, equal to the stock `b10200` Q8
   baseline;
-- full no-thinking quality run: 95/150, including HermesAgent 14/20 after the
-  Docker endpoint was made reachable;
+- full 8-pack thinking-off: 109/150 after replacing an invalid network-blocked
+  HermesAgent 0/20 leg with its reachable 14/20 rerun; the same weights and Q8
+  cache scored 111/150 on stock `b10200`;
+- full 8-pack thinking-on: `low` 121/150 at a 16,384-token output cap, `high`
+  121/150 at 65,536, and `max` 123/150 at 65,536; four of 226 `max` API
+  responses hit the cap, while `low` and `high` had no cap hits;
+- stock `b10200` scored 122/150 at default `low` effort with the same weights
+  and Q8 cache; together with the 109/150 fork versus 111/150 stock
+  thinking-off comparison, this is the serving/quantization regression check;
+- live reasoning-effort rendering: off 11 prompt tokens, low 11, high 90, max
+  103;
 - `soak-test.sh`: 25/25 responses, zero errors, zero silent-empty responses;
 - `bench-agentic.sh`: all 15 turns through 54K;
 - Q8 CUDA concat regression: 45/45.

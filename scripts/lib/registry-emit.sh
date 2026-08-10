@@ -682,6 +682,15 @@ for vr in _tui_registry.parse_variant_rows(tab):
             # "16bit" default (fp16/bf16 per compose --dtype) / "int8" / "fp8".
             "act_format": (COMPOSE_REGISTRY.get(d["slug"], {}) or {}).get("act_format"),
             "chat_template": (COMPOSE_REGISTRY.get(d["slug"], {}) or {}).get("chat_template"),
+            # Graded reasoning is variant-scoped because model support alone does
+            # not prove that the selected engine + template preserve the effort
+            # request. Empty levels means the usual binary thinking on/off API.
+            "reasoning_effort_levels": list(
+                (COMPOSE_REGISTRY.get(d["slug"], {}) or {}).get("reasoning_effort_levels") or []
+            ),
+            "reasoning_effort_default": (
+                (COMPOSE_REGISTRY.get(d["slug"], {}) or {}).get("reasoning_effort_default")
+            ),
             # W4A8-int8-activation capability (c3 serve-confirm checkbox, #609) —
             # True when the compose is wired + weights are positive-sym int4.
             "act8_capable": bool((COMPOSE_REGISTRY.get(d["slug"], {}) or {}).get("act8_capable")),

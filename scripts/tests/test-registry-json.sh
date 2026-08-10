@@ -60,7 +60,7 @@ need(isinstance(d["variants"], list) and d["variants"], "variants must be a non-
 need(isinstance(d["defaults"], list) and d["defaults"], "defaults must be a non-empty list")
 
 # variants — the parse_variant_rows fields (+ source + configured_ctx +
-# weights_companions/drafter/vision + baseline); port is an int.  configured_ctx
+# reasoning effort + weights_companions/drafter/vision + baseline); port is an int.  configured_ctx
 # is the EXACT numeric registry max_ctx int behind ctx_label (the cockpit's
 # divergence badge compares the probe against it).  weights_companions = the
 # per-slug extra weight keys (DFlash draft / mmproj) the cockpit Download
@@ -81,6 +81,9 @@ VARIANT_KEYS = {
     "act_format",
     # template-regime facet (2026-07-18): froggeric | gemma-canonical | native
     "chat_template",
+    # Optional graded reasoning control. Empty levels + null default means the
+    # profile has the usual binary thinking on/off contract.
+    "reasoning_effort_levels", "reasoning_effort_default",
     # c3 serve-confirm W4A8 checkbox capability (#609).
     "act8_capable",
     # c3 catalog offload column: weight-offload backend — None (resident, the
@@ -100,6 +103,22 @@ need(v0["source"] == "curated", f"variant.source default must be 'curated' (got 
 # configured_ctx is an int (or None) — the exact registry max_ctx behind ctx_label.
 need(v0["configured_ctx"] is None or isinstance(v0["configured_ctx"], int),
      f"variant.configured_ctx must be int|None (got {type(v0['configured_ctx']).__name__})")
+for variant in d["variants"]:
+    levels = variant["reasoning_effort_levels"]
+    default = variant["reasoning_effort_default"]
+    need(isinstance(levels, list),
+         f"{variant['slug']}: reasoning_effort_levels must be list")
+    need((not levels and default is None) or default in levels,
+         f"{variant['slug']}: reasoning effort default must belong to declared levels")
+
+deepseek_fast = next(
+    v for v in d["variants"]
+    if v["slug"] == "llamacpp/deepseek-flash-multi4-antirez-iq2-fast-prefill"
+)
+need(deepseek_fast["reasoning_effort_levels"] == ["low", "high", "max"],
+     "DeepSeek V4 fast-prefill must expose low/high/max reasoning effort")
+need(deepseek_fast["reasoning_effort_default"] == "low",
+     "DeepSeek V4 fast-prefill reasoning effort must default to low")
 
 # defaults
 DEFAULT_KEYS = {"model", "engine", "topology", "slug", "source"}

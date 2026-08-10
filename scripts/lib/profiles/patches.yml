@@ -484,7 +484,7 @@ patches:
       note: "Locally maintained minja transcription of the official DeepSeek V4 0731 encoding protocol; sha256 b8755094c6bfa409f97ac1adc39a98cbdf2435ef777a5d7ce94be1a00747600f."
     drift_guard:
       kind: behavioral
-      check: "On the pinned engine image, ordinary and streaming get_weather-class requests produce parsed tool_calls with valid JSON arguments and no raw DSML leakage; tool-result replay stays coherent; reasoning_content remains separated from content. Any behavioral/TPS comparison MUST use the SELF-CONTAINED symmetric restart+settle protocol: identical docker restart on BOTH arms -> healthy -> fixed 60s settle -> >=3 bench.sh runs/arm -> compare the GRAND MEAN of the SAME canonical segment; flag ONLY a deterministic regression reproduced across ALL 3 runs."
+      check: "On the pinned engine image, ordinary and streaming get_weather-class requests produce parsed tool_calls with valid JSON arguments and no raw DSML leakage; tool-result replay stays coherent; reasoning_content remains separated from content. With enable_thinking=true, nested chat_template_kwargs.reasoning_effort values low/high/max MUST render distinct low/high/max prompt regimes (low adds no prefix; high and max add their different official prefixes). Top-level reasoning_effort is NOT the contract because this llama-server ignores it. Any behavioral/TPS comparison MUST use the SELF-CONTAINED symmetric restart+settle protocol: identical docker restart on BOTH arms -> healthy -> fixed 60s settle -> >=3 bench.sh runs/arm -> compare the GRAND MEAN of the SAME canonical segment; flag ONLY a deterministic regression reproduced across ALL 3 runs."
       on_fail: capability-degraded
     capability: chat-template-override
     foundational: false
