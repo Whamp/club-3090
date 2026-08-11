@@ -9,7 +9,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-_RECEIPT_VERSION = 1
+from deepseek_v4_lowbit.safetensors_header import (
+    SafetensorsHeaderError,
+    safetensors_inventory,
+)
+
+_RECEIPT_VERSION = 2
 _HASH_CHUNK_BYTES = 8 * 1024 * 1024
 
 
@@ -31,6 +36,7 @@ class ShardReceipt:
     output_sha256: str
     output_bytes: int
     tensors: dict[str, dict[str, Any]]
+    metadata: dict[str, Any]
 
 
 class ResumableSafetensorsWriter:
@@ -70,6 +76,8 @@ class ResumableSafetensorsWriter:
         shard_name: str,
         tensors: Mapping[str, Any],
         identity: ShardIdentity,
+        *,
+        metadata: Mapping[str, Any] | None = None,
     ) -> ShardReceipt:
         shard_name = _validate_shard_name(shard_name)
         completed = self.completed_shard(shard_name, identity)
@@ -89,6 +97,7 @@ class ResumableSafetensorsWriter:
         partial_receipt_path.unlink(missing_ok=True)
 
         safe_tensors = _prepare_tensors(tensors)
+        receipt_metadata = _validate_receipt_metadata(metadata or {})
         save_file = _import_optional("safetensors.torch").save_file
         save_file(safe_tensors, str(temporary_output_path))
         _sync_file(temporary_output_path)
@@ -99,7 +108,8 @@ class ResumableSafetensorsWriter:
             output_path=output_path,
             output_sha256=file_sha256(temporary_output_path),
             output_bytes=temporary_output_path.stat().st_size,
-            tensors=_safetensors_inventory(temporary_output_path),
+            tensors=safetensors_inventory(temporary_output_path),
+            metadata=receipt_metadata,
         )
         _write_json_atomic_target(partial_receipt_path, _receipt_payload(receipt))
         os.replace(temporary_output_path, output_path)
@@ -188,7 +198,13 @@ class ResumableSafetensorsWriter:
             raise ResumeConflictError(
                 f"checksum verification failed for shard {receipt.shard_name}"
             )
-        if _safetensors_inventory(expected_path) != receipt.tensors:
+        try:
+            inventory = safetensors_inventory(expected_path)
+        except SafetensorsHeaderError as error:
+            raise ResumeConflictError(
+                f"invalid safetensors output for shard {receipt.shard_name}"
+            ) from error
+        if inventory != receipt.tensors:
             raise ResumeConflictError(
                 f"tensor inventory mismatch for shard {receipt.shard_name}"
             )
@@ -210,6 +226,7 @@ class ResumableSafetensorsWriter:
             if output_bytes < 0:
                 raise ValueError("negative output_bytes")
             tensors = _validate_tensor_records(payload["tensors"])
+            metadata = _validate_receipt_metadata(payload.get("metadata", {}))
             return ShardReceipt(
                 shard_name=shard_name,
                 identity=ShardIdentity(
@@ -220,6 +237,7 @@ class ResumableSafetensorsWriter:
                 output_sha256=output_sha256,
                 output_bytes=output_bytes,
                 tensors=tensors,
+                metadata=metadata,
             )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
             raise ResumeConflictError(f"invalid conversion receipt {path}") from error
@@ -257,82 +275,6 @@ def _prepare_tensors(tensors: Mapping[str, Any]) -> dict[str, Any]:
             raise ValueError(f"tensor {name!r} must be on CPU before shard writing")
         prepared[name] = tensor.contiguous()
     return prepared
-
-
-def _safetensors_inventory(path: Path) -> dict[str, dict[str, Any]]:
-    file_size = path.stat().st_size
-    with path.open("rb") as file_handle:
-        encoded_header_size = file_handle.read(8)
-        if len(encoded_header_size) != 8:
-            raise ResumeConflictError(f"invalid safetensors header in {path}")
-        header_size = int.from_bytes(encoded_header_size, byteorder="little")
-        if header_size <= 0 or header_size > file_size - 8:
-            raise ResumeConflictError(f"invalid safetensors header size in {path}")
-        try:
-            header = json.loads(
-                file_handle.read(header_size),
-                object_pairs_hook=_reject_duplicate_json_keys,
-            )
-        except (UnicodeDecodeError, ValueError, json.JSONDecodeError) as error:
-            raise ResumeConflictError(
-                f"invalid safetensors header in {path}"
-            ) from error
-
-    if not isinstance(header, dict):
-        raise ResumeConflictError(f"invalid safetensors tensor map in {path}")
-    payload_bytes = file_size - 8 - header_size
-    inventory: dict[str, dict[str, Any]] = {}
-    occupied_ranges: list[tuple[int, int, str]] = []
-    for tensor_name, raw_record in header.items():
-        if tensor_name == "__metadata__":
-            continue
-        try:
-            dtype = _require_nonempty_string(raw_record["dtype"], "tensor dtype")
-            shape = raw_record["shape"]
-            offsets = raw_record["data_offsets"]
-            if not isinstance(shape, list) or any(
-                not isinstance(dimension, int) or dimension < 0 for dimension in shape
-            ):
-                raise ValueError("invalid shape")
-            if (
-                not isinstance(offsets, list)
-                or len(offsets) != 2
-                or any(not isinstance(offset, int) for offset in offsets)
-            ):
-                raise ValueError("invalid offsets")
-            start, end = offsets
-            if start < 0 or end < start or end > payload_bytes:
-                raise ValueError("out-of-range offsets")
-        except (KeyError, TypeError, ValueError) as error:
-            raise ResumeConflictError(
-                f"invalid safetensors record for {tensor_name!r} in {path}"
-            ) from error
-        occupied_ranges.append((start, end, tensor_name))
-        inventory[tensor_name] = {
-            "dtype": dtype,
-            "shape": shape,
-            "nbytes": end - start,
-        }
-
-    previous_end = 0
-    for start, end, tensor_name in sorted(occupied_ranges):
-        if start != previous_end:
-            raise ResumeConflictError(
-                f"non-contiguous tensor data before {tensor_name!r} in {path}"
-            )
-        previous_end = end
-    if previous_end != payload_bytes:
-        raise ResumeConflictError(f"unaccounted tensor data in {path}")
-    return dict(sorted(inventory.items()))
-
-
-def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError(f"duplicate JSON key {key!r}")
-        result[key] = value
-    return result
 
 
 def _require_nonempty_string(value: Any, field_name: str) -> str:
@@ -373,6 +315,19 @@ def _validate_tensor_records(value: Any) -> dict[str, dict[str, Any]]:
     return records
 
 
+def _validate_receipt_metadata(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValueError("receipt metadata must be an object")
+    try:
+        serialized = json.dumps(value, allow_nan=False, sort_keys=True)
+        normalized = json.loads(serialized)
+    except (TypeError, ValueError) as error:
+        raise ValueError("receipt metadata must contain finite JSON values") from error
+    if not isinstance(normalized, dict):
+        raise ValueError("receipt metadata must normalize to an object")
+    return normalized
+
+
 def _receipt_payload(receipt: ShardReceipt) -> dict[str, Any]:
     return {
         "version": _RECEIPT_VERSION,
@@ -382,6 +337,7 @@ def _receipt_payload(receipt: ShardReceipt) -> dict[str, Any]:
         "output_sha256": receipt.output_sha256,
         "output_bytes": receipt.output_bytes,
         "tensors": receipt.tensors,
+        "metadata": receipt.metadata,
     }
 
 

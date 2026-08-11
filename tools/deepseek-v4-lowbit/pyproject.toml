@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = []
 
 [project.scripts]
+deepseek-v4-convert = "deepseek_v4_lowbit.convert_cli:main"
 deepseek-v4-plan = "deepseek_v4_lowbit.plan_cli:main"
 
 [build-system]

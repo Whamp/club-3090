@@ -119,6 +119,27 @@ def classify_tensor(name: str) -> TensorIdentity:
     )
 
 
+def load_artifact_recipe(path: Path) -> ArtifactRecipe:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("recipe must be a JSON object")
+    default = _load_layer_quantization(raw.get("default"), "default")
+    raw_layers = raw.get("layers", {})
+    if not isinstance(raw_layers, dict):
+        raise ValueError("recipe layers must be a JSON object")
+
+    layers: dict[int, LayerQuantization] = {}
+    for layer, value in raw_layers.items():
+        try:
+            layer_number = int(layer)
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"invalid layer number: {layer!r}") from error
+        if layer_number < 0:
+            raise ValueError(f"layer number must be non-negative: {layer_number}")
+        layers[layer_number] = _load_layer_quantization(value, f"layers.{layer}")
+    return ArtifactRecipe(default=default, layers=layers)
+
+
 def load_tensor_headers(path: Path) -> tuple[TensorHeader, ...]:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
@@ -184,6 +205,18 @@ def plan_artifact(
             accumulator.quantized_tensor_count += 1
 
     return accumulator.finish()
+
+
+def _load_layer_quantization(value: Any, location: str) -> LayerQuantization:
+    if not isinstance(value, dict):
+        raise ValueError(f"{location} must be a JSON object")
+    if set(value) != {"w13_bits", "w2_bits"}:
+        raise ValueError(f"{location} must contain only w13_bits and w2_bits")
+    w13_bits = value["w13_bits"]
+    w2_bits = value["w2_bits"]
+    if not isinstance(w13_bits, int) or not isinstance(w2_bits, int):
+        raise ValueError(f"{location} bit widths must be integers")
+    return LayerQuantization(w13_bits=w13_bits, w2_bits=w2_bits)
 
 
 def _parse_header(shard: str, name: str, metadata: Any) -> TensorHeader:

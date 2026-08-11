@@ -97,6 +97,33 @@ A completed shard is skipped only after its identity and checksum verify. Recipe
 
 Call `completed_shard()` before loading a source shard so a resume avoids dequantization and quantization work. Keep the output and `.conversion-state` directories together on durable storage until artifact validation finishes.
 
+## Streamed conversion
+
+`deepseek-v4-convert` processes the official indexed checkpoint one source shard at a time. For each routed expert it delegates DeepSeek MXFP4/E8M0 normalization and dequantization to pinned AutoRound, optionally loads the matching expert imatrix vector, fits WNA16, emits compressed-tensors keys, releases transient tensors, and hands the completed shard to the resumable writer. Preserved tensors retain their values and dtypes; source routed scales are replaced; every `mtp.*` tensor is omitted.
+
+The official 72,317-tensor header capture verifies the streaming boundary: all 35,328 routed weights, including the omitted MTP weights, have their source scale in the same one of 48 shards. There are no missing or cross-shard pairs.
+
+Run a resumable plain-RTN conversion:
+
+```bash
+deepseek-v4-convert \
+  /durable/source/DeepSeek-V4-Flash-0731 \
+  /durable/output/deepseek-v4-flash-wna16 \
+  /durable/recipe.json \
+  --device cuda \
+  --quantizer plain-rtn
+```
+
+For an imatrix-weighted run, use `--quantizer imatrix-weighted-rtn --imatrix /durable/routed-moe-imatrix.dat`. Repeat `--shard NAME` to process only an intentional pilot subset. Subset runs write verified shards and receipts but deliberately do not create a model index or config. A full 48-shard run additionally:
+
+- creates `model.safetensors.index.json` from verified receipts;
+- replaces the source FP8 metadata with exact per-layer/per-projection compressed-tensors groups;
+- sets `num_nextn_predict_layers` to zero and records MTP as omitted;
+- copies tokenizer, model-code, and other non-weight assets atomically; and
+- writes `conversion-metrics.json` from metrics retained in shard receipts.
+
+The transform recipe checksum includes layer bits, group size, quantizer, imatrix checksum, compute device, and pinned AutoRound/compressed-tensors revisions. Resume fails closed if any of these change.
+
 ## W3 constraint
 
 The pinned vLLM implementation allocates each packed dimension using a pack factor of `32 // bits`. W3 therefore uses ten values per 32-bit word. DeepSeek V4's 4096- and 2048-wide expert matrices are not divisible by ten, so the current planner rejects W3. Supporting it requires a tested padding contract in the writer and loader; silently truncating dimensions would corrupt the artifact.
