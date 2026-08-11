@@ -55,6 +55,21 @@ with ImatrixFile.open(Path("routed-moe-imatrix.dat")) as imatrix:
 
 The parser contract follows `antirez/ds4@84cc882352757baf628a1776badf7cc54d584e28`. The published imatrix itself still needs a direct checksum and full-geometry check when staged for the pilot.
 
+## Quantizer comparison
+
+`quantize_symmetric()` wraps the pinned AutoRound RTN primitives rather than copying their scale-search implementation:
+
+- plain RTN uses `quant_tensor_rtn_sym`;
+- imatrix-weighted scale search uses `quant_tensor_opt_rtn_sym`;
+- both return signed codes, stored FP16 group scales, the reconstruction produced from those persisted values, and comparable weighted and unweighted MSE.
+
+Quantization is an optional heavy path. Run it in the AutoRound checkout pinned by the plan at `f17d9cd4b36982006bad21ff87127aac739072e3`; metadata planning and imatrix indexing do not import Torch or AutoRound. The CPU regression fixture shows weighted W2 search reducing its weighted MSE from about `0.05703` to `0.05031`. This verifies the comparison mechanism, not expected DeepSeek quality; representative real layers remain the rental-pilot decision point.
+
+```bash
+PYTHONPATH=src /path/to/auto-round/.venv/bin/python \
+  -m unittest tests/test_quantizer.py -v
+```
+
 ## W3 constraint
 
 The pinned vLLM implementation allocates each packed dimension using a pack factor of `32 // bits`. W3 therefore uses ten values per 32-bit word. DeepSeek V4's 4096- and 2048-wide expert matrices are not divisible by ten, so the current planner rejects W3. Supporting it requires a tested padding contract in the writer and loader; silently truncating dimensions would corrupt the artifact.
