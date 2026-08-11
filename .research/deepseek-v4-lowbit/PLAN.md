@@ -121,6 +121,8 @@ Implementation status:
 3. Commit `e5a8452c7` adds projection-sensitive compressed-tensors WNA16 MoE support: fused gate/up must share a schema, down may use a different bit width, mixed schemas are Humming-only, and packed shapes and Humming descriptors remain distinct. It also makes the haosdent SM80 FP8 helper import safely when Triton is disabled, so CPU tests can collect without a GPU.
 4. The focused CPU run passed 44 tests covering 2–8-bit Humming support, INT2 loading, mixed W2/W4 selection and packing, per-sublayer schema conversion, invalid mixed layouts, and existing WNA16 behavior. The changed-file ruff, format, mypy, typo, SPDX, import, and repository policy hooks passed.
 5. GPU kernel-oracle comparison, packaged SM86 verification, and runtime dispatch proof remain open. Static `SM75+` support is insufficient.
+6. `tools/deepseek-v4-lowbit` now provides a dependency-free exact artifact planner and JSON recipe command. Against all 72,317 captured tensor headers it reproduces the four planning anchors at 76.769692, 78.769692, 81.269692, and 85.769692 GiB; classifies 33,024 routed projection weights; preserves 8.238442 GiB; and omits 10.116807 GiB of MTP tensors. Its unit tests, Ruff, formatting, and `ty` checks pass.
+7. W3 is not currently safe for DeepSeek V4 through the pinned vLLM loader. The runtime allocates the packed dimension with `32 // 3 = 10`, but the 4096- and 2048-wide expert matrices are not divisible by ten. The planner rejects this case rather than silently truncating. W3 remains a candidate only after the writer and loader gain a tested padding contract.
 
 ## Target-runtime fit check
 
@@ -193,7 +195,7 @@ Plan at least 450–500 GB of fast local storage if source, work files, and more
 
 1. **Done:** compare haosdent and Lasimeri and select the pinned haosdent base.
 2. **Done for CPU contracts:** port the W2/W3 bridge and add separate `w13`/`w2` schema support in the isolated vLLM worktree.
-3. Prepare the imatrix parser, tensor-name mapping, quantizer comparison, exact size planner, resumable shard writer, and durable output location.
+3. **In progress:** the tensor-name classifier and exact size planner are implemented and verified. Prepare the imatrix parser and expert-vector mapping next, followed by the quantizer comparison, resumable shard writer, and durable output location.
 4. Define the first bounded rental experiment from that executable tooling, then recheck live on-demand instance availability and total cost.
 5. Rent the selected non-interruptible machine and run the representative-layer pilot; expand into full conversion only if the pilot is useful.
 6. Do not disturb the active server60 service. When it becomes available and Will authorizes GPU use, test exact-shape modeled layouts and verify packaged Humming SM86 kernels against a small PyTorch oracle.

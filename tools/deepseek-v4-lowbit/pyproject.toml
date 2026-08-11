@@ -1,0 +1,23 @@
+[project]
+name = "deepseek-v4-lowbit"
+version = "0.1.0"
+description = "Plan and build mixed-WNA16 DeepSeek V4 artifacts"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+deepseek-v4-plan = "deepseek_v4_lowbit.plan_cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ty.environment]
+python-version = "3.12"
