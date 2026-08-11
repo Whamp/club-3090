@@ -123,6 +123,7 @@ Implementation status:
 5. GPU kernel-oracle comparison, packaged SM86 verification, and runtime dispatch proof remain open. Static `SM75+` support is insufficient.
 6. `tools/deepseek-v4-lowbit` now provides a dependency-free exact artifact planner and JSON recipe command. Against all 72,317 captured tensor headers it reproduces the four planning anchors at 76.769692, 78.769692, 81.269692, and 85.769692 GiB; classifies 33,024 routed projection weights; preserves 8.238442 GiB; and omits 10.116807 GiB of MTP tensors. Its unit tests, Ruff, formatting, and `ty` checks pass.
 7. W3 is not currently safe for DeepSeek V4 through the pinned vLLM loader. The runtime allocates the packed dimension with `32 // 3 = 10`, but the 4096- and 2048-wide expert matrices are not divisible by ten. The planner rejects this case rather than silently truncating. W3 remains a candidate only after the writer and loader gain a tested padding contract.
+8. The CPU tool now has a memory-mapped legacy llama.cpp imatrix parser and exact DS4-to-official tensor mapper. It indexes packed entries without materializing the approximately 450 MB float payload, slices one expert vector at a time, normalizes by call count, and rejects corrupt lengths, duplicate names, wrong expert geometry, non-finite selected values, and trailing data. Twelve package tests pass. Direct checksum and 43-layer/129-entry geometry validation against the published artifact remains part of staging the rental pilot.
 
 ## Target-runtime fit check
 
@@ -195,7 +196,7 @@ Plan at least 450–500 GB of fast local storage if source, work files, and more
 
 1. **Done:** compare haosdent and Lasimeri and select the pinned haosdent base.
 2. **Done for CPU contracts:** port the W2/W3 bridge and add separate `w13`/`w2` schema support in the isolated vLLM worktree.
-3. **In progress:** the tensor-name classifier and exact size planner are implemented and verified. Prepare the imatrix parser and expert-vector mapping next, followed by the quantizer comparison, resumable shard writer, and durable output location.
+3. **In progress:** the tensor-name classifier, exact size planner, imatrix parser, and expert-vector mapping are implemented and verified against pinned format fixtures. Prepare the quantizer comparison next, followed by the resumable shard writer and durable output location; directly validate the parser against the published imatrix while staging the pilot.
 4. Define the first bounded rental experiment from that executable tooling, then recheck live on-demand instance availability and total cost.
 5. Rent the selected non-interruptible machine and run the representative-layer pilot; expand into full conversion only if the pilot is useful.
 6. Do not disturb the active server60 service. When it becomes available and Will authorizes GPU use, test exact-shape modeled layouts and verify packaged Humming SM86 kernels against a small PyTorch oracle.
