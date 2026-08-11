@@ -73,6 +73,37 @@ class ImatrixFile:
     def entry_count(self) -> int:
         return len(self._entries)
 
+    def validate_deepseek_v4_geometry(
+        self,
+        *,
+        layer_count: int = 43,
+        expert_count: int = 256,
+        hidden_size: int = 4096,
+        intermediate_size: int = 2048,
+    ) -> None:
+        expected: dict[str, int] = {}
+        for layer in range(layer_count):
+            expected[f"blk.{layer}.ffn_gate_exps.weight"] = expert_count * hidden_size
+            expected[f"blk.{layer}.ffn_up_exps.weight"] = expert_count * hidden_size
+            expected[f"blk.{layer}.ffn_down_exps.weight"] = (
+                expert_count * intermediate_size
+            )
+        if set(self._entries) != set(expected):
+            missing = sorted(set(expected) - set(self._entries))
+            extra = sorted(set(self._entries) - set(expected))
+            raise ValueError(
+                f"DeepSeek V4 imatrix entry mismatch: missing={missing}, extra={extra}"
+            )
+        for name, value_count in expected.items():
+            entry = self._entries[name]
+            if entry.calls <= 0:
+                raise ValueError(f"DeepSeek V4 imatrix entry has no calls: {name}")
+            if entry.value_count != value_count:
+                raise ValueError(
+                    f"DeepSeek V4 imatrix geometry mismatch for {name}: "
+                    f"got {entry.value_count}, expected {value_count}"
+                )
+
     def expert_vector(
         self,
         hf_weight_name: str,

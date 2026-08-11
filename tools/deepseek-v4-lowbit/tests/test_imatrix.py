@@ -1,11 +1,51 @@
 from __future__ import annotations
 
+import io
+import mmap
 import struct
 import tempfile
 import unittest
 from pathlib import Path
 
-from deepseek_v4_lowbit.imatrix import ImatrixFile, map_hf_expert_to_imatrix
+from deepseek_v4_lowbit.imatrix import (
+    ImatrixEntry,
+    ImatrixFile,
+    map_hf_expert_to_imatrix,
+)
+
+
+class ImatrixGeometryTests(unittest.TestCase):
+    def test_validates_complete_deepseek_geometry(self) -> None:
+        entries = {}
+        for layer in range(2):
+            entries[f"blk.{layer}.ffn_gate_exps.weight"] = ImatrixEntry(
+                "gate", 1, 4 * 8, 0
+            )
+            entries[f"blk.{layer}.ffn_up_exps.weight"] = ImatrixEntry("up", 1, 4 * 8, 0)
+            entries[f"blk.{layer}.ffn_down_exps.weight"] = ImatrixEntry(
+                "down", 1, 4 * 6, 0
+            )
+        source = io.BytesIO()
+        mapping = mmap.mmap(-1, 1)
+        self.addCleanup(mapping.close)
+        self.addCleanup(source.close)
+        imatrix = ImatrixFile(source, mapping, entries, chunks=None, dataset=None)
+
+        imatrix.validate_deepseek_v4_geometry(
+            layer_count=2,
+            expert_count=4,
+            hidden_size=8,
+            intermediate_size=6,
+        )
+
+        entries["blk.1.ffn_down_exps.weight"] = ImatrixEntry("down", 1, 23, 0)
+        with self.assertRaisesRegex(ValueError, "geometry mismatch"):
+            imatrix.validate_deepseek_v4_geometry(
+                layer_count=2,
+                expert_count=4,
+                hidden_size=8,
+                intermediate_size=6,
+            )
 
 
 class ImatrixNameMappingTests(unittest.TestCase):

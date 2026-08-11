@@ -97,6 +97,26 @@ A completed shard is skipped only after its identity and checksum verify. Recipe
 
 Call `completed_shard()` before loading a source shard so a resume avoids dequantization and quantization work. Keep the output and `.conversion-state` directories together on durable storage until artifact validation finishes.
 
+## Bounded quantizer pilot
+
+`deepseek-v4-pilot` compares plain and imatrix-weighted RTN only on named `LAYER:EXPERT` samples. It validates the published imatrix's complete 43-layer/129-entry geometry, loads only the source shards containing those samples, runs both candidates at the requested bit widths, verifies that each result packs, and records elapsed time plus weighted and unweighted error.
+
+The initial rental pilot is intentionally limited to layers 0, 26, 37, and 42; experts 0 and 127; all three projections; and W2. That is 24 matrices and 48 candidate fits from source shards 2, 28, 39, and 44:
+
+```bash
+deepseek-v4-pilot \
+  /durable/source/DeepSeek-V4-Flash-0731 \
+  /durable/routed-moe-imatrix.dat \
+  /durable/pilot/w2-quantizer-comparison.json \
+  --sample 0:0 --sample 0:127 \
+  --sample 26:0 --sample 26:127 \
+  --sample 37:0 --sample 37:127 \
+  --sample 42:0 --sample 42:127 \
+  --bits 2 --device cuda
+```
+
+Use weighted RTN for the full artifact only if its measured weighted-error improvement is meaningful relative to its runtime. This pilot is a method screen, not an end-to-end quality claim.
+
 ## Streamed conversion
 
 `deepseek-v4-convert` processes the official indexed checkpoint one source shard at a time. For each routed expert it delegates DeepSeek MXFP4/E8M0 normalization and dequantization to pinned AutoRound, optionally loads the matching expert imatrix vector, fits WNA16, emits compressed-tensors keys, releases transient tensors, and hands the completed shard to the resumable writer. Preserved tensors retain their values and dtypes; source routed scales are replaced; every `mtp.*` tensor is omitted.
