@@ -70,6 +70,33 @@ PYTHONPATH=src /path/to/auto-round/.venv/bin/python \
   -m unittest tests/test_quantizer.py -v
 ```
 
+## Checkpoint packing
+
+`pack_quantized_tensor()` delegates to the `pack_to_int32` implementation in `compressed-tensors==0.17.0`, the version pinned by the selected vLLM fork. It preserves the package's signed-code offset and low-bit-first word order; the regression fixture packs repeated W2 codes `[-2, -1, 0, 1]` as the literal word `0xE4E4E4E4`.
+
+`packed_checkpoint_tensors()` expands one official per-expert weight name into the three keys consumed by vLLM's `RoutedExperts` loader:
+
+```text
+layers.N.ffn.experts.E.w1.weight_packed
+layers.N.ffn.experts.E.w1.weight_scale
+layers.N.ffn.experts.E.w1.weight_shape
+```
+
+The same mapping applies to `w3` and `w2`. The checkpoint stays per-expert; vLLM fuses `w1` and `w3` into `w13` while loading.
+
+## Resumable shard output
+
+`ResumableSafetensorsWriter` writes each output shard through a temporary file and records a receipt under `.conversion-state/receipts/`. A receipt binds:
+
+- the source-shard SHA-256;
+- a canonical recipe SHA-256;
+- the output-shard SHA-256 and byte length; and
+- each tensor's name, dtype, shape, and raw byte count.
+
+A completed shard is skipped only after its identity and checksum verify. Recipe changes, source changes, orphaned final files, malformed receipts, checksum failures, missing expected shards, mixed recipe fingerprints, and duplicate tensor names fail closed. The writer can recover the narrow crash window where the final shard rename completed but the prepared receipt rename did not. `finalize_index()` creates `model.safetensors.index.json` only from verified receipts.
+
+Call `completed_shard()` before loading a source shard so a resume avoids dequantization and quantization work. Keep the output and `.conversion-state` directories together on durable storage until artifact validation finishes.
+
 ## W3 constraint
 
 The pinned vLLM implementation allocates each packed dimension using a pack factor of `32 // bits`. W3 therefore uses ten values per 32-bit word. DeepSeek V4's 4096- and 2048-wide expert matrices are not divisible by ten, so the current planner rejects W3. Supporting it requires a tested padding contract in the writer and loader; silently truncating dimensions would corrupt the artifact.
