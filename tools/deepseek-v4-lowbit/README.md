@@ -146,6 +146,8 @@ For an imatrix-weighted run, use `--quantizer imatrix-weighted-rtn --imatrix /du
 
 The transform recipe checksum includes layer bits, group size, quantizer, imatrix checksum, compute device, and pinned AutoRound/compressed-tensors revisions. Resume fails closed if any of these change.
 
+After a Hugging Face upload, `deepseek-v4-verify-upload LOCAL_DIRECTORY REPOSITORY REPORT` compares the exact local and remote inventories. It verifies LFS/Xet objects with content SHA-256, ordinary files with their Git blob SHA-1, and byte sizes for every file; only Hub-managed `.gitattributes` may be extra. A successful upload command alone is not sufficient evidence for deleting the rental.
+
 ## W3 constraint
 
 The pinned vLLM implementation allocates each packed dimension using a pack factor of `32 // bits`. W3 therefore uses ten values per 32-bit word. DeepSeek V4's 4096- and 2048-wide expert matrices are not divisible by ten, so the current planner rejects W3. Supporting it requires a tested padding contract in the writer and loader; silently truncating dimensions would corrupt the artifact.
