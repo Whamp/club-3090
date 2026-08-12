@@ -50,7 +50,13 @@ class ResumableShardWriterTests(unittest.TestCase):
             "model-00001-of-00001.safetensors", tensors, identity
         )
         resumed = writer.completed_shard("model-00001-of-00001.safetensors", identity)
-        index_path = writer.finalize_index(["model-00001-of-00001.safetensors"])
+        index_path = writer.finalize_index(
+            ["model-00001-of-00001.safetensors"],
+            expected_weight_map={
+                "model.layers.0.weight_packed": "model-00001-of-00001.safetensors",
+                "model.layers.0.weight_scale": "model-00001-of-00001.safetensors",
+            },
+        )
 
         self.assertEqual(resumed, receipt)
         self.assertEqual(receipt.output_bytes, receipt.output_path.stat().st_size)
@@ -159,6 +165,66 @@ class ResumableShardWriterTests(unittest.TestCase):
         with self.assertRaisesRegex(ResumeConflictError, "tensor inventory"):
             writer.completed_shard(shard_name, identity)
 
+    def test_rejects_final_inventory_that_differs_from_expected_mapping(self) -> None:
+        torch = importlib.import_module("torch")
+
+        from deepseek_v4_lowbit.shard_writer import (
+            ResumableSafetensorsWriter,
+            ResumeConflictError,
+            ShardIdentity,
+        )
+
+        writer = ResumableSafetensorsWriter(self.output_directory)
+        shard_name = "model-00001-of-00001.safetensors"
+        identity = ShardIdentity(source_sha256="source-a", recipe_sha256="recipe-a")
+        writer.write_shard(shard_name, {"weight": torch.ones(1)}, identity)
+
+        mismatches = {
+            "missing tensor": {"weight": shard_name, "missing": shard_name},
+            "unexpected tensor": {},
+        }
+        for mismatch, expected_weight_map in mismatches.items():
+            with self.subTest(mismatch=mismatch):
+                with self.assertRaisesRegex(
+                    ResumeConflictError,
+                    "final tensor inventory does not match expected output",
+                ):
+                    writer.finalize_index(
+                        [shard_name],
+                        expected_weight_map=expected_weight_map,
+                    )
+                self.assertFalse(
+                    (self.output_directory / "model.safetensors.index.json").exists()
+                )
+
+    def test_rejects_tensor_written_to_wrong_expected_shard(self) -> None:
+        torch = importlib.import_module("torch")
+
+        from deepseek_v4_lowbit.shard_writer import (
+            ResumableSafetensorsWriter,
+            ResumeConflictError,
+            ShardIdentity,
+        )
+
+        writer = ResumableSafetensorsWriter(self.output_directory)
+        identity = ShardIdentity(source_sha256="source-a", recipe_sha256="recipe-a")
+        first = "model-00001-of-00002.safetensors"
+        second = "model-00002-of-00002.safetensors"
+        writer.write_shard(first, {"first_weight": torch.ones(1)}, identity)
+        writer.write_shard(second, {"second_weight": torch.zeros(1)}, identity)
+
+        with self.assertRaisesRegex(
+            ResumeConflictError,
+            "final tensor inventory does not match expected output",
+        ):
+            writer.finalize_index(
+                [first, second],
+                expected_weight_map={
+                    "first_weight": second,
+                    "second_weight": first,
+                },
+            )
+
     def test_rejects_duplicate_tensor_names_across_shards(self) -> None:
         torch = importlib.import_module("torch")
 
@@ -176,7 +242,10 @@ class ResumableShardWriterTests(unittest.TestCase):
         writer.write_shard(second, {"weight": torch.zeros(1)}, identity)
 
         with self.assertRaisesRegex(ResumeConflictError, "duplicate tensor"):
-            writer.finalize_index([first, second])
+            writer.finalize_index(
+                [first, second],
+                expected_weight_map={"weight": first},
+            )
 
 
 if __name__ == "__main__":

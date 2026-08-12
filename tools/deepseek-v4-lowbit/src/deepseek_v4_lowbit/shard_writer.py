@@ -118,12 +118,22 @@ class ResumableSafetensorsWriter:
         _sync_directory(self.receipt_directory)
         return receipt
 
-    def finalize_index(self, expected_shards: Iterable[str]) -> Path:
+    def finalize_index(
+        self,
+        expected_shards: Iterable[str],
+        *,
+        expected_weight_map: Mapping[str, str],
+    ) -> Path:
+        """Publish an index only when produced tensors exactly match expectations."""
         shard_names = [_validate_shard_name(name) for name in expected_shards]
         if not shard_names:
             raise ValueError("at least one expected shard is required")
         if len(set(shard_names)) != len(shard_names):
             raise ValueError("expected shard names must be unique")
+        validated_expected_weight_map = _validate_expected_weight_map(
+            expected_weight_map,
+            set(shard_names),
+        )
 
         weight_map: dict[str, str] = {}
         total_size = 0
@@ -149,6 +159,19 @@ class ResumableSafetensorsWriter:
         if len(recipe_fingerprints) != 1:
             raise ResumeConflictError(
                 "expected shards were produced with different recipe fingerprints"
+            )
+        if weight_map != validated_expected_weight_map:
+            missing = sorted(set(validated_expected_weight_map) - set(weight_map))
+            unexpected = sorted(set(weight_map) - set(validated_expected_weight_map))
+            wrong_shard = sorted(
+                tensor_name
+                for tensor_name in set(weight_map) & set(validated_expected_weight_map)
+                if weight_map[tensor_name] != validated_expected_weight_map[tensor_name]
+            )
+            raise ResumeConflictError(
+                "final tensor inventory does not match expected output: "
+                f"missing={missing[:3]}, unexpected={unexpected[:3]}, "
+                f"wrong_shard={wrong_shard[:3]}"
             )
 
         index_path = self.output_directory / "model.safetensors.index.json"
@@ -291,6 +314,28 @@ def _require_sha256(value: Any) -> str:
     ):
         raise ValueError("output_sha256 must be a lowercase SHA-256 digest")
     return value
+
+
+def _validate_expected_weight_map(
+    value: Mapping[str, str],
+    expected_shards: set[str],
+) -> dict[str, str]:
+    if not isinstance(value, Mapping):
+        raise ValueError("expected weight map must be a mapping")
+    validated: dict[str, str] = {}
+    for tensor_name, shard_name in value.items():
+        if not isinstance(tensor_name, str) or not tensor_name:
+            raise ValueError("expected tensor names must be non-empty strings")
+        if not isinstance(shard_name, str):
+            raise ValueError("expected shard names must be strings")
+        validated_shard_name = _validate_shard_name(shard_name)
+        if validated_shard_name not in expected_shards:
+            raise ValueError(
+                f"expected tensor {tensor_name!r} references unknown shard "
+                f"{validated_shard_name!r}"
+            )
+        validated[tensor_name] = validated_shard_name
+    return validated
 
 
 def _validate_tensor_records(value: Any) -> dict[str, dict[str, Any]]:

@@ -8,7 +8,9 @@ The planner reads captured safetensors headers without loading model weights. It
 
 - preserves non-MTP, non-routed-expert tensors byte-for-byte;
 - omits every `mtp.*` tensor;
-- replaces routed-expert `w1`, `w3`, and `w2` weights and source scales with symmetric group-size-128 Humming WNA16 weights and FP16 scales;
+- replaces routed-expert `w1`, `w3`, and `w2` weights and source scales
+  with symmetric group-size-128 Humming WNA16 weights, FP16 scales, and INT64
+  logical-shape tensors;
 - supports one `w13` bit width and one `w2` bit width per layer; and
 - rejects dimensions that the pinned vLLM Humming loader cannot pack.
 
@@ -32,7 +34,10 @@ uv run deepseek-v4-plan \
   /path/to/recipe.json
 ```
 
-The JSON result separates preserved bytes, new packed weights and scales, replaced source bytes, and omitted MTP bytes. `total_bytes` is the expected raw tensor payload; filesystem and safetensors-header overhead are not included.
+The JSON result separates preserved bytes, packed weights, FP16 scales, INT64
+logical-shape tensors, replaced source bytes, and omitted MTP bytes.
+`total_bytes` is the expected raw tensor payload; filesystem and
+safetensors-header overhead are not included.
 
 ## Routed-expert imatrix
 
@@ -93,7 +98,14 @@ The same mapping applies to `w3` and `w2`. The checkpoint stays per-expert; vLLM
 - the output-shard SHA-256 and byte length; and
 - each tensor's name, dtype, shape, and raw byte count.
 
-A completed shard is skipped only after its identity and checksum verify. Recipe changes, source changes, orphaned final files, malformed receipts, checksum failures, missing expected shards, mixed recipe fingerprints, and duplicate tensor names fail closed. The writer can recover the narrow crash window where the final shard rename completed but the prepared receipt rename did not. `finalize_index()` creates `model.safetensors.index.json` only from verified receipts.
+A completed shard is skipped only after its identity and checksum verify.
+Recipe changes, source changes, orphaned final files, malformed receipts,
+checksum failures, missing expected shards, mixed recipe fingerprints,
+duplicate tensor names, and any missing, unexpected, or mis-sharded final
+tensor fail closed. The writer can recover the narrow crash window where the
+final shard rename completed but the prepared receipt rename did not.
+`finalize_index()` creates `model.safetensors.index.json` only when verified
+receipts exactly match the output inventory derived from the source index.
 
 Call `completed_shard()` before loading a source shard so a resume avoids dequantization and quantization work. Keep the output and `.conversion-state` directories together on durable storage until artifact validation finishes.
 
@@ -132,7 +144,15 @@ only. It cannot establish SM86 compilation, dispatch, or performance.
 
 ## Streamed conversion
 
-`deepseek-v4-convert` processes the official indexed checkpoint one source shard at a time. For each routed expert it delegates DeepSeek MXFP4/E8M0 normalization and dequantization to pinned AutoRound, optionally loads the matching expert imatrix vector, fits WNA16, emits compressed-tensors keys, releases transient tensors, and hands the completed shard to the resumable writer. Preserved tensors retain their values and dtypes; source routed scales are replaced; every `mtp.*` tensor is omitted.
+`deepseek-v4-convert` processes the official indexed checkpoint one source
+shard at a time. For each routed expert it delegates DeepSeek MXFP4/E8M0
+normalization and dequantization to pinned AutoRound, optionally loads the
+matching expert imatrix vector, fits WNA16, emits compressed-tensors keys,
+releases transient tensors, and hands the completed shard to the resumable
+writer. Preserved tensors retain their values and dtypes; source routed scales
+are replaced; every `mtp.*` tensor is omitted. The official checkpoint has 48
+source shards, but shards 46–48 contain only MTP tensors, so the MTP-free
+artifact writes and finalizes exactly 45 output shards.
 
 The official 72,317-tensor header capture verifies the streaming boundary: all 35,328 routed weights, including the omitted MTP weights, have their source scale in the same one of 48 shards. There are no missing or cross-shard pairs.
 
@@ -147,7 +167,7 @@ deepseek-v4-convert \
   --quantizer plain-rtn
 ```
 
-For an imatrix-weighted run, use `--quantizer imatrix-weighted-rtn --imatrix /durable/routed-moe-imatrix.dat`. Repeat `--shard NAME` to process only an intentional pilot subset. Subset runs write verified shards and receipts but deliberately do not create a model index or config. A full 48-shard run additionally:
+For an imatrix-weighted run, use `--quantizer imatrix-weighted-rtn --imatrix /durable/routed-moe-imatrix.dat`. Repeat `--shard NAME` to process only an intentional pilot subset. Subset runs write verified shards and receipts but deliberately do not create a model index or config. A full run accounts for all 48 source shards, writes 45 output shards, and additionally:
 
 - creates `model.safetensors.index.json` from verified receipts;
 - replaces the source FP8 metadata with exact per-layer/per-projection compressed-tensors groups;

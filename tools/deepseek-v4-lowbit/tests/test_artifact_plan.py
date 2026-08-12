@@ -68,13 +68,15 @@ class ArtifactPlanTests(unittest.TestCase):
 
         plan = plan_artifact(self.headers, recipe, group_size=128)
 
-        # w1/w3: each 2 rows * one int32 word + one FP16 scale per row.
+        # w1/w3: each 2 rows * eight int32 words + one FP16 scale per row.
         # w2: 4 rows * sixteen int32 words + one FP16 scale per row.
+        # Every replacement also stores its logical [output, input] shape as INT64.
         self.assertEqual(plan.quantized_weight_bytes, 384)
         self.assertEqual(plan.quantized_scale_bytes, 16)
+        self.assertEqual(plan.quantized_shape_bytes, 48)
         self.assertEqual(plan.preserved_bytes, 8)
         self.assertEqual(plan.omitted_bytes, 8)
-        self.assertEqual(plan.total_bytes, 408)
+        self.assertEqual(plan.total_bytes, 456)
         self.assertEqual(plan.quantized_tensor_count, 3)
 
     def test_layer_override_changes_only_selected_layer(self) -> None:

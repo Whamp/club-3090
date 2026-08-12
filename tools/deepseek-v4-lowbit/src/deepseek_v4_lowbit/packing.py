@@ -81,21 +81,33 @@ def pack_quantized_tensor(
     )
 
 
-def packed_checkpoint_tensors(
-    source_weight_name: str,
-    packed: PackedQuantizedTensor,
-) -> dict[str, Any]:
-    """Expand one logical expert weight into compressed-tensors checkpoint keys."""
+def packed_checkpoint_tensor_names(source_weight_name: str) -> tuple[str, str, str]:
+    """Return the three checkpoint names replacing one logical expert weight."""
     suffix = ".weight"
     if not source_weight_name.endswith(suffix):
         raise ValueError(
             f"source weight name must end in {suffix!r}, got {source_weight_name!r}"
         )
     prefix = source_weight_name[: -len(suffix)]
+    return (
+        f"{prefix}.weight_packed",
+        f"{prefix}.weight_scale",
+        f"{prefix}.weight_shape",
+    )
+
+
+def packed_checkpoint_tensors(
+    source_weight_name: str,
+    packed: PackedQuantizedTensor,
+) -> dict[str, Any]:
+    """Expand one logical expert weight into compressed-tensors checkpoint keys."""
+    packed_name, scale_name, shape_name = packed_checkpoint_tensor_names(
+        source_weight_name
+    )
     return {
-        f"{prefix}.weight_packed": packed.weight_packed,
-        f"{prefix}.weight_scale": packed.weight_scale,
-        f"{prefix}.weight_shape": packed.weight_shape,
+        packed_name: packed.weight_packed,
+        scale_name: packed.weight_scale,
+        shape_name: packed.weight_shape,
     }
 
 

@@ -4,14 +4,19 @@ import argparse
 import json
 import os
 import shutil
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
-from deepseek_v4_lowbit.artifact_plan import load_artifact_recipe
+from deepseek_v4_lowbit.artifact_plan import (
+    TensorDisposition,
+    classify_tensor,
+    load_artifact_recipe,
+)
 from deepseek_v4_lowbit.imatrix import ImatrixFile
 from deepseek_v4_lowbit.model_config import materialize_model_config
+from deepseek_v4_lowbit.packing import packed_checkpoint_tensor_names
 from deepseek_v4_lowbit.shard_writer import (
     ResumableSafetensorsWriter,
     file_sha256,
@@ -39,8 +44,15 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("source and output directories must differ")
 
     recipe = load_artifact_recipe(arguments.recipe)
-    source_shards = load_source_shards(source_directory / _SOURCE_INDEX_NAME)
-    selected_shards = _select_shards(source_shards, arguments.shard)
+    source_weight_map = load_source_weight_map(source_directory / _SOURCE_INDEX_NAME)
+    source_shards = tuple(sorted(set(source_weight_map.values())))
+    selected_source_shards = _select_shards(source_shards, arguments.shard)
+    expected_weight_map = build_expected_output_weight_map(source_weight_map)
+    output_shards = select_output_shards(source_shards, expected_weight_map)
+    selected_output_shards = select_output_shards(
+        selected_source_shards,
+        expected_weight_map,
+    )
     quantizer = QuantizerKind(arguments.quantizer)
 
     if quantizer is QuantizerKind.IMATRIX_WEIGHTED:
@@ -64,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
     writer = ResumableSafetensorsWriter(output_directory)
     results: list[ShardTransformResult] = []
     with imatrix_context as imatrix:
-        for shard_name in selected_shards:
+        for shard_name in selected_output_shards:
             result = transform_source_shard(
                 source_directory / shard_name,
                 shard_name,
@@ -77,9 +89,16 @@ def main(argv: list[str] | None = None) -> int:
             status = "resumed" if result.resumed else "written"
             print(f"{status}: {shard_name} ({len(result.metrics)} quantized weights)")
 
-    all_shards_selected = selected_shards == source_shards
+    omitted_only_shard_count = len(selected_source_shards) - len(selected_output_shards)
+    if omitted_only_shard_count:
+        print(f"skipped: {omitted_only_shard_count} MTP-only source shards")
+
+    all_shards_selected = selected_source_shards == source_shards
     if all_shards_selected:
-        writer.finalize_index(source_shards)
+        writer.finalize_index(
+            output_shards,
+            expected_weight_map=expected_weight_map,
+        )
         _materialize_model_assets(
             source_directory,
             output_directory,
@@ -94,13 +113,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"finalized: {output_directory}")
     else:
         print(
-            f"pilot subset complete: {len(selected_shards)}/{len(source_shards)} "
-            "shards; model index and config were not finalized"
+            f"pilot subset complete: {len(selected_source_shards)}/"
+            f"{len(source_shards)} source shards, {len(selected_output_shards)} "
+            "output shards; model index and config were not finalized"
         )
     return 0
 
 
-def load_source_shards(index_path: Path) -> tuple[str, ...]:
+def load_source_weight_map(index_path: Path) -> dict[str, str]:
+    """Load and validate the complete source tensor-to-shard mapping."""
     try:
         payload = json.loads(index_path.read_text(encoding="utf-8"))
         weight_map = payload["weight_map"]
@@ -109,7 +130,7 @@ def load_source_shards(index_path: Path) -> tuple[str, ...]:
     if not isinstance(weight_map, dict) or not weight_map:
         raise ValueError(f"safetensors index has no weight map: {index_path}")
 
-    shard_names: set[str] = set()
+    validated_weight_map: dict[str, str] = {}
     for tensor_name, shard_name in weight_map.items():
         if not isinstance(tensor_name, str) or not tensor_name:
             raise ValueError("safetensors index contains an invalid tensor name")
@@ -119,13 +140,53 @@ def load_source_shards(index_path: Path) -> tuple[str, ...]:
             or not shard_name.endswith(".safetensors")
         ):
             raise ValueError(f"invalid source shard name: {shard_name!r}")
-        shard_names.add(shard_name)
+        validated_weight_map[tensor_name] = shard_name
 
-    ordered = tuple(sorted(shard_names))
-    missing = [name for name in ordered if not (index_path.parent / name).is_file()]
+    shard_names = sorted(set(validated_weight_map.values()))
+    missing = [name for name in shard_names if not (index_path.parent / name).is_file()]
     if missing:
         raise ValueError(f"source index references missing shards: {missing}")
-    return ordered
+    return validated_weight_map
+
+
+def load_source_shards(index_path: Path) -> tuple[str, ...]:
+    """Load sorted unique shard names from a validated source index."""
+    return tuple(sorted(set(load_source_weight_map(index_path).values())))
+
+
+def build_expected_output_weight_map(
+    source_weight_map: Mapping[str, str],
+) -> dict[str, str]:
+    """Derive the exact MTP-free WNA16 output inventory from the source index."""
+    expected_weight_map: dict[str, str] = {}
+    for source_tensor_name, shard_name in source_weight_map.items():
+        identity = classify_tensor(source_tensor_name)
+        if identity.disposition in {
+            TensorDisposition.OMIT,
+            TensorDisposition.REPLACE_SOURCE_SCALE,
+        }:
+            continue
+        if identity.disposition is TensorDisposition.QUANTIZE:
+            output_tensor_names = packed_checkpoint_tensor_names(source_tensor_name)
+        else:
+            output_tensor_names = (source_tensor_name,)
+        for output_tensor_name in output_tensor_names:
+            if output_tensor_name in expected_weight_map:
+                raise ValueError(
+                    f"source index maps multiple tensors to output "
+                    f"{output_tensor_name!r}"
+                )
+            expected_weight_map[output_tensor_name] = shard_name
+    return expected_weight_map
+
+
+def select_output_shards(
+    source_shards: tuple[str, ...],
+    expected_weight_map: Mapping[str, str],
+) -> tuple[str, ...]:
+    """Keep source shards that own at least one expected output tensor."""
+    output_shard_names = set(expected_weight_map.values())
+    return tuple(shard for shard in source_shards if shard in output_shard_names)
 
 
 def _select_shards(

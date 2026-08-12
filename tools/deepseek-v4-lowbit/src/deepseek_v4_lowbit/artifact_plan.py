@@ -13,6 +13,7 @@ _ROUTED_EXPERT_NAME = re.compile(
     r"(?P<projection>w[123])\.(?P<kind>weight|scale)$"
 )
 _SUPPORTED_BITS = frozenset({2, 3, 4, 8})
+_WNA16_WEIGHT_SHAPE_BYTES = 2 * 8
 
 
 class TensorDisposition(Enum):
@@ -71,6 +72,7 @@ class ArtifactPlan:
     preserved_bytes: int
     quantized_weight_bytes: int
     quantized_scale_bytes: int
+    quantized_shape_bytes: int
     replaced_source_bytes: int
     omitted_bytes: int
     preserved_tensor_count: int
@@ -83,6 +85,7 @@ class _PlanAccumulator:
     preserved_bytes: int = 0
     quantized_weight_bytes: int = 0
     quantized_scale_bytes: int = 0
+    quantized_shape_bytes: int = 0
     replaced_source_bytes: int = 0
     omitted_bytes: int = 0
     preserved_tensor_count: int = 0
@@ -94,6 +97,7 @@ class _PlanAccumulator:
             self.preserved_bytes
             + self.quantized_weight_bytes
             + self.quantized_scale_bytes
+            + self.quantized_shape_bytes
         )
         return ArtifactPlan(total_bytes=total_bytes, **vars(self))
 
@@ -195,13 +199,14 @@ def plan_artifact(
                 raise ValueError(
                     f"routed expert weight has no source scale: {header.name}"
                 )
-            weight_bytes, scale_bytes = _planned_wna16_bytes(
+            weight_bytes, scale_bytes, shape_bytes = _planned_wna16_bytes(
                 header,
                 bits=recipe.bits_for(identity.layer, identity.projection),
                 group_size=group_size,
             )
             accumulator.quantized_weight_bytes += weight_bytes
             accumulator.quantized_scale_bytes += scale_bytes
+            accumulator.quantized_shape_bytes += shape_bytes
             accumulator.quantized_tensor_count += 1
 
     return accumulator.finish()
@@ -244,7 +249,7 @@ def _planned_wna16_bytes(
     *,
     bits: int,
     group_size: int,
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     if header.dtype != "I8" or len(header.shape) != 2:
         raise ValueError(
             f"expected packed I8 matrix for routed expert weight {header.name}, "
@@ -267,4 +272,4 @@ def _planned_wna16_bytes(
 
     weight_bytes = output_features * (input_features // pack_factor) * 4
     scale_bytes = output_features * (input_features // group_size) * 2
-    return weight_bytes, scale_bytes
+    return weight_bytes, scale_bytes, _WNA16_WEIGHT_SHAPE_BYTES
