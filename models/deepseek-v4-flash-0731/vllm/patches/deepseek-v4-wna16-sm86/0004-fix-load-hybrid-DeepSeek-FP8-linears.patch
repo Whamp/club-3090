@@ -1,0 +1,133 @@
+From e6edd4c684ee534e324e09f592c4d1c60b87146e Mon Sep 17 00:00:00 2001
+From: Will Hampson <whamp@ggl.slmail.me>
+Date: Tue, 11 Aug 2026 23:18:42 -0700
+Subject: [PATCH] fix: load hybrid DeepSeek FP8 linears
+
+---
+ .../models/test_deepseek_v4_weight_mapper.py  | 45 +++++++++++++++++++
+ vllm/models/deepseek_v4/nvidia/model.py       | 38 +++++++++++++---
+ 2 files changed, 76 insertions(+), 7 deletions(-)
+ create mode 100644 tests/models/test_deepseek_v4_weight_mapper.py
+
+diff --git a/tests/models/test_deepseek_v4_weight_mapper.py b/tests/models/test_deepseek_v4_weight_mapper.py
+new file mode 100644
+index 000000000..7ef977463
+--- /dev/null
++++ b/tests/models/test_deepseek_v4_weight_mapper.py
+@@ -0,0 +1,45 @@
++# SPDX-License-Identifier: Apache-2.0
++# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
++
++from types import SimpleNamespace
++
++import pytest
++
++from vllm.models.deepseek_v4.nvidia.model import (
++    _make_deepseek_v4_weights_mapper,
++    _uses_compressed_tensors_fp8_linears,
++)
++
++
++@pytest.fixture
++def should_do_global_cleanup_after_test() -> bool:
++    return False
++
++
++def test_compressed_tensors_fp8_linear_gate_requires_explicit_fallback() -> None:
++    config = SimpleNamespace(
++        quantization_config={
++            "quant_method": "compressed-tensors",
++            "config_groups": {
++                "experts": {"format": "pack-quantized", "targets": ["RoutedExperts"]}
++            },
++        }
++    )
++    assert not _uses_compressed_tensors_fp8_linears(config)
++
++    config.quantization_config["config_groups"]["linears"] = {
++        "format": "float-quantized",
++        "targets": ["Linear"],
++    }
++    assert _uses_compressed_tensors_fp8_linears(config)
++
++
++def test_compressed_tensors_mapper_keeps_fp8_linear_scale_name() -> None:
++    mapper = _make_deepseek_v4_weights_mapper("fp4", compressed_tensors_hybrid=True)
++
++    assert mapper._map_name("layers.0.attn.wq_a.scale") == (
++        "model.layers.0.attn.wq_a.weight_scale"
++    )
++    assert mapper._map_name("layers.0.ffn.experts.0.w1.weight_scale") == (
++        "model.layers.0.ffn.experts.0.w1.weight_scale"
++    )
+diff --git a/vllm/models/deepseek_v4/nvidia/model.py b/vllm/models/deepseek_v4/nvidia/model.py
+index 9aab14c58..3dcf11d62 100644
+--- a/vllm/models/deepseek_v4/nvidia/model.py
++++ b/vllm/models/deepseek_v4/nvidia/model.py
+@@ -954,7 +954,10 @@ class DeepseekV4DecoderLayer(nn.Module):
+         residual: torch.Tensor | None = None,
+         x_scales: torch.Tensor | None = None,
+     ) -> tuple[
+-        torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor,
++        torch.Tensor,
++        torch.Tensor,
++        torch.Tensor,
++        torch.Tensor,
+         torch.Tensor | None,
+     ]:
+         """Returns (x, residual, post_mix, res_mix, x_scales).
+@@ -1428,15 +1431,32 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
+             )
+ 
+ 
+-def _make_deepseek_v4_weights_mapper(expert_dtype: str) -> WeightsMapper:
++def _uses_compressed_tensors_fp8_linears(config: typing.Any) -> bool:
++    quantization_config = getattr(config, "quantization_config", None) or {}
++    if quantization_config.get("quant_method") != "compressed-tensors":
++        return False
++    return any(
++        group.get("format") == "float-quantized"
++        and "Linear" in group.get("targets", [])
++        for group in quantization_config.get("config_groups", {}).values()
++    )
++
++
++def _make_deepseek_v4_weights_mapper(
++    expert_dtype: str, *, compressed_tensors_hybrid: bool = False
++) -> WeightsMapper:
++    linear_scale_name = (
++        ".weight_scale" if compressed_tensors_hybrid else ".weight_scale_inv"
++    )
+     if expert_dtype == "fp4":
+         # MXFP4 experts use Mxfp4MoEMethod, which registers scales as
+         # ``w{1,2,3}_weight_scale`` (no _inv suffix). FP8 linear and
+-        # shared experts use Fp8LinearMethod's block scales, which
+-        # register as ``weight_scale_inv``.
++        # shared experts use block scales. Native FP8 registers
++        # ``weight_scale_inv``; compressed-tensors registers ``weight_scale``
++        # until its post-load conversion.
+         scale_regex = {
+             re.compile(r"(\.experts\.\d+\.w[123])\.scale$"): r"\1.weight_scale",
+-            re.compile(r"\.scale$"): ".weight_scale_inv",
++            re.compile(r"\.scale$"): linear_scale_name,
+         }
+     else:
+         # FP8 experts use Fp8MoEMethod (block_quant=True), which registers
+@@ -1517,8 +1537,12 @@ class DeepseekV4ForCausalLM(
+         config = vllm_config.model_config.hf_config
+         self.config = config
+         expert_dtype = getattr(config, "expert_dtype", "fp4")
+-        if expert_dtype != "fp4":
+-            self.hf_to_vllm_mapper = _make_deepseek_v4_weights_mapper(expert_dtype)
++        compressed_tensors_hybrid = _uses_compressed_tensors_fp8_linears(config)
++        if expert_dtype != "fp4" or compressed_tensors_hybrid:
++            self.hf_to_vllm_mapper = _make_deepseek_v4_weights_mapper(
++                expert_dtype,
++                compressed_tensors_hybrid=compressed_tensors_hybrid,
++            )
+ 
+         self.model = self.model_cls(
+             vllm_config=vllm_config, prefix=maybe_prefix(prefix, "model")
+-- 
+2.55.0
+
