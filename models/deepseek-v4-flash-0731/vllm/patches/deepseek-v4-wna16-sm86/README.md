@@ -64,6 +64,25 @@ Base drift requires review rather than silent acceptance.
 - CodeGraph reports one changed test file, three affected helper callers, and
   no new file cycles.
 
+## Runtime image
+
+`build-runtime-image.sh` builds the rental-proven Python environment over the
+exact patched vLLM tree. It rejects dirty or drifted source, pins the Linux
+amd64 CUDA 13.0.2 development image by manifest digest, installs Torch
+2.13.0+cu130, reuses vLLM's precompiled native extensions from pinned upstream
+base `62195e9784ebec1ece42b88a861734e0702cc2d5`, and verifies
+`humming-kernels==0.1.10`.
+
+```bash
+./build-runtime-image.sh \
+  /path/to/patched-vllm \
+  club-3090/deepseek-v4-wna16-sm86:97a21943-cu130
+```
+
+Building the image uses CPU, disk, and network only. It does not establish
+SM86 kernel compilation, numerical correctness, model loading, dispatch, or
+performance. Those remain runtime gates.
+
 ## Deferred GPU proof
 
 The patch series is not a runtime-support or performance claim until these

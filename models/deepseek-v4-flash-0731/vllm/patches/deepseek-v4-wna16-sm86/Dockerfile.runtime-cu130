@@ -1,0 +1,55 @@
+# syntax=docker/dockerfile:1.7
+FROM nvidia/cuda:13.0.2-devel-ubuntu24.04@sha256:0eee3094c71518ad31d011a594ae6ed6de72959ee07e318cb31cffe71690e90c
+
+ARG UV_VERSION=0.9.28
+ARG TORCH_VERSION=2.13.0
+ARG VLLM_PRECOMPILED_WHEEL_COMMIT=62195e9784ebec1ece42b88a861734e0702cc2d5
+ARG VLLM_SOURCE_VERSION=0.1.dev4+g2a3dd2ea7
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    UV_LINK_MODE=copy \
+    VLLM_USE_PRECOMPILED=1 \
+    VLLM_PRECOMPILED_WHEEL_VARIANT=cu130 \
+    VLLM_PRECOMPILED_WHEEL_COMMIT=${VLLM_PRECOMPILED_WHEEL_COMMIT} \
+    SETUPTOOLS_SCM_PRETEND_VERSION=${VLLM_SOURCE_VERSION} \
+    PATH=/opt/venv/bin:/root/.local/bin:/usr/local/cuda/bin:${PATH}
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+        ca-certificates \
+        curl \
+        git \
+        python3.12 \
+        python3.12-dev \
+        python3.12-venv \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl --fail --location --silent --show-error \
+        "https://astral.sh/uv/${UV_VERSION}/install.sh" | sh \
+    && uv venv --python 3.12 /opt/venv
+
+WORKDIR /workspace/vllm
+COPY . .
+
+RUN uv pip install --python /opt/venv/bin/python \
+        "torch==${TORCH_VERSION}" \
+        --index-url https://download.pytorch.org/whl/cu130 \
+    && uv pip install --python /opt/venv/bin/python \
+        --editable /workspace/vllm \
+        --torch-backend=cu130 \
+    && uv pip check --python /opt/venv/bin/python \
+    && python - <<'PY'
+import importlib.metadata
+import torch
+assert torch.__version__.startswith("2.13.0+cu130"), torch.__version__
+assert importlib.metadata.version("humming-kernels") == "0.1.10"
+print(
+    f"torch={torch.__version__} cuda={torch.version.cuda} "
+    f"humming={importlib.metadata.version('humming-kernels')}"
+)
+PY
+
+ENV VLLM_NO_USAGE_STATS=1 \
+    VLLM_WORKER_MULTIPROC_METHOD=spawn \
+    OMP_NUM_THREADS=1
+
+ENTRYPOINT ["vllm", "serve"]
