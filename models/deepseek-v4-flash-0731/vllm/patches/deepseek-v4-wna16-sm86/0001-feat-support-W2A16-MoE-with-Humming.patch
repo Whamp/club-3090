@@ -1,0 +1,510 @@
+From 095557aba0f22f0a713429063610f2af01e827ae Mon Sep 17 00:00:00 2001
+From: Will Hampson <whamp@ggl.slmail.me>
+Date: Tue, 11 Aug 2026 06:56:41 -0700
+Subject: [PATCH 1/3] feat: support W2A16 MoE with Humming
+
+---
+ tests/quantization/test_auto_round.py         |  7 +-
+ tests/quantization/test_compressed_tensors.py | 96 +++++++++++++++++++
+ tests/quantization/test_moe_wna16.py          | 77 +++++++++++++++
+ .../fused_moe/experts/fused_humming_moe.py    | 32 ++++++-
+ .../layers/fused_moe/oracle/int_wna16.py      | 17 +++-
+ .../compressed_tensors_moe_wna16.py           | 24 ++++-
+ .../layers/quantization/moe_wna16.py          | 24 +++--
+ .../quantization/utils/humming_utils.py       |  3 +
+ 8 files changed, 264 insertions(+), 16 deletions(-)
+
+diff --git a/tests/quantization/test_auto_round.py b/tests/quantization/test_auto_round.py
+index 838ca4495..1e78cd376 100644
+--- a/tests/quantization/test_auto_round.py
++++ b/tests/quantization/test_auto_round.py
+@@ -1245,7 +1245,8 @@ def test_inc_get_quant_method_moe_uses_resolved_scheme(monkeypatch) -> None:
+     assert method is sentinel
+ 
+ 
+-def test_resolve_gptq_moe_falls_back_to_moe_wna16(monkeypatch) -> None:
++@pytest.mark.parametrize("bits", [2, 4])
++def test_resolve_gptq_moe_falls_back_to_moe_wna16(monkeypatch, bits) -> None:
+     captured = {}
+ 
+     class DummyMoeConfig:
+@@ -1279,7 +1280,7 @@ def test_resolve_gptq_moe_falls_back_to_moe_wna16(monkeypatch) -> None:
+     )
+ 
+     layer_config = INCLayerConfig(
+-        bits=4,
++        bits=bits,
+         group_size=128,
+         sym=True,
+         packing_format="auto_round:auto_gptq",
+@@ -1292,7 +1293,7 @@ def test_resolve_gptq_moe_falls_back_to_moe_wna16(monkeypatch) -> None:
+ 
+     assert captured["from_config"] == {
+         "quant_method": "gptq",
+-        "bits": 4,
++        "bits": bits,
+         "group_size": 128,
+         "sym": True,
+         "lm_head": False,
+diff --git a/tests/quantization/test_compressed_tensors.py b/tests/quantization/test_compressed_tensors.py
+index 19f63f228..bc3fa4b4d 100644
+--- a/tests/quantization/test_compressed_tensors.py
++++ b/tests/quantization/test_compressed_tensors.py
+@@ -39,6 +39,11 @@ from vllm.model_executor.layers.quantization.compressed_tensors.utils import (
+     find_matched_target,
+ )
+ from vllm.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
++from vllm.model_executor.layers.quantization.utils.quant_utils import (
++    GroupShape,
++    QuantKey,
++    ScaleDesc,
++)
+ from vllm.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+ from vllm.platforms import current_platform
+ from vllm.v1.attention.backends.fa_utils import get_flash_attn_version
+@@ -939,6 +944,97 @@ def test_wna16_moe_w2_scale_sharding(actorder, group_size, part, full, expected)
+     assert result == expected
+ 
+ 
++@pytest.mark.parametrize("num_bits", range(2, 9))
++def test_humming_supports_compressed_tensors_wna16_moe(num_bits):
++    from vllm.model_executor.layers.fused_moe.experts.fused_humming_moe import (
++        HummingExpertsBase,
++    )
++    from vllm.model_executor.layers.quantization.compressed_tensors.schemes.compressed_tensors_wNa16 import (  # noqa: E501
++        WNA16_SUPPORTED_TYPES_MAP,
++    )
++
++    weight_key = QuantKey(
++        dtype=WNA16_SUPPORTED_TYPES_MAP[num_bits],
++        scale=ScaleDesc(
++            dtype=torch.float16,
++            static=True,
++            group_shape=GroupShape(row=1, col=128),
++        ),
++        symmetric=True,
++    )
++
++    assert HummingExpertsBase._supports_quant_scheme(weight_key, None)
++
++
++@pytest.mark.parametrize("num_bits", range(2, 9))
++def test_humming_wna16_moe_schema_accepts_compressed_tensors(num_bits):
++    from vllm.model_executor.layers.fused_moe.oracle.int_wna16 import (
++        _humming_wna16_weight_schema,
++    )
++
++    quant_args = QuantizationArgs(
++        num_bits=num_bits,
++        type=QuantizationType.INT,
++        strategy=QuantizationStrategy.GROUP,
++        symmetric=True,
++        dynamic=False,
++        group_size=128,
++    )
++
++    assert _humming_wna16_weight_schema(quant_args) == {
++        "quant_method": "compressed-tensors",
++        "format": "pack-quantized",
++        "type": "int",
++        "num_bits": num_bits,
++        "strategy": "group",
++        "group_size": 128,
++        "symmetric": True,
++    }
++
++
++@pytest.mark.parametrize("num_bits", [2, 3, 5, 6, 7])
++def test_compressed_tensors_wna16_moe_selects_humming_only_bits(monkeypatch, num_bits):
++    from vllm.model_executor.layers.fused_moe.oracle.int_wna16 import WNA16MoEBackend
++    from vllm.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa: E501
++        compressed_tensors_moe_wna16 as wna16_module,
++    )
++    from vllm.model_executor.layers.quantization.compressed_tensors.schemes.compressed_tensors_wNa16 import (  # noqa: E501
++        WNA16_SUPPORTED_TYPES_MAP,
++    )
++
++    captured = {}
++
++    def fake_select_wna16_moe_backend(*, config, weight_key, **kwargs):
++        del config, kwargs
++        captured["weight_key"] = weight_key
++        return WNA16MoEBackend.HUMMING, object
++
++    monkeypatch.setattr(
++        wna16_module,
++        "select_wna16_moe_backend",
++        fake_select_wna16_moe_backend,
++    )
++
++    quant_args = QuantizationArgs(
++        num_bits=num_bits,
++        type=QuantizationType.INT,
++        strategy=QuantizationStrategy.GROUP,
++        symmetric=True,
++        dynamic=False,
++        group_size=128,
++    )
++
++    method = wna16_module.CompressedTensorsWNA16MoEMethod(
++        quant_args,
++        None,
++        Mock(),
++    )
++
++    assert method.wna16_backend == WNA16MoEBackend.HUMMING
++    assert captured["weight_key"].dtype == WNA16_SUPPORTED_TYPES_MAP[num_bits]
++    assert captured["weight_key"].scale.group_shape == GroupShape(row=1, col=128)
++
++
+ @pytest.mark.skipif(
+     not current_platform.is_cuda() or not current_platform.has_device_capability(80),
+     reason="MXFP4 requires ampere or newer",
+diff --git a/tests/quantization/test_moe_wna16.py b/tests/quantization/test_moe_wna16.py
+index 58faaf492..3c6ffe632 100644
+--- a/tests/quantization/test_moe_wna16.py
++++ b/tests/quantization/test_moe_wna16.py
+@@ -22,6 +22,9 @@ from vllm.model_executor.layers.fused_moe.oracle.int_wna16 import (
+ from vllm.model_executor.layers.quantization import moe_wna16
+ from vllm.model_executor.layers.quantization.auto_awq import AutoAWQConfig
+ from vllm.model_executor.layers.quantization.auto_gptq import AutoGPTQConfig
++from vllm.model_executor.layers.quantization.compressed_tensors.schemes.compressed_tensors_wNa16 import (  # noqa: E501
++    WNA16_SUPPORTED_TYPES_MAP,
++)
+ from vllm.model_executor.layers.quantization.moe_wna16 import (
+     MoeWNA16Config,
+     MoeWNA16Method,
+@@ -140,6 +143,80 @@ def test_compressed_tensors_weights_are_transposed_for_triton():
+     assert torch.equal(converted[3], w2_scale.transpose(1, 2).contiguous())
+ 
+ 
++def test_moe_wna16_accepts_int2_for_humming(monkeypatch):
++    from tests.kernels.moe.utils import make_dummy_moe_config
++
++    captured = {}
++
++    def fake_select_wna16_moe_backend(*, weight_key, **kwargs):
++        del kwargs
++        captured["weight_key"] = weight_key
++        return WNA16MoEBackend.HUMMING, object
++
++    monkeypatch.setattr(
++        moe_wna16, "select_wna16_moe_backend", fake_select_wna16_moe_backend
++    )
++    quant_config = MoeWNA16Config(
++        linear_quant_method="gptq",
++        weight_bits=2,
++        group_size=128,
++        has_zp=False,
++        lm_head_quantized=False,
++        modules_to_not_convert=None,
++        full_config={},
++    )
++
++    method = MoeWNA16Method(quant_config, make_dummy_moe_config())
++
++    assert method.wna16_backend == WNA16MoEBackend.HUMMING
++    assert captured["weight_key"].dtype == WNA16_SUPPORTED_TYPES_MAP[2]
++    assert captured["weight_key"].scale.group_shape.row == 1
++    assert captured["weight_key"].scale.group_shape.col == 128
++
++
++def test_moe_wna16_gptq_loader_accepts_int2(monkeypatch):
++    loaded_weight = torch.arange(12, dtype=torch.int32).reshape(3, 4)
++    captured = {}
++
++    def original_loader(param, weight, *args, **kwargs):
++        del param, args, kwargs
++        captured["weight"] = weight
++        return True
++
++    quant_config = MoeWNA16Config(
++        linear_quant_method="gptq",
++        weight_bits=2,
++        group_size=128,
++        has_zp=False,
++        lm_head_quantized=False,
++        modules_to_not_convert=None,
++        full_config={},
++    )
++    layer = SimpleNamespace(
++        quant_config=quant_config,
++        group_size_div_factor=1,
++        intermediate_size_per_partition=1,
++        moe_config=SimpleNamespace(tp_size=1),
++    )
++    monkeypatch.setattr(
++        moe_wna16, "get_tp_group", lambda: SimpleNamespace(device=torch.device("cpu"))
++    )
++    monkeypatch.setattr(moe_wna16, "get_tensor_model_parallel_rank", lambda: 0)
++    loader = MoeWNA16Method.get_weight_loader(layer, original_loader)
++
++    assert loader(
++        torch.nn.Parameter(torch.empty(0)),
++        loaded_weight,
++        "w1.qweight",
++        "w1",
++        0,
++        return_success=True,
++    )
++    assert torch.equal(
++        captured["weight"], loaded_weight.T.contiguous().view(torch.uint8)
++    )
++
++
+ def test_moe_wna16_setup_forwards_selected_backend(monkeypatch):
+     method = object.__new__(MoeWNA16Method)
+     method.experts_cls = object
+diff --git a/vllm/model_executor/layers/fused_moe/experts/fused_humming_moe.py b/vllm/model_executor/layers/fused_moe/experts/fused_humming_moe.py
+index 45836c387..56442d806 100644
+--- a/vllm/model_executor/layers/fused_moe/experts/fused_humming_moe.py
++++ b/vllm/model_executor/layers/fused_moe/experts/fused_humming_moe.py
+@@ -37,6 +37,9 @@ from vllm.model_executor.layers.fused_moe.utils import (
+     swiglu_limit_func,
+ )
+ from vllm.model_executor.layers.quantization.utils.quant_utils import (
++    INT4_DTYPE,
++    INT8_DTYPE,
++    GroupShape,
+     QuantKey,
+     kFp8Dynamic128Sym,
+     kFp8DynamicTokenSym,
+@@ -55,6 +58,7 @@ from vllm.model_executor.layers.quantization.utils.quant_utils import (
+     kNvfp4Static,
+ )
+ from vllm.platforms import current_platform
++from vllm.scalar_type import ScalarType
+ from vllm.utils.import_utils import has_humming
+ from vllm.v1.worker.workspace import current_workspace_manager
+ 
+@@ -66,6 +70,29 @@ if TYPE_CHECKING:
+ logger = init_logger(__name__)
+ 
+ 
++def _is_supported_wna16_weight_key(weight_key: QuantKey | None) -> bool:
++    if weight_key is None or weight_key.scale2 is not None:
++        return False
++
++    group_shape = weight_key.scale.group_shape
++    if not (
++        group_shape == GroupShape.PER_CHANNEL
++        or (group_shape.row == 1 and group_shape.col > 0)
++    ):
++        return False
++
++    dtype = weight_key.dtype
++    if dtype in (INT4_DTYPE, INT8_DTYPE, torch.uint8):
++        return True
++
++    return (
++        isinstance(dtype, ScalarType)
++        and dtype.is_integer()
++        and not dtype.is_signed()
++        and 2 <= dtype.size_bits <= 8
++    )
++
++
+ def get_humming_moe_gemm_type() -> str:
+     env_gemm_type: str | None = envs.VLLM_HUMMING_MOE_GEMM_TYPE
+     gemm_type = "indexed"
+@@ -210,7 +237,10 @@ class HummingExpertsBase(mk.FusedMoEExpertsModular):
+             # mxfp8 (compressed-tensors / modelopt / online)
+             (kMxfp8Static, kMxfp8Dynamic),
+         ]
+-        return (weight_key, activation_key) in SUPPORTED_W_A
++        return (weight_key, activation_key) in SUPPORTED_W_A or (
++            activation_key in (None, kFp8DynamicTokenSym)
++            and _is_supported_wna16_weight_key(weight_key)
++        )
+ 
+     @property
+     def expects_unquantized_inputs(self) -> bool:
+diff --git a/vllm/model_executor/layers/fused_moe/oracle/int_wna16.py b/vllm/model_executor/layers/fused_moe/oracle/int_wna16.py
+index 2ac53525c..b2b15298a 100644
+--- a/vllm/model_executor/layers/fused_moe/oracle/int_wna16.py
++++ b/vllm/model_executor/layers/fused_moe/oracle/int_wna16.py
+@@ -1108,10 +1108,21 @@ def _humming_wna16_weight_schema(
+             "desc_act": quant_config.desc_act,
+             "sym": quant_config.is_sym,
+         }
++    if isinstance(quant_config, QuantizationArgs):
++        quant_type = getattr(quant_config.type, "value", quant_config.type)
++        quant_strategy = getattr(quant_config.strategy, "value", quant_config.strategy)
++        return {
++            "quant_method": "compressed-tensors",
++            "format": "pack-quantized",
++            "type": str(quant_type),
++            "num_bits": quant_config.num_bits,
++            "strategy": str(quant_strategy),
++            "group_size": quant_config.group_size,
++            "symmetric": quant_config.symmetric,
++        }
+     raise TypeError(
+-        "Humming WNA16 checkpoint schema requires AutoAWQConfig or "
+-        "AutoGPTQConfig, "
+-        f"got {type(quant_config).__name__}."
++        "Humming WNA16 checkpoint schema requires AutoAWQConfig, "
++        f"AutoGPTQConfig or QuantizationArgs, got {type(quant_config).__name__}."
+     )
+ 
+ 
+diff --git a/vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe_wna16.py b/vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe_wna16.py
+index eaec0fec4..3606afeca 100644
+--- a/vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe_wna16.py
++++ b/vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe_wna16.py
+@@ -40,7 +40,9 @@ from vllm.model_executor.layers.quantization.utils.marlin_utils import (
+     marlin_make_workspace_new,
+ )
+ from vllm.model_executor.layers.quantization.utils.quant_utils import (
++    GroupShape,
+     QuantKey,
++    ScaleDesc,
+     kInt4Static32GroupScale,
+     kInt4StaticGroupScale,
+     kInt8StaticGroupScale,
+@@ -85,8 +87,14 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
+             assert self.group_size == -1
+             scale = kInt8StaticGroupScale
+         else:
+-            raise ValueError(
+-                "CompressedTensorsWNA16MoEMethod only supports int4 and int8 now."
++            scale = ScaleDesc(
++                dtype=torch.float16,
++                static=True,
++                group_shape=(
++                    GroupShape.PER_CHANNEL
++                    if self.group_size == -1
++                    else GroupShape(row=1, col=self.group_size)
++                ),
+             )
+ 
+         weight_key = QuantKey(self.quant_type, scale, symmetric=self.symmetric)
+@@ -110,7 +118,10 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
+             WNA16MoEBackend.MARLIN,
+             WNA16MoEBackend.BATCHED_MARLIN,
+         ]
+-        self.is_transposed = self.wna16_backend != WNA16MoEBackend.FLASHINFER_TRTLLM
++        self.is_transposed = self.wna16_backend not in (
++            WNA16MoEBackend.FLASHINFER_TRTLLM,
++            WNA16MoEBackend.HUMMING,
++        )
+ 
+         if self.is_marlin:
+             assert check_moe_marlin_supports_config(
+@@ -465,6 +476,7 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
+             moe_quant_config=self.moe_quant_config,
+             moe_config=self.moe,
+             experts_cls=self.experts_cls,
++            backend=self.wna16_backend,
+             routing_tables=layer._expert_routing_tables(),
+             **marlin_args,
+         )
+@@ -565,6 +577,12 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
+     def get_fused_moe_quant_config(
+         self, layer: torch.nn.Module
+     ) -> FusedMoEQuantConfig | None:
++        if self.wna16_backend == WNA16MoEBackend.HUMMING:
++            from vllm.model_executor.layers.quantization.utils.humming_utils import (
++                get_humming_moe_quant_config,
++            )
++
++            return get_humming_moe_quant_config(layer)
+         return make_wna16_moe_quant_config(
+             w1_scale=layer.w13_weight_scale,
+             w2_scale=layer.w2_weight_scale,
+diff --git a/vllm/model_executor/layers/quantization/moe_wna16.py b/vllm/model_executor/layers/quantization/moe_wna16.py
+index 76f2d740b..87afc1580 100644
+--- a/vllm/model_executor/layers/quantization/moe_wna16.py
++++ b/vllm/model_executor/layers/quantization/moe_wna16.py
+@@ -35,13 +35,16 @@ from vllm.model_executor.layers.quantization.base_config import (
+ from vllm.model_executor.layers.quantization.utils.quant_utils import (
+     INT4_DTYPE,
+     INT8_DTYPE,
++    GroupShape,
+     QuantKey,
++    ScaleDesc,
+     kInt4Static32GroupScale,
+     kInt4StaticGroupScale,
+     kInt8StaticGroupScale,
+ )
+ from vllm.model_executor.utils import replace_parameter, set_weight_attrs
+ from vllm.platforms import current_platform
++from vllm.scalar_type import scalar_types
+ 
+ 
+ class MoeWNA16Config(QuantizationConfig):
+@@ -159,7 +162,9 @@ class MoeWNA16Config(QuantizationConfig):
+ 
+         awq_min_capability = AutoAWQConfig.get_min_capability()
+ 
+-        gptq_compatible = quant_method == "gptq" and not desc_act and num_bits in [4, 8]
++        gptq_compatible = (
++            quant_method == "gptq" and not desc_act and num_bits in [2, 4, 8]
++        )
+         awq_compatible = (
+             quant_method == "awq"
+             and num_bits == 4
+@@ -202,10 +207,10 @@ def is_layer_skipped_quant(prefix: str, modules_to_not_convert: list[str]):
+ 
+ 
+ class MoeWNA16Method(FusedMoEMethodBase):
+-    """Linear method for MOE WNA16 (W8A16/W4A16) quantization.
++    """Linear method for MoE W2A16, W4A16, and W8A16 quantization.
+ 
+     Args:
+-        quant_config: The MOE WNA16 (W8A16/W4A16) quantization config.
++        quant_config: The MoE weight-only quantization configuration.
+     """
+ 
+     def __init__(self, quant_config: MoeWNA16Config, moe: "FusedMoEConfig") -> None:
+@@ -215,7 +220,14 @@ class MoeWNA16Method(FusedMoEMethodBase):
+         num_bits = self.quant_config.weight_bits
+         group_size = self.quant_config.group_size
+ 
+-        if num_bits == 4:
++        if num_bits == 2:
++            quant_type = scalar_types.uint2b2
++            scale = ScaleDesc(
++                dtype=torch.float16,
++                static=True,
++                group_shape=GroupShape(row=1, col=group_size),
++            )
++        elif num_bits == 4:
+             quant_type = INT4_DTYPE
+             if group_size == 32:
+                 scale = kInt4Static32GroupScale
+@@ -226,7 +238,7 @@ class MoeWNA16Method(FusedMoEMethodBase):
+             quant_type = INT8_DTYPE
+             scale = kInt8StaticGroupScale
+         else:
+-            raise ValueError("MoeWNA16Method only supports int4 and int8 now.")
++            raise ValueError("MoeWNA16Method only supports int2, int4, and int8.")
+ 
+         weight_key = QuantKey(quant_type, scale)
+ 
+@@ -587,7 +599,7 @@ class MoeWNA16Method(FusedMoEMethodBase):
+                 else:
+                     loaded_weight = loaded_weight.T
+             elif layer.quant_config.linear_quant_method == "gptq":
+-                assert layer.quant_config.weight_bits in [4, 8]
++                assert layer.quant_config.weight_bits in [2, 4, 8]
+                 if "weight" in weight_name:
+                     loaded_weight = loaded_weight.T.contiguous().view(torch.uint8)
+                 elif "zeros" in weight_name:
+diff --git a/vllm/model_executor/layers/quantization/utils/humming_utils.py b/vllm/model_executor/layers/quantization/utils/humming_utils.py
+index 15c6a178b..9daa5a9c9 100644
+--- a/vllm/model_executor/layers/quantization/utils/humming_utils.py
++++ b/vllm/model_executor/layers/quantization/utils/humming_utils.py
+@@ -64,6 +64,9 @@ if has_humming():
+         humming_dtypes.uint8: INT8_DTYPE,
+         humming_dtypes.uint2: torch.uint8,
+         humming_dtypes.uint3: torch.uint8,
++        humming_dtypes.uint5: torch.uint8,
++        humming_dtypes.uint6: torch.uint8,
++        humming_dtypes.uint7: torch.uint8,
+     }
+ 
+     _HUMMING_TO_SCALE_DTYPE: dict[humming_dtypes.DataType, torch.dtype] = {
+-- 
+2.55.0
+
