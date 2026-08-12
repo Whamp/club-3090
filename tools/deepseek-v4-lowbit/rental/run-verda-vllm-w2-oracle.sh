@@ -94,6 +94,7 @@ VLLM_USE_PRECOMPILED=1 uv pip install \
     --editable "$VLLM_DIRECTORY" \
     --torch-backend=cu130
 uv pip install --python "$ORACLE_ENVIRONMENT/bin/python" \
+    "ninja==1.13.0" \
     "pytest==9.1.1" \
     "pytest-asyncio==1.4.0" \
     "pytest-rerunfailures==16.4" \

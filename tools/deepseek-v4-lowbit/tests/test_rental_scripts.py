@@ -60,8 +60,9 @@ class RentalScriptContractTests(unittest.TestCase):
         script = _ORACLE_SCRIPT.read_text(encoding="utf-8")
         self.assertIn('export PATH="/usr/local/cuda/bin:$PATH"', script)
 
-    def test_oracle_installs_vllm_conftest_dependency(self) -> None:
+    def test_oracle_installs_vllm_test_and_jit_dependencies(self) -> None:
         script = _ORACLE_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn('"ninja==1.13.0"', script)
         self.assertIn('"tblib==3.1.0"', script)
 
 
