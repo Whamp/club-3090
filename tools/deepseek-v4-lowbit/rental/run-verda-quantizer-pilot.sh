@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly CLUB_3090_REVISION="ce8487a4fc4d6b99b01b91f99c55a603fece44a5"
+readonly CLUB_3090_REVISION="5a36de6b856ab0795e1c8e1afe97eef1216b94d8"
 readonly AUTO_ROUND_REVISION="f17d9cd4b36982006bad21ff87127aac739072e3"
 readonly DEEPSEEK_REVISION="7872f01b1d1fe23eabc4c98b48bffcef5a386062"
 readonly IMATRIX_REVISION="e7f04037032990db0346398d249baf9fb9df1ccc"
@@ -18,6 +18,7 @@ readonly IMATRIX_DIRECTORY="$RENTAL_ROOT/imatrix"
 readonly IMATRIX_PATH="$IMATRIX_DIRECTORY/$IMATRIX_FILENAME"
 readonly REPORT_DIRECTORY="$RENTAL_ROOT/reports"
 readonly PILOT_REPORT="$REPORT_DIRECTORY/w2-quantizer-comparison.json"
+readonly PILOT_SUMMARY="$REPORT_DIRECTORY/w2-quantizer-summary.json"
 readonly RENTAL_LOG="$REPORT_DIRECTORY/run-verda-quantizer-pilot.log"
 readonly CLUB_3090_DIRECTORY="$RENTAL_ROOT/club-3090"
 readonly AUTO_ROUND_DIRECTORY="$RENTAL_ROOT/auto-round"
@@ -131,6 +132,14 @@ log_pilot_step "Compare 24 matrices and 48 W2 quantizer candidates"
     --bits 2 \
     --device cuda
 
+log_pilot_step "Summarize paired error and projected quantize-and-pack time"
+"$PYTHON_ENVIRONMENT/bin/deepseek-v4-summarize-pilot" \
+    "$PILOT_REPORT" \
+    "$PILOT_SUMMARY"
+
 log_pilot_step "Pilot complete"
-sha256sum "$PILOT_REPORT"
-printf 'pilot_report=%s\nrental_log=%s\n' "$PILOT_REPORT" "$RENTAL_LOG"
+sha256sum "$PILOT_REPORT" "$PILOT_SUMMARY"
+printf 'pilot_report=%s\npilot_summary=%s\nrental_log=%s\n' \
+    "$PILOT_REPORT" \
+    "$PILOT_SUMMARY" \
+    "$RENTAL_LOG"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly CLUB_3090_REVISION="9636a0d74dc926a0fb008311174b0bf5fbb2af30"
+readonly CLUB_3090_REVISION="5a36de6b856ab0795e1c8e1afe97eef1216b94d8"
 readonly CLUB_3090_REF="refs/heads/feat/deepseek-v4-lowbit-vllm"
 readonly DEEPSEEK_REVISION="7872f01b1d1fe23eabc4c98b48bffcef5a386062"
 readonly SOURCE_REPOSITORY="deepseek-ai/DeepSeek-V4-Flash-0731"
@@ -11,6 +11,7 @@ readonly RENTAL_ROOT="${2:-$HOME/deepseek-v4-lowbit-rental}"
 readonly SOURCE_DIRECTORY="$RENTAL_ROOT/source/DeepSeek-V4-Flash-0731"
 readonly IMATRIX_PATH="$RENTAL_ROOT/imatrix/imatrix/DeepSeek-V4-Flash-chat-v2-routed-moe-ds4-1p5m.dat"
 readonly PILOT_REPORT="$RENTAL_ROOT/reports/w2-quantizer-comparison.json"
+readonly PILOT_SUMMARY="$RENTAL_ROOT/reports/w2-quantizer-summary.json"
 readonly FULL_RUN_LOG="$RENTAL_ROOT/reports/run-verda-full-conversion.log"
 readonly UPLOAD_REPORT="$RENTAL_ROOT/reports/huggingface-upload-verification.json"
 readonly CLUB_3090_DIRECTORY="$RENTAL_ROOT/club-3090"
@@ -40,8 +41,8 @@ esac
     echo "Full conversion requires the completed rental pilot environment" >&2
     exit 2
 }
-[[ -f "$PILOT_REPORT" ]] || {
-    echo "Full conversion requires the completed quantizer pilot report" >&2
+[[ -f "$PILOT_REPORT" && -f "$PILOT_SUMMARY" ]] || {
+    echo "Full conversion requires the completed pilot report and summary" >&2
     exit 2
 }
 if [[ "$QUANTIZER" == "imatrix-weighted-rtn" && ! -f "$IMATRIX_PATH" ]]; then
