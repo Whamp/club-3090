@@ -10,6 +10,7 @@ _RUNTIME_PATCH_DIRECTORY = (
 )
 _DOCKERFILE = _RUNTIME_PATCH_DIRECTORY / "Dockerfile.runtime-cu130"
 _BUILD_SCRIPT = _RUNTIME_PATCH_DIRECTORY / "build-runtime-image.sh"
+_SM86_ORACLE_SCRIPT = _RUNTIME_PATCH_DIRECTORY / "run-sm86-oracle.sh"
 
 
 class RuntimeImageContractTests(unittest.TestCase):
@@ -40,6 +41,17 @@ class RuntimeImageContractTests(unittest.TestCase):
         self.assertIn("status --porcelain --untracked-files=all", script)
         self.assertIn("exit 2", script)
         self.assertIn("org.opencontainers.image.revision", script)
+
+    def test_sm86_oracle_requires_authorization_and_idle_gpu(self) -> None:
+        script = _SM86_ORACLE_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("I_AUTHORIZE_SERVER60_GPU_ORACLE", script)
+        self.assertIn("query-compute-apps=pid,process_name", script)
+        self.assertIn("refuses to share GPUs with active processes", script)
+        self.assertIn("capability != (8, 6)", script)
+        self.assertIn("test_humming_w2_group128_indexed_numerical_oracle", script)
+        self.assertIn("grep -q 'sm_86'", script)
+        self.assertIn("--gpus", script)
+        self.assertIn("device=0", script)
 
 
 if __name__ == "__main__":

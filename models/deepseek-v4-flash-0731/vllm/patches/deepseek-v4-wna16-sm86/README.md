@@ -83,6 +83,13 @@ Building the image uses CPU, disk, and network only. It does not establish
 SM86 kernel compilation, numerical correctness, model loading, dispatch, or
 performance. Those remain runtime gates.
 
+`run-sm86-oracle.sh` implements the next bounded gate. It requires the literal
+`I_AUTHORIZE_SERVER60_GPU_ORACLE` argument, the exact image-tree label, no
+existing GPU compute processes, an empty report directory, and compute
+capability 8.6. It exposes only GPU 0, runs the deterministic numerical oracle,
+and rejects success unless at least one generated Humming cubin reports
+`sm_86` under `cuobjdump`. It does not load or serve the DeepSeek artifact.
+
 ## Deferred GPU proof
 
 The patch series is not a runtime-support or performance claim until these
