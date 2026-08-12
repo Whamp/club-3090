@@ -62,6 +62,9 @@ class RentalScriptContractTests(unittest.TestCase):
 
     def test_oracle_installs_vllm_test_and_jit_dependencies(self) -> None:
         script = _ORACLE_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn('PYTHON_DEV_VERSION="3.12.3-1ubuntu0.15"', script)
+        self.assertIn('"python3.12-dev=$PYTHON_DEV_VERSION"', script)
+        self.assertIn("/usr/include/python3.12/Python.h", script)
         self.assertIn('"ninja==1.13.0"', script)
         self.assertIn('"tblib==3.1.0"', script)
         self.assertIn('export PATH="$ORACLE_ENVIRONMENT/bin:$PATH"', script)

@@ -11,6 +11,7 @@ readonly HAOSDENT_REF="refs/heads/dsv4-flash-a100"
 readonly EXPECTED_PATCHED_TREE="97a21943d9a68bcf1ef4ac3319d0a6e3e1c66267"
 readonly TORCH_VERSION="2.13.0"
 readonly HUMMING_VERSION="0.1.10"
+readonly PYTHON_DEV_VERSION="3.12.3-1ubuntu0.15"
 readonly RENTAL_ROOT="${1:-$HOME/deepseek-v4-lowbit-rental}"
 readonly CLUB_3090_DIRECTORY="$RENTAL_ROOT/club-3090"
 readonly VLLM_DIRECTORY="$RENTAL_ROOT/vllm-sm8x"
@@ -83,6 +84,14 @@ checkout_pinned_ref \
     "$VLLM_DIRECTORY"
 "$PATCH_INSTALLER" "$VLLM_DIRECTORY"
 test "$(git -C "$VLLM_DIRECTORY" rev-parse 'HEAD^{tree}')" = "$EXPECTED_PATCHED_TREE"
+
+log_oracle_step "Install Humming JIT system prerequisite"
+if [[ ! -f /usr/include/python3.12/Python.h ]]; then
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install --yes \
+        "python3.12-dev=$PYTHON_DEV_VERSION"
+fi
+test -f /usr/include/python3.12/Python.h
 
 log_oracle_step "Install isolated precompiled-extension vLLM test environment"
 uv venv --allow-existing --python 3.12 "$ORACLE_ENVIRONMENT"
