@@ -3,7 +3,7 @@ set -euo pipefail
 
 export PYTHONUTF8="${PYTHONUTF8:-1}"
 
-readonly CLUB_3090_REVISION="934d405a7bb6c3dacd8bc6c2b9ffaff0ad87757a"
+readonly CLUB_3090_REVISION="d8c3285f6ad2c33d9003cc215f35acca2c3e8c4d"
 readonly CLUB_3090_REF="refs/heads/feat/deepseek-v4-lowbit-vllm"
 readonly HAOSDENT_REVISION="12810046c799cbe874967e19b1c0fa134ab7b209"
 readonly HAOSDENT_REF="refs/heads/dsv4-flash-a100"
