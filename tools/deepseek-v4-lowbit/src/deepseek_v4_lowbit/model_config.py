@@ -45,7 +45,7 @@ def build_compressed_tensors_config(
     }
     config_groups["group_fp8_linears"] = {
         "format": "float-quantized",
-        "input_activations": None,
+        "input_activations": _fp8_dynamic_activation_quantization_args(),
         "output_activations": None,
         "targets": ["Linear"],
         "weights": _fp8_block_weight_quantization_args(),
@@ -96,6 +96,23 @@ def materialize_model_config(
         ),
     }
     return output
+
+
+def _fp8_dynamic_activation_quantization_args() -> dict[str, Any]:
+    return {
+        "actorder": None,
+        "block_structure": None,
+        "dynamic": True,
+        "group_size": None,
+        "num_bits": 8,
+        "observer": "memoryless_minmax",
+        "observer_kwargs": {},
+        "scale_dtype": None,
+        "strategy": "token",
+        "symmetric": True,
+        "type": "float",
+        "zp_dtype": None,
+    }
 
 
 def _fp8_block_weight_quantization_args() -> dict[str, Any]:

@@ -55,6 +55,11 @@ class ModelConfigTests(unittest.TestCase):
         self.assertEqual(list(groups), ["group_w2", "group_fp8_linears"])
         self.assertEqual(groups["group_fp8_linears"]["format"], "float-quantized")
         self.assertEqual(groups["group_fp8_linears"]["targets"], ["Linear"])
+        self.assertTrue(groups["group_fp8_linears"]["input_activations"]["dynamic"])
+        self.assertEqual(
+            groups["group_fp8_linears"]["input_activations"]["strategy"],
+            "token",
+        )
         self.assertEqual(
             groups["group_fp8_linears"]["weights"]["block_structure"],
             [128, 128],
