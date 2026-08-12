@@ -40,14 +40,23 @@ RUN uv pip install --python /opt/venv/bin/python \
     && python - <<'PY'
 import importlib.metadata
 import torch
-import vllm._C_stable_libtorch
-import vllm._moe_C_stable_libtorch
 assert torch.__version__.startswith("2.13.0+cu130"), torch.__version__
 assert importlib.metadata.version("humming-kernels") == "0.1.10"
 print(
     f"torch={torch.__version__} cuda={torch.version.cuda} "
     f"humming={importlib.metadata.version('humming-kernels')}"
 )
+PY
+
+RUN python - <<'PY'
+import importlib.util
+for module_name in (
+    "vllm._C_stable_libtorch",
+    "vllm._moe_C_stable_libtorch",
+):
+    spec = importlib.util.find_spec(module_name)
+    assert spec is not None and spec.origin is not None, module_name
+    print(f"native_extension={module_name} path={spec.origin}")
 PY
 
 ENV VLLM_NO_USAGE_STATS=1 \

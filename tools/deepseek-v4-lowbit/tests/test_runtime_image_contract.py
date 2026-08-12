@@ -26,8 +26,9 @@ class RuntimeImageContractTests(unittest.TestCase):
         )
         self.assertIn("ARG TORCH_VERSION=2.13.0", dockerfile)
         self.assertIn('== "0.1.10"', dockerfile)
-        self.assertIn("import vllm._C_stable_libtorch", dockerfile)
-        self.assertIn("import vllm._moe_C_stable_libtorch", dockerfile)
+        self.assertIn('"vllm._C_stable_libtorch"', dockerfile)
+        self.assertIn('"vllm._moe_C_stable_libtorch"', dockerfile)
+        self.assertIn("importlib.util.find_spec(module_name)", dockerfile)
         self.assertIn('ENTRYPOINT ["vllm", "serve"]', dockerfile)
 
     def test_builder_rejects_drifted_or_dirty_vllm_source(self) -> None:
