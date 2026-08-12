@@ -4,6 +4,7 @@ library_name: transformers
 pipeline_tag: text-generation
 base_model: deepseek-ai/DeepSeek-V4-Flash-0731
 base_model_relation: quantized
+quantized_by: hampsonw
 tags:
   - deepseek-v4
   - compressed-tensors
@@ -12,17 +13,17 @@ tags:
   - experimental
 ---
 
-# DeepSeek V4 Flash 0731 W2A16
+# DeepSeek V4 Flash 0731 routed-expert W2A16
 
-This is an experimental, MTP-free W2A16 quantization of
+This is an experimental, MTP-free quantization of
 [DeepSeek-V4-Flash-0731](https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-0731).
-It was built to test whether a roughly 77 GiB safetensors checkpoint could run
-through vLLM and Humming on four 24 GB RTX 3090 GPUs.
+Its routed experts use W2A16, while other tensors retain their source values and
+dtypes. It was built to test whether a roughly 77 GiB safetensors checkpoint
+could run through vLLM and Humming on four 24 GB RTX 3090 GPUs.
 
 The checkpoint loads and generates with a patched research runtime. It does not
-work with stock vLLM, and its first measured runtime was much slower than
-llama.cpp. Treat it as a reproducible research artifact, not a production
-release.
+work with stock vLLM. The first serving configuration prioritized fit and
+correctness over speed; performance tuning is ongoing.
 
 ## What changed
 
@@ -75,10 +76,8 @@ conversion, but it is not a 0731-native calibration run.
 | Humming | `humming-kernels==0.1.10`, source `inclusionAI/humming@4351af3a8fcdce1a8dee50104ba49566af2427fb` |
 | Conversion and runtime record | [`Whamp/club-3090@d6776fba`](https://github.com/Whamp/club-3090/tree/d6776fbac8a4d062102e57d7cfe0e3eb4d0be1b6) |
 
-The full conversion ran on one A100 80 GB VM. It used 112.9 GiB peak host
-memory, no swap, and 2 hours 31 minutes of service CPU time. The upload verifier
-then matched every local and remote file by byte size and Git, LFS, or Xet
-object hash before the VM was deleted.
+The full conversion ran on one A100 80 GB VM and used 112.9 GiB peak host
+memory with no swap.
 
 The immutable weight snapshot is
 [`75d9286c37f3037f3ab390cfbc10747466eac714`](https://huggingface.co/hampsonw/DeepSeek-V4-Flash-0731-WNA16/tree/75d9286c37f3037f3ab390cfbc10747466eac714).
@@ -107,8 +106,10 @@ environment.
 
 ## Measured results
 
-The tested host used four RTX 3090 GPUs with tensor parallelism 4. The patched
-runtime:
+The first tested configuration prioritized fitting the model and proving the
+execution path. It used four RTX 3090 GPUs with tensor parallelism 4, eager
+execution, `max_num_seqs=1`, a 256-token batch budget, and SM86 correctness
+fallbacks. It:
 
 - loaded all 45 shards;
 - generated a correct deterministic short response;
@@ -117,11 +118,10 @@ runtime:
 - measured about 5.55 single-stream decode tokens/s on a short code prompt.
 
 The comparison llama.cpp service measured about 1,379 prompt tokens/s on a
-similar 9,212-token prompt and 34–38 decode tokens/s. The first WNA16 runtime
-was therefore rejected as a replacement on performance grounds. The vLLM test
-used conservative eager execution and correctness fallbacks, so these numbers
-describe that runtime configuration rather than the fastest possible WNA16
-implementation.
+similar 9,212-token prompt and 34–38 decode tokens/s. These are initial
+correctness-baseline results, not a final performance result. Work continues on
+a faster serving configuration, including graph-enabled execution and decode
+path optimization.
 
 ## Evaluation and limitations
 
@@ -134,9 +134,8 @@ Available evidence consists of:
   “only code” instruction.
 
 No broad quality suite, 200K needle test, concurrency stress test, or comparison
-against the official checkpoint was completed. This repository makes no claim
-that W2A16 preserves the official model's benchmark scores or matches Antirez
-or Unsloth GGUF quality.
+against the official checkpoint was completed. Quality relative to the official
+checkpoint and Antirez or Unsloth GGUF quants has not been measured.
 
 Other limits:
 
