@@ -117,6 +117,8 @@ deepseek-v4-pilot \
 
 Use weighted RTN for the full artifact only if its measured weighted-error improvement is meaningful relative to its runtime. This pilot is a method screen, not an end-to-end quality claim.
 
+`deepseek-v4-summarize-pilot PILOT_REPORT SUMMARY_REPORT` pairs candidates by tensor and bit width. It reports improvement, tie, and worsening counts; median weighted-error change; per-projection timing; and a projection-aware extrapolation across all 43 layers × 256 experts. The extrapolation covers quantize-and-pack time only, explicitly excluding download, source dequantization, writing, finalization, and upload. Its `decision` remains null: the evidence informs the explicit full-run quantizer argument rather than silently selecting one.
+
 `rental/run-verda-quantizer-pilot.sh` is the idempotent, secret-free staging entry point for the selected Verda A100 pilot. It pins the conversion and AutoRound commits, official checkpoint and imatrix revisions, CUDA 13.0 Torch environment, representative downloads, imatrix checksum, and command above. It writes a durable JSON report and timestamped log under the supplied rental root.
 
 ## Streamed conversion
