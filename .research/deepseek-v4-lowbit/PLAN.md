@@ -18,7 +18,7 @@ No single quantization recipe is selected yet. Runtime fit, basic quality, loade
 
 ### The quality signal is useful but not directly portable
 
-Antirez published a 450,892,648-byte DeepSeek V4 Flash routed-expert imatrix at Hugging Face revision `e7f04037032990db0346398d249baf9fb9df1ccc`, SHA-256/Xet etag `02a7c78c29875e4653d6ce21d8821c02161e83ed90c506bdd8d275f76d4ac97e`.
+Antirez published a 450,892,648-byte DeepSeek V4 Flash routed-expert imatrix at Hugging Face revision `e7f04037032990db0346398d249baf9fb9df1ccc`. Pinned Hub metadata identifies its LFS content SHA-256 as `02a7c78c29875e4653d6ce21d8821c02161e83ed90c506bdd8d275f76d4ac97e` and its distinct Xet hash as `cf8a1815d71086e3ec47cefda1fdf381effcb160716ea0c44190a49e2b7614e8`; the rental script verifies the content SHA-256 after download.
 
 This imatrix was collected for the original `deepseek-ai/DeepSeek-V4-Flash`, not the 0731 checkpoint. Antirez uploaded it on May 12, 2026; the repository added 0731 artifacts on July 31 and August 1. Antirez then reused the same imatrix to build 0731 imatrix GGUFs. That makes it a relevant prior for 0731, not a 0731-native activation measurement. The pilot must check whether it improves 0731 WNA16 results; collecting a new 0731 imatrix remains an option if it does not.
 
