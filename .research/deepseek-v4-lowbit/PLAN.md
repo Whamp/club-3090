@@ -214,8 +214,28 @@ Plan at least 450–500 GB of fast local storage if source, work files, and more
 5. **Done:** run the 24-matrix plain-versus-imatrix pilot and select imatrix-weighted RTN from 24/24 weighted-error improvements with modest projected time cost.
 6. **Done:** generate one all-W2, MTP-free artifact; upload it directly from Verda; verify all Hub hashes and inventory; and delete all rental compute and storage.
 7. **Done:** stage the immutable Hub revision on server60 and verify all 54 cache objects without loading the model, touching the existing GPU process, or disrupting llama.cpp.
-8. **Open, requires explicit GPU-use authorization:** reconstruct the pinned SM86 vLLM runtime on server60, run the exact W2/group-128/BF16 numerical oracle, inspect generated `sm_86` cubins, and prove the intended runtime dispatch.
-9. **Open, requires the active service to be intentionally stopped:** load the candidate at 200K or longer context and compare prefill, decode, throughput, concurrency, context capacity, VRAM, and basic quality with the preserved llama.cpp baseline before deciding how much deeper evaluation is worthwhile.
+8. **Done:** reconstruct the pinned SM86 runtime and pass the exact
+   W2/group-128/BF16 numerical oracle on one RTX 3090 in 78.24 seconds.
+   Humming generated 13 inspected `sm_86` cubins. The final seven-patch
+   integration tree is `12b87bcd52bb2973685fa8f38b5fc8bbbfe7519c`; it
+   composes native DeepSeek FP8 linears with routed WNA16 experts and routes
+   SM86 sparse decode away from a split-K tile that exceeds the GPU's
+   101,376-byte shared-memory limit.
+9. **Done; candidate rejected for replacement performance:** load all 45
+   shards at 200K on TP=4 with no CPU weight offload. The accepted eager
+   configuration used a 256-token chunk ceiling, a 64 MiB sparse-indexer
+   logits budget, the per-query sparse-prefill fallback, and an explicit
+   1 GiB packed KV allocation per GPU. It exposed 210,826 cache tokens
+   (1.05× one 200K request), returned an exact short smoke response, and
+   completed a 9,009-token prefill at 809 tok/s with 11.13-second TTFT.
+   Short code decode measured 5.55 tok/s. Preserved llama.cpp evidence on
+   this host is roughly 1,379 tok/s for a 9,212-token prefill, 403 tok/s for
+   a 199,488-token full-history prefill, and 34–38 decode tok/s. Because vLLM
+   lost both prefill and decode by material margins, the progressive gate
+   stopped before a 200K needle, concurrency stress, or full quality packs.
+   The trusted Unsloth IQ1_M llama.cpp router was restored at 200K on port
+   8200; the former Antirez service could not be restored because its GGUF
+   was no longer present.
 
 ## Pinned evidence
 
