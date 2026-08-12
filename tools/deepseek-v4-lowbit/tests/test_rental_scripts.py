@@ -64,6 +64,8 @@ class RentalScriptContractTests(unittest.TestCase):
         script = _ORACLE_SCRIPT.read_text(encoding="utf-8")
         self.assertIn('"ninja==1.13.0"', script)
         self.assertIn('"tblib==3.1.0"', script)
+        self.assertIn('export PATH="$ORACLE_ENVIRONMENT/bin:$PATH"', script)
+        self.assertIn("ninja --version", script)
 
 
 if __name__ == "__main__":

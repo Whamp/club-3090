@@ -102,6 +102,8 @@ uv pip install --python "$ORACLE_ENVIRONMENT/bin/python" \
     "pytest-timeout==2.4.0" \
     "tblib==3.1.0"
 uv pip check --python "$ORACLE_ENVIRONMENT/bin/python"
+export PATH="$ORACLE_ENVIRONMENT/bin:$PATH"
+ninja --version
 
 log_oracle_step "Verify exact GPU and Humming environment"
 "$ORACLE_ENVIRONMENT/bin/python" - "$HUMMING_VERSION" <<'PY'
