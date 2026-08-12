@@ -1,0 +1,39 @@
+from __future__ import annotations
+
+import unittest
+from pathlib import Path
+
+_RENTAL_DIRECTORY = Path(__file__).parents[1] / "rental"
+_PILOT_SCRIPT = _RENTAL_DIRECTORY / "run-verda-quantizer-pilot.sh"
+_FULL_CONVERSION_SCRIPT = _RENTAL_DIRECTORY / "run-verda-full-conversion.sh"
+
+
+class RentalScriptContractTests(unittest.TestCase):
+    def test_capacity_checks_measure_the_rental_root(self) -> None:
+        for script_path in (_PILOT_SCRIPT, _FULL_CONVERSION_SCRIPT):
+            script = script_path.read_text(encoding="utf-8")
+            with self.subTest(script=script_path.name):
+                self.assertIn("- \"$RENTAL_ROOT\" <<'PY'", script)
+                self.assertIn("shutil.disk_usage(sys.argv[1])", script)
+                self.assertNotIn('shutil.disk_usage(".")', script)
+
+    def test_rental_workloads_require_the_selected_a100_capability(self) -> None:
+        for script_path in (_PILOT_SCRIPT, _FULL_CONVERSION_SCRIPT):
+            script = script_path.read_text(encoding="utf-8")
+            with self.subTest(script=script_path.name):
+                self.assertIn("torch.cuda.get_device_capability() != (8, 0)", script)
+                self.assertIn("requires compute capability 8.0", script)
+
+    def test_mutable_checkouts_fail_closed_on_dirty_trees(self) -> None:
+        for script_path in (_PILOT_SCRIPT, _FULL_CONVERSION_SCRIPT):
+            script = script_path.read_text(encoding="utf-8")
+            with self.subTest(script=script_path.name):
+                self.assertIn(
+                    "status --porcelain --untracked-files=all",
+                    script,
+                )
+                self.assertGreaterEqual(script.count("require_clean_checkout"), 3)
+
+
+if __name__ == "__main__":
+    unittest.main()

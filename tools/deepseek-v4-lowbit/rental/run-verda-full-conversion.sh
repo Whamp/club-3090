@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export PYTHONUTF8="${PYTHONUTF8:-1}"
+
 readonly CLUB_3090_REVISION="46707654f68e4ee89d5d99ab79bcdc64023e44fc"
 readonly CLUB_3090_REF="refs/heads/feat/deepseek-v4-lowbit-vllm"
 readonly DEEPSEEK_REVISION="7872f01b1d1fe23eabc4c98b48bffcef5a386062"
@@ -24,6 +26,14 @@ exec > >(tee -a "$FULL_RUN_LOG") 2>&1
 
 log_full_run_step() {
     printf '\n[%s] %s\n' "$(date --utc +%Y-%m-%dT%H:%M:%SZ)" "$1"
+}
+
+require_clean_checkout() {
+    local destination="$1"
+    [[ -z "$(git -C "$destination" status --porcelain --untracked-files=all)" ]] || {
+        echo "Pinned repository checkout must be clean: $destination" >&2
+        return 2
+    }
 }
 
 case "$QUANTIZER" in
@@ -51,12 +61,18 @@ esac
 }
 
 log_full_run_step "Verify CUDA, authentication, and free storage"
-"$PYTHON_ENVIRONMENT/bin/python" - <<'PY'
+"$PYTHON_ENVIRONMENT/bin/python" - "$RENTAL_ROOT" <<'PY'
 import shutil
+import sys
 import torch
 if not torch.cuda.is_available():
     raise SystemExit("Full conversion CUDA check failed")
-free_gib = shutil.disk_usage(".").free / (1024**3)
+if torch.cuda.get_device_capability() != (8, 0):
+    raise SystemExit(
+        "Full conversion requires compute capability 8.0, got "
+        f"{torch.cuda.get_device_capability()}"
+    )
+free_gib = shutil.disk_usage(sys.argv[1]).free / (1024**3)
 if free_gib < 260:
     raise SystemExit(f"Full conversion requires at least 260 GiB free, found {free_gib:.1f}")
 print(f"free_disk_gib={free_gib:.1f} gpu={torch.cuda.get_device_name(0)}")
@@ -64,9 +80,11 @@ PY
 "$PYTHON_ENVIRONMENT/bin/hf" auth whoami
 
 log_full_run_step "Update conversion tooling to pinned upload-verifier revision"
+require_clean_checkout "$CLUB_3090_DIRECTORY"
 git -C "$CLUB_3090_DIRECTORY" fetch --depth 1 origin "$CLUB_3090_REF"
 git -C "$CLUB_3090_DIRECTORY" checkout --detach "$CLUB_3090_REVISION"
 test "$(git -C "$CLUB_3090_DIRECTORY" rev-parse HEAD)" = "$CLUB_3090_REVISION"
+require_clean_checkout "$CLUB_3090_DIRECTORY"
 uv pip install --python "$PYTHON_ENVIRONMENT/bin/python" \
     --editable "$CLUB_3090_DIRECTORY/tools/deepseek-v4-lowbit"
 uv pip check --python "$PYTHON_ENVIRONMENT/bin/python"

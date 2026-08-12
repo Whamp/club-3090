@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export PYTHONUTF8="${PYTHONUTF8:-1}"
+
 readonly CLUB_3090_REVISION="46707654f68e4ee89d5d99ab79bcdc64023e44fc"
 readonly AUTO_ROUND_REVISION="f17d9cd4b36982006bad21ff87127aac739072e3"
 readonly DEEPSEEK_REVISION="7872f01b1d1fe23eabc4c98b48bffcef5a386062"
@@ -31,12 +33,22 @@ log_pilot_step() {
     printf '\n[%s] %s\n' "$(date --utc +%Y-%m-%dT%H:%M:%SZ)" "$1"
 }
 
+require_clean_checkout() {
+    local destination="$1"
+    [[ -z "$(git -C "$destination" status --porcelain --untracked-files=all)" ]] || {
+        echo "Pinned repository checkout must be clean: $destination" >&2
+        return 2
+    }
+}
+
 checkout_pinned_repository() {
     local repository_url="$1"
     local repository_ref="$2"
     local revision="$3"
     local destination="$4"
-    if [[ ! -d "$destination/.git" ]]; then
+    if [[ -d "$destination/.git" ]]; then
+        require_clean_checkout "$destination"
+    else
         git clone --filter=blob:none --no-checkout "$repository_url" "$destination"
     fi
     git -C "$destination" fetch --depth 1 origin "$repository_ref"
@@ -45,13 +57,15 @@ checkout_pinned_repository() {
         echo "Pinned repository checkout mismatch: $destination" >&2
         return 1
     }
+    require_clean_checkout "$destination"
 }
 
 log_pilot_step "Verify rental hardware and storage"
 nvidia-smi
-python3 - <<'PY'
+python3 - "$RENTAL_ROOT" <<'PY'
 import shutil
-free_gib = shutil.disk_usage(".").free / (1024**3)
+import sys
+free_gib = shutil.disk_usage(sys.argv[1]).free / (1024**3)
 if free_gib < 50:
     raise SystemExit(f"Rental pilot requires at least 50 GiB free, found {free_gib:.1f}")
 print(f"free_disk_gib={free_gib:.1f}")
@@ -94,7 +108,15 @@ uv pip check --python "$PYTHON_ENVIRONMENT/bin/python"
 import torch
 if not torch.cuda.is_available():
     raise SystemExit("Rental pilot CUDA check failed: torch.cuda.is_available() is false")
-print(f"torch={torch.__version__} cuda={torch.version.cuda} gpu={torch.cuda.get_device_name(0)}")
+if torch.cuda.get_device_capability() != (8, 0):
+    raise SystemExit(
+        "Rental pilot requires compute capability 8.0, got "
+        f"{torch.cuda.get_device_capability()}"
+    )
+print(
+    f"torch={torch.__version__} cuda={torch.version.cuda} "
+    f"gpu={torch.cuda.get_device_name(0)} cc=8.0"
+)
 PY
 
 log_pilot_step "Download four pinned representative source shards"
