@@ -98,7 +98,8 @@ uv pip install --python "$ORACLE_ENVIRONMENT/bin/python" \
     "pytest-asyncio==1.4.0" \
     "pytest-rerunfailures==16.4" \
     "pytest-shard==0.1.2" \
-    "pytest-timeout==2.4.0"
+    "pytest-timeout==2.4.0" \
+    "tblib==3.1.0"
 uv pip check --python "$ORACLE_ENVIRONMENT/bin/python"
 
 log_oracle_step "Verify exact GPU and Humming environment"
