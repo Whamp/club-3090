@@ -40,7 +40,7 @@ class ModelConfigTests(unittest.TestCase):
             groups["group_w2"]["targets"],
         )
 
-    def test_preserves_source_fp8_linears_after_exact_wna16_expert_targets(
+    def test_routes_preserved_fp8_linears_through_deepseek_native_config(
         self,
     ) -> None:
         recipe = ArtifactRecipe(default=LayerQuantization(2, 2))
@@ -52,19 +52,9 @@ class ModelConfigTests(unittest.TestCase):
         )
 
         groups = config["config_groups"]
-        self.assertEqual(list(groups), ["group_w2", "group_fp8_linears"])
-        self.assertEqual(groups["group_fp8_linears"]["format"], "float-quantized")
-        self.assertEqual(groups["group_fp8_linears"]["targets"], ["Linear"])
-        self.assertTrue(groups["group_fp8_linears"]["input_activations"]["dynamic"])
-        self.assertEqual(
-            groups["group_fp8_linears"]["input_activations"]["strategy"],
-            "token",
-        )
-        self.assertEqual(
-            groups["group_fp8_linears"]["weights"]["block_structure"],
-            [128, 128],
-        )
-        self.assertEqual(groups["group_fp8_linears"]["weights"]["type"], "float")
+        self.assertEqual(list(groups), ["group_w2"])
+        self.assertEqual(config["base_quant_method"], "deepseek_v4_fp8")
+        self.assertNotIn("Linear", groups["group_w2"]["targets"])
 
     def test_replaces_source_fp8_metadata_and_disables_mtp(self) -> None:
         source = {

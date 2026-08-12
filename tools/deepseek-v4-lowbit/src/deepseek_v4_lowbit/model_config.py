@@ -43,14 +43,8 @@ def build_compressed_tensors_config(
         }
         for bits, targets in sorted(targets_by_bits.items())
     }
-    config_groups["group_fp8_linears"] = {
-        "format": "float-quantized",
-        "input_activations": _fp8_dynamic_activation_quantization_args(),
-        "output_activations": None,
-        "targets": ["Linear"],
-        "weights": _fp8_block_weight_quantization_args(),
-    }
     return {
+        "base_quant_method": "deepseek_v4_fp8",
         "config_groups": config_groups,
         "format": "pack-quantized",
         "global_compression_ratio": None,
@@ -96,40 +90,6 @@ def materialize_model_config(
         ),
     }
     return output
-
-
-def _fp8_dynamic_activation_quantization_args() -> dict[str, Any]:
-    return {
-        "actorder": None,
-        "block_structure": None,
-        "dynamic": True,
-        "group_size": None,
-        "num_bits": 8,
-        "observer": "memoryless_minmax",
-        "observer_kwargs": {},
-        "scale_dtype": None,
-        "strategy": "token",
-        "symmetric": True,
-        "type": "float",
-        "zp_dtype": None,
-    }
-
-
-def _fp8_block_weight_quantization_args() -> dict[str, Any]:
-    return {
-        "actorder": None,
-        "block_structure": [128, 128],
-        "dynamic": False,
-        "group_size": None,
-        "num_bits": 8,
-        "observer": "memoryless_minmax",
-        "observer_kwargs": {},
-        "scale_dtype": None,
-        "strategy": "block",
-        "symmetric": True,
-        "type": "float",
-        "zp_dtype": None,
-    }
 
 
 def _weight_quantization_args(bits: int, group_size: int) -> dict[str, Any]:
