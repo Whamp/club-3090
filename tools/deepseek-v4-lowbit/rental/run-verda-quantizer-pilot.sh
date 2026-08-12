@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly CLUB_3090_REVISION="eeb00ad432f4462e722f6e213ef64ee94ba9a0f4"
+readonly CLUB_3090_REVISION="e8599bad2ac721bdf0650f4a36aa71bc4137f15d"
 readonly AUTO_ROUND_REVISION="f17d9cd4b36982006bad21ff87127aac739072e3"
 readonly DEEPSEEK_REVISION="7872f01b1d1fe23eabc4c98b48bffcef5a386062"
 readonly IMATRIX_REVISION="e7f04037032990db0346398d249baf9fb9df1ccc"
