@@ -40,6 +40,27 @@ class ModelConfigTests(unittest.TestCase):
             groups["group_w2"]["targets"],
         )
 
+    def test_preserves_source_fp8_linears_after_exact_wna16_expert_targets(
+        self,
+    ) -> None:
+        recipe = ArtifactRecipe(default=LayerQuantization(2, 2))
+
+        config = build_compressed_tensors_config(
+            recipe,
+            layer_count=2,
+            group_size=128,
+        )
+
+        groups = config["config_groups"]
+        self.assertEqual(list(groups), ["group_w2", "group_fp8_linears"])
+        self.assertEqual(groups["group_fp8_linears"]["format"], "float-quantized")
+        self.assertEqual(groups["group_fp8_linears"]["targets"], ["Linear"])
+        self.assertEqual(
+            groups["group_fp8_linears"]["weights"]["block_structure"],
+            [128, 128],
+        )
+        self.assertEqual(groups["group_fp8_linears"]["weights"]["type"], "float")
+
     def test_replaces_source_fp8_metadata_and_disables_mtp(self) -> None:
         source = {
             "model_type": "deepseek_v4",
