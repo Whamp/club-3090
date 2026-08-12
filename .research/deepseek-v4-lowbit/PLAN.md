@@ -228,12 +228,18 @@ Plan at least 450–500 GB of fast local storage if source, work files, and more
    1 GiB packed KV allocation per GPU. It exposed 210,826 cache tokens
    (1.05× one 200K request), returned an exact short smoke response, and
    completed a 9,009-token prefill at 809 tok/s with 11.13-second TTFT.
-   Short code decode measured 5.55 tok/s. Preserved llama.cpp evidence on
-   this host is roughly 1,379 tok/s for a 9,212-token prefill, 403 tok/s for
-   a 199,488-token full-history prefill, and 34–38 decode tok/s. Because vLLM
-   lost both prefill and decode by material margins, the progressive gate
-   stopped before a 200K needle, concurrency stress, or full quality packs.
-   The trusted Unsloth IQ1_M llama.cpp router was restored at 200K on port
+   Short code decode measured 5.55 tok/s. The running candidate used
+   24,066 MiB per card and left 61–62 MiB free. Preserved llama.cpp evidence
+   on this host is roughly 1,379 tok/s for a 9,212-token prefill, 403 tok/s
+   for a 199,488-token full-history prefill, and 34–38 decode tok/s. Both
+   accepted endpoints were configured for one active request; vLLM's packed
+   cache reported 1.05× maximum concurrency at 200K. No multi-request
+   throughput run followed because vLLM had already lost both single-stream
+   prefill and decode by material margins. The progressive gate also stopped
+   before a 200K needle or full quality packs. Basic quality evidence is one
+   exact short response plus syntactically correct quicksort; the latter
+   added prose despite an “only code” instruction. The trusted Unsloth IQ1_M
+   llama.cpp router was restored at 200K on port
    8200; the former Antirez service could not be restored because its GGUF
    was no longer present.
 
