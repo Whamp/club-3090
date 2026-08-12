@@ -18,6 +18,10 @@ _PATCH_5 = (
 _PATCH_6 = (
     _RUNTIME_PATCH_DIRECTORY / "0006-fix-compose-DeepSeek-FP8-with-WNA16-experts.patch"
 )
+_PATCH_7 = (
+    _RUNTIME_PATCH_DIRECTORY
+    / "0007-fix-gate-sparse-split-K-decode-by-shared-memory.patch"
+)
 _SM86_ORACLE_SCRIPT = _RUNTIME_PATCH_DIRECTORY / "run-sm86-oracle.sh"
 _SERVER60_ROLLBACK_SCRIPT = (
     _RUNTIME_PATCH_DIRECTORY / "run-server60-oracle-with-rollback.sh"
@@ -46,7 +50,7 @@ class RuntimeImageContractTests(unittest.TestCase):
     def test_builder_rejects_drifted_or_dirty_vllm_source(self) -> None:
         script = _BUILD_SCRIPT.read_text(encoding="utf-8")
         self.assertIn(
-            'EXPECTED_VLLM_TREE="b2cebe3ecbe8aa19b38234375bb1754ef28116a2"',
+            'EXPECTED_VLLM_TREE="12b87bcd52bb2973685fa8f38b5fc8bbbfe7519c"',
             script,
         )
         self.assertIn("status --porcelain --untracked-files=all", script)
@@ -86,6 +90,18 @@ class RuntimeImageContractTests(unittest.TestCase):
         self.assertIn(
             "9af88957c5900e741794002907183a324510bcc7ebb7dd60fef22d66cd5ac005"
             "  0006-fix-compose-DeepSeek-FP8-with-WNA16-experts.patch",
+            readme,
+        )
+
+    def test_sm86_sparse_decode_dispatch_patch_is_checksum_pinned(self) -> None:
+        self.assertEqual(
+            hashlib.sha256(_PATCH_7.read_bytes()).hexdigest(),
+            "f4dec6b898ec327a06b8bd85841ad9e662eb9be7ab59a6cd3a75f60e4c0bc672",
+        )
+        readme = (_RUNTIME_PATCH_DIRECTORY / "README.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "f4dec6b898ec327a06b8bd85841ad9e662eb9be7ab59a6cd3a75f60e4c0bc672"
+            "  0007-fix-gate-sparse-split-K-decode-by-shared-memory.patch",
             readme,
         )
 

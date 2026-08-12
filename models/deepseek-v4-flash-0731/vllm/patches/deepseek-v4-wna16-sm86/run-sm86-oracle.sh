@@ -2,9 +2,9 @@
 set -euo pipefail
 
 readonly AUTHORIZATION_PHRASE="I_AUTHORIZE_SERVER60_GPU_ORACLE"
-readonly EXPECTED_IMAGE_TREE="b2cebe3ecbe8aa19b38234375bb1754ef28116a2"
+readonly EXPECTED_IMAGE_TREE="12b87bcd52bb2973685fa8f38b5fc8bbbfe7519c"
 readonly ORACLE_TEST="tests/kernels/moe/test_moe.py::test_humming_w2_group128_indexed_numerical_oracle"
-readonly IMAGE="${VLLM_IMAGE:-club-3090/deepseek-v4-wna16-sm86:b2cebe3e-cu130}"
+readonly IMAGE="${VLLM_IMAGE:-club-3090/deepseek-v4-wna16-sm86:12b87bcd-cu130}"
 readonly REPORT_DIRECTORY="${REPORT_DIRECTORY:-$PWD/sm86-oracle-report}"
 readonly AUTHORIZATION="${1:-}"
 

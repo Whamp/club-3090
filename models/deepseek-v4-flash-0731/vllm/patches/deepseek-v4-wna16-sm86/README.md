@@ -40,6 +40,9 @@ Apply these patches in filename order:
 6. `0006-fix-compose-DeepSeek-FP8-with-WNA16-experts.patch`
    - Keeps preserved DeepSeek E4M3/UE8M0 linears on the native grouped-FP8 path.
    - Delegates only routed experts to compressed-tensors WNA16/Humming.
+7. `0007-fix-gate-sparse-split-K-decode-by-shared-memory.patch`
+   - Keeps split-K sparse decode on CUDA devices that can launch its tile.
+   - Routes lower-shared-memory devices such as SM86 to the existing single-pass decode.
 
 Patch SHA-256 values:
 
@@ -50,10 +53,11 @@ f88b96897566663411d9d09a41e3f3eec54bd9b958fd34165412a2d288310d2b  0001-feat-supp
 3be16754f61170ff2da57a1c64edcd7c524ed6ad9b10c5189d3661e6f55ffc8f  0004-fix-load-hybrid-DeepSeek-FP8-linears.patch
 f446a73a37b7715023f05aeec526b714fdadbefa80772268e242218c69efc34e  0005-fix-forward-layer-to-Humming-MoE-kernel.patch
 9af88957c5900e741794002907183a324510bcc7ebb7dd60fef22d66cd5ac005  0006-fix-compose-DeepSeek-FP8-with-WNA16-experts.patch
+f4dec6b898ec327a06b8bd85841ad9e662eb9be7ab59a6cd3a75f60e4c0bc672  0007-fix-gate-sparse-split-K-decode-by-shared-memory.patch
 ```
 
 The expected final Git tree is
-`b2cebe3ecbe8aa19b38234375bb1754ef28116a2`.
+`12b87bcd52bb2973685fa8f38b5fc8bbbfe7519c`.
 
 ## Apply
 
@@ -90,7 +94,7 @@ base `62195e9784ebec1ece42b88a861734e0702cc2d5`, and verifies
 ```bash
 ./build-runtime-image.sh \
   /path/to/patched-vllm \
-  club-3090/deepseek-v4-wna16-sm86:b2cebe3e-cu130
+  club-3090/deepseek-v4-wna16-sm86:12b87bcd-cu130
 ```
 
 Building the image uses CPU, disk, and network only. It does not establish

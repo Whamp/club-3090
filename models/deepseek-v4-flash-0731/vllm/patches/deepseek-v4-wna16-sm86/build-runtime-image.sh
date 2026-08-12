@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly EXPECTED_VLLM_TREE="b2cebe3ecbe8aa19b38234375bb1754ef28116a2"
+readonly EXPECTED_VLLM_TREE="12b87bcd52bb2973685fa8f38b5fc8bbbfe7519c"
 SCRIPT_DIRECTORY="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIRECTORY
 readonly DOCKERFILE="$SCRIPT_DIRECTORY/Dockerfile.runtime-cu130"
 readonly VLLM_DIRECTORY="${1:?usage: build-runtime-image.sh VLLM_DIRECTORY [IMAGE_TAG]}"
-readonly IMAGE_TAG="${2:-club-3090/deepseek-v4-wna16-sm86:b2cebe3e-cu130}"
+readonly IMAGE_TAG="${2:-club-3090/deepseek-v4-wna16-sm86:12b87bcd-cu130}"
 
 actual_tree="$(git -C "$VLLM_DIRECTORY" rev-parse 'HEAD^{tree}')"
 [[ "$actual_tree" == "$EXPECTED_VLLM_TREE" ]] || {
