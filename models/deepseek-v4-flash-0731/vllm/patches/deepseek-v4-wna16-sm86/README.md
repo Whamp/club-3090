@@ -33,6 +33,10 @@ Apply these patches in filename order:
    - Detects the explicit compressed-tensors FP8 linear fallback.
    - Maps preserved native DeepSeek FP8 scales to compressed-tensors' pre-load
      parameter name without changing ordinary DeepSeek FP8 checkpoints.
+5. `0005-fix-forward-layer-to-Humming-MoE-kernel.patch`
+   - Passes the production routed-experts layer into the Humming WNA16 factory.
+   - Locks down the compressed-tensors setup path that the standalone oracle
+     did not previously exercise.
 
 Patch SHA-256 values:
 
@@ -41,10 +45,11 @@ f88b96897566663411d9d09a41e3f3eec54bd9b958fd34165412a2d288310d2b  0001-feat-supp
 73c33d6f1aec0d87738d4e1cb51e0bb0bab776c6a2b0c5b670639729d0f8896a  0002-feat-support-mixed-WNA16-MoE-projection-bits.patch
 1f8c8c1734f4415b1d490bb7d3dbc290f49c9fb1dfeb0e268cdab728072030aa  0003-test-add-Humming-W2A16-MoE-oracle.patch
 3be16754f61170ff2da57a1c64edcd7c524ed6ad9b10c5189d3661e6f55ffc8f  0004-fix-load-hybrid-DeepSeek-FP8-linears.patch
+f446a73a37b7715023f05aeec526b714fdadbefa80772268e242218c69efc34e  0005-fix-forward-layer-to-Humming-MoE-kernel.patch
 ```
 
 The expected final Git tree is
-`7f4c19003f808a28ec5adcb5675468c5d34af97b`.
+`9a54d487051e937a9dd6c146b971d93ff422eb30`.
 
 ## Apply
 
@@ -81,7 +86,7 @@ base `62195e9784ebec1ece42b88a861734e0702cc2d5`, and verifies
 ```bash
 ./build-runtime-image.sh \
   /path/to/patched-vllm \
-  club-3090/deepseek-v4-wna16-sm86:7f4c1900-cu130
+  club-3090/deepseek-v4-wna16-sm86:9a54d487-cu130
 ```
 
 Building the image uses CPU, disk, and network only. It does not establish

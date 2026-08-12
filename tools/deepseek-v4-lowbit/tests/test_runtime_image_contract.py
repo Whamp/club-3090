@@ -12,6 +12,9 @@ _RUNTIME_PATCH_DIRECTORY = (
 _DOCKERFILE = _RUNTIME_PATCH_DIRECTORY / "Dockerfile.runtime-cu130"
 _BUILD_SCRIPT = _RUNTIME_PATCH_DIRECTORY / "build-runtime-image.sh"
 _PATCH_4 = _RUNTIME_PATCH_DIRECTORY / "0004-fix-load-hybrid-DeepSeek-FP8-linears.patch"
+_PATCH_5 = (
+    _RUNTIME_PATCH_DIRECTORY / "0005-fix-forward-layer-to-Humming-MoE-kernel.patch"
+)
 _SM86_ORACLE_SCRIPT = _RUNTIME_PATCH_DIRECTORY / "run-sm86-oracle.sh"
 _SERVER60_ROLLBACK_SCRIPT = (
     _RUNTIME_PATCH_DIRECTORY / "run-server60-oracle-with-rollback.sh"
@@ -40,7 +43,7 @@ class RuntimeImageContractTests(unittest.TestCase):
     def test_builder_rejects_drifted_or_dirty_vllm_source(self) -> None:
         script = _BUILD_SCRIPT.read_text(encoding="utf-8")
         self.assertIn(
-            'EXPECTED_VLLM_TREE="7f4c19003f808a28ec5adcb5675468c5d34af97b"',
+            'EXPECTED_VLLM_TREE="9a54d487051e937a9dd6c146b971d93ff422eb30"',
             script,
         )
         self.assertIn("status --porcelain --untracked-files=all", script)
@@ -56,6 +59,18 @@ class RuntimeImageContractTests(unittest.TestCase):
         self.assertIn(
             "3be16754f61170ff2da57a1c64edcd7c524ed6ad9b10c5189d3661e6f55ffc8f"
             "  0004-fix-load-hybrid-DeepSeek-FP8-linears.patch",
+            readme,
+        )
+
+    def test_humming_layer_forwarding_patch_is_checksum_pinned(self) -> None:
+        self.assertEqual(
+            hashlib.sha256(_PATCH_5.read_bytes()).hexdigest(),
+            "f446a73a37b7715023f05aeec526b714fdadbefa80772268e242218c69efc34e",
+        )
+        readme = (_RUNTIME_PATCH_DIRECTORY / "README.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "f446a73a37b7715023f05aeec526b714fdadbefa80772268e242218c69efc34e"
+            "  0005-fix-forward-layer-to-Humming-MoE-kernel.patch",
             readme,
         )
 
