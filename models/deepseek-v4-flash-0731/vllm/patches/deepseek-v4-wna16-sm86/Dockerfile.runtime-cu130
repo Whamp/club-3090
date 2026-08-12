@@ -40,6 +40,8 @@ RUN uv pip install --python /opt/venv/bin/python \
     && python - <<'PY'
 import importlib.metadata
 import torch
+import vllm._C_stable_libtorch
+import vllm._moe_C_stable_libtorch
 assert torch.__version__.startswith("2.13.0+cu130"), torch.__version__
 assert importlib.metadata.version("humming-kernels") == "0.1.10"
 print(
