@@ -90,6 +90,14 @@ capability 8.6. It exposes only GPU 0, runs the deterministic numerical oracle,
 and rejects success unless at least one generated Humming cubin reports
 `sm_86` under `cuobjdump`. It does not load or serve the DeepSeek artifact.
 
+`run-server60-oracle-with-rollback.sh` wraps that gate for the current server60
+service. It requires a separate literal authorization, verifies the healthy
+llama.cpp baseline and exact image digest, stops only that Compose service,
+bounds the oracle to 20 minutes, and restores the exact Compose project from an
+EXIT trap on success, failure, interruption, or timeout. Restoration is not
+complete until the original service is healthy on the same image digest. This
+wrapper is server60-specific and must not be used on another host unchanged.
+
 ## Deferred GPU proof
 
 The patch series is not a runtime-support or performance claim until these

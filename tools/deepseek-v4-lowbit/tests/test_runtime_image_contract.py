@@ -11,6 +11,9 @@ _RUNTIME_PATCH_DIRECTORY = (
 _DOCKERFILE = _RUNTIME_PATCH_DIRECTORY / "Dockerfile.runtime-cu130"
 _BUILD_SCRIPT = _RUNTIME_PATCH_DIRECTORY / "build-runtime-image.sh"
 _SM86_ORACLE_SCRIPT = _RUNTIME_PATCH_DIRECTORY / "run-sm86-oracle.sh"
+_SERVER60_ROLLBACK_SCRIPT = (
+    _RUNTIME_PATCH_DIRECTORY / "run-server60-oracle-with-rollback.sh"
+)
 
 
 class RuntimeImageContractTests(unittest.TestCase):
@@ -52,6 +55,17 @@ class RuntimeImageContractTests(unittest.TestCase):
         self.assertIn("grep -q 'sm_86'", script)
         self.assertIn("--gpus", script)
         self.assertIn("device=0", script)
+
+    def test_server60_wrapper_restores_exact_llama_service(self) -> None:
+        script = _SERVER60_ROLLBACK_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("I_AUTHORIZE_LLAMA_STOP_FOR_SM86_ORACLE", script)
+        self.assertIn("trap restore_llama_service EXIT INT TERM HUP", script)
+        self.assertIn("sha256:a96bd947d63eb81d8baf9f6f5ecb266", script)
+        self.assertIn("stop --timeout 120", script)
+        self.assertIn("up --detach", script)
+        self.assertIn("I_AUTHORIZE_SERVER60_GPU_ORACLE", script)
+        self.assertIn("timeout --signal=TERM --kill-after=2m", script)
+        self.assertIn("CRITICAL: failed to restore healthy llama.cpp service", script)
 
 
 if __name__ == "__main__":
