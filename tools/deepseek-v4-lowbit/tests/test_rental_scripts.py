@@ -6,6 +6,7 @@ from pathlib import Path
 _RENTAL_DIRECTORY = Path(__file__).parents[1] / "rental"
 _PILOT_SCRIPT = _RENTAL_DIRECTORY / "run-verda-quantizer-pilot.sh"
 _FULL_CONVERSION_SCRIPT = _RENTAL_DIRECTORY / "run-verda-full-conversion.sh"
+_ORACLE_SCRIPT = _RENTAL_DIRECTORY / "run-verda-vllm-w2-oracle.sh"
 
 
 class RentalScriptContractTests(unittest.TestCase):
@@ -32,7 +33,7 @@ class RentalScriptContractTests(unittest.TestCase):
         self.assertNotIn('"$PYTHON_ENVIRONMENT/bin/hf" auth whoami', script)
 
     def test_mutable_checkouts_fail_closed_on_dirty_trees(self) -> None:
-        for script_path in (_PILOT_SCRIPT, _FULL_CONVERSION_SCRIPT):
+        for script_path in (_PILOT_SCRIPT, _FULL_CONVERSION_SCRIPT, _ORACLE_SCRIPT):
             script = script_path.read_text(encoding="utf-8")
             with self.subTest(script=script_path.name):
                 self.assertIn(
@@ -40,6 +41,24 @@ class RentalScriptContractTests(unittest.TestCase):
                     script,
                 )
                 self.assertGreaterEqual(script.count("require_clean_checkout"), 3)
+
+    def test_clone_capable_checkouts_validate_after_first_checkout(self) -> None:
+        for script_path in (_PILOT_SCRIPT, _ORACLE_SCRIPT):
+            script = script_path.read_text(encoding="utf-8")
+            with self.subTest(script=script_path.name):
+                self.assertIn(
+                    'if [[ -d "$destination/.git" ]]; then\n'
+                    '        require_clean_checkout "$destination"\n'
+                    "    else\n"
+                    "        git clone --filter=blob:none --no-checkout "
+                    '"$repository_url" "$destination"\n'
+                    "    fi",
+                    script,
+                )
+
+    def test_oracle_discovers_pinned_cuda_tools(self) -> None:
+        script = _ORACLE_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn('export PATH="/usr/local/cuda/bin:$PATH"', script)
 
 
 if __name__ == "__main__":

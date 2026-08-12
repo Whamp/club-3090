@@ -2,6 +2,7 @@
 set -euo pipefail
 
 export PYTHONUTF8="${PYTHONUTF8:-1}"
+export PATH="/usr/local/cuda/bin:$PATH"
 
 readonly CLUB_3090_REVISION="d8c3285f6ad2c33d9003cc215f35acca2c3e8c4d"
 readonly CLUB_3090_REF="refs/heads/feat/deepseek-v4-lowbit-vllm"
@@ -27,21 +28,28 @@ log_oracle_step() {
     printf '\n[%s] %s\n' "$(date --utc +%Y-%m-%dT%H:%M:%SZ)" "$1"
 }
 
+require_clean_checkout() {
+    local destination="$1"
+    [[ -z "$(git -C "$destination" status --porcelain --untracked-files=all)" ]] || {
+        echo "Pinned oracle checkout must be clean: $destination" >&2
+        return 2
+    }
+}
+
 checkout_pinned_ref() {
     local repository_url="$1"
     local repository_ref="$2"
     local revision="$3"
     local destination="$4"
-    if [[ ! -d "$destination/.git" ]]; then
+    if [[ -d "$destination/.git" ]]; then
+        require_clean_checkout "$destination"
+    else
         git clone --filter=blob:none --no-checkout "$repository_url" "$destination"
     fi
-    [[ -z "$(git -C "$destination" status --porcelain)" ]] || {
-        echo "Pinned oracle checkout must be clean: $destination" >&2
-        return 2
-    }
     git -C "$destination" fetch --depth 1 origin "$repository_ref"
     git -C "$destination" checkout --detach "$revision"
     test "$(git -C "$destination" rev-parse HEAD)" = "$revision"
+    require_clean_checkout "$destination"
 }
 
 log_oracle_step "Verify A100 scope, CUDA tools, and storage"
