@@ -77,7 +77,38 @@ if free_gib < 260:
     raise SystemExit(f"Full conversion requires at least 260 GiB free, found {free_gib:.1f}")
 print(f"free_disk_gib={free_gib:.1f} gpu={torch.cuda.get_device_name(0)}")
 PY
-"$PYTHON_ENVIRONMENT/bin/hf" auth whoami
+"$PYTHON_ENVIRONMENT/bin/python" - "$HUGGINGFACE_REPOSITORY" <<'PY'
+import os
+import sys
+
+from huggingface_hub import HfApi
+
+repository_id = sys.argv[1]
+namespace = repository_id.partition("/")[0]
+api = HfApi(token=os.environ["HF_TOKEN"])
+identity = api.whoami()
+access_token = (identity.get("auth") or {}).get("accessToken") or {}
+role = access_token.get("role")
+has_write_access = role == "write"
+if role == "fineGrained":
+    for scope in (access_token.get("fineGrained") or {}).get("scoped", []):
+        entity = scope.get("entity") or {}
+        permissions = set(scope.get("permissions") or [])
+        if entity.get("name") == namespace and "repo.write" in permissions:
+            has_write_access = True
+            break
+if not has_write_access:
+    raise SystemExit(
+        f"HF_TOKEN lacks repo.write permission for namespace {namespace!r}"
+    )
+repository = api.model_info(repository_id)
+if not repository.private:
+    raise SystemExit(f"Artifact repository must be private: {repository_id}")
+print(
+    f"huggingface_user={identity.get('name')} repository={repository.id} "
+    "private=true write_access=true"
+)
+PY
 
 log_full_run_step "Update conversion tooling to pinned upload-verifier revision"
 require_clean_checkout "$CLUB_3090_DIRECTORY"

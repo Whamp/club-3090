@@ -24,6 +24,13 @@ class RentalScriptContractTests(unittest.TestCase):
                 self.assertIn("torch.cuda.get_device_capability() != (8, 0)", script)
                 self.assertIn("requires compute capability 8.0", script)
 
+    def test_full_conversion_requires_private_write_target(self) -> None:
+        script = _FULL_CONVERSION_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn('HfApi(token=os.environ["HF_TOKEN"])', script)
+        self.assertIn('"repo.write"', script)
+        self.assertIn("if not repository.private", script)
+        self.assertNotIn('"$PYTHON_ENVIRONMENT/bin/hf" auth whoami', script)
+
     def test_mutable_checkouts_fail_closed_on_dirty_trees(self) -> None:
         for script_path in (_PILOT_SCRIPT, _FULL_CONVERSION_SCRIPT):
             script = script_path.read_text(encoding="utf-8")
