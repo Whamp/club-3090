@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly CLUB_3090_REVISION="e8599bad2ac721bdf0650f4a36aa71bc4137f15d"
+readonly CLUB_3090_REVISION="46707654f68e4ee89d5d99ab79bcdc64023e44fc"
 readonly CLUB_3090_REF="refs/heads/feat/deepseek-v4-lowbit-vllm"
 readonly HAOSDENT_REVISION="12810046c799cbe874967e19b1c0fa134ab7b209"
 readonly HAOSDENT_REF="refs/heads/dsv4-flash-a100"

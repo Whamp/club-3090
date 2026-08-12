@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly CLUB_3090_REVISION="e8599bad2ac721bdf0650f4a36aa71bc4137f15d"
+readonly CLUB_3090_REVISION="46707654f68e4ee89d5d99ab79bcdc64023e44fc"
 readonly CLUB_3090_REF="refs/heads/feat/deepseek-v4-lowbit-vllm"
 readonly DEEPSEEK_REVISION="7872f01b1d1fe23eabc4c98b48bffcef5a386062"
 readonly SOURCE_REPOSITORY="deepseek-ai/DeepSeek-V4-Flash-0731"
@@ -45,23 +45,12 @@ esac
     echo "Full conversion requires the completed pilot report and summary" >&2
     exit 2
 }
-if [[ "$QUANTIZER" == "imatrix-weighted-rtn" && ! -f "$IMATRIX_PATH" ]]; then
-    echo "Weighted full conversion requires the verified routed-expert imatrix" >&2
+[[ -f "$IMATRIX_PATH" ]] || {
+    echo "Full conversion requires the verified pilot routed-expert imatrix" >&2
     exit 2
-fi
+}
 
-log_full_run_step "Verify pilot report, CUDA, authentication, and free storage"
-"$PYTHON_ENVIRONMENT/bin/python" - "$PILOT_REPORT" <<'PY'
-import json
-import sys
-report = json.load(open(sys.argv[1], encoding="utf-8"))
-results = report.get("results", [])
-if len(results) != 48:
-    raise SystemExit(f"Full conversion requires 48 pilot candidates, found {len(results)}")
-if {item.get("quantizer") for item in results} != {"plain-rtn", "imatrix-weighted-rtn"}:
-    raise SystemExit("Full conversion pilot report has unexpected quantizer candidates")
-print(f"pilot_candidates={len(results)}")
-PY
+log_full_run_step "Verify CUDA, authentication, and free storage"
 "$PYTHON_ENVIRONMENT/bin/python" - <<'PY'
 import shutil
 import torch
@@ -81,6 +70,20 @@ test "$(git -C "$CLUB_3090_DIRECTORY" rev-parse HEAD)" = "$CLUB_3090_REVISION"
 uv pip install --python "$PYTHON_ENVIRONMENT/bin/python" \
     --editable "$CLUB_3090_DIRECTORY/tools/deepseek-v4-lowbit"
 uv pip check --python "$PYTHON_ENVIRONMENT/bin/python"
+
+log_full_run_step "Validate exact pilot report, summary, and input handoff"
+"$PYTHON_ENVIRONMENT/bin/deepseek-v4-validate-pilot" \
+    "$PILOT_REPORT" \
+    "$PILOT_SUMMARY" \
+    "$SOURCE_DIRECTORY" \
+    "$IMATRIX_PATH" \
+    --sample 0:0 --sample 0:127 \
+    --sample 26:0 --sample 26:127 \
+    --sample 37:0 --sample 37:127 \
+    --sample 42:0 --sample 42:127 \
+    --bits 2 \
+    --group-size 128 \
+    --device cuda
 
 log_full_run_step "Resume full pinned official-checkpoint download"
 "$PYTHON_ENVIRONMENT/bin/hf" download \
