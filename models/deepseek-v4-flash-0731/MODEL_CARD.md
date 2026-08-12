@@ -21,9 +21,10 @@ Its routed experts use W2A16, while other tensors retain their source values and
 dtypes. It was built to test whether a roughly 77 GiB safetensors checkpoint
 could run through vLLM and Humming on four 24 GB RTX 3090 GPUs.
 
-The checkpoint loads and generates with a patched research runtime. It does not
-work with stock vLLM. The first serving configuration prioritized fit and
-correctness over speed; performance tuning is ongoing.
+The checkpoint loads and generates with a patched SM86 runtime. It does not
+work with stock vLLM. On four RTX 3090s, the promoted 131,072-token profile
+measures 60.82 single-stream decode tokens/s. Short-request concurrency tests
+passed with two and four simultaneous requests.
 
 ## What changed
 
@@ -106,36 +107,57 @@ environment.
 
 ## Measured results
 
-The first tested configuration prioritized fitting the model and proving the
-execution path. It used four RTX 3090 GPUs with tensor parallelism 4, eager
-execution, `max_num_seqs=1`, a 256-token batch budget, and SM86 correctness
-fallbacks. It:
+The promoted server60 profile uses four RTX 3090 GPUs with tensor parallelism 4,
+breakable CUDA graphs, `max_num_seqs=4`, a 256-token batch budget, no CPU weight
+offload, FP8 DeepSeek MLA cache, and the required SM86 sparse-attention
+fallbacks. It serves 131,072 tokens.
 
-- loaded all 45 shards;
-- generated a correct deterministic short response;
-- exposed a 200,000-token context with 210,826 reported cache tokens;
-- measured 809 prompt tokens/s on a 9,009-token prompt; and
-- measured about 5.55 single-stream decode tokens/s on a short code prompt.
+A thermally warm matched code benchmark used 3 warmups and 5 measured
+512-token generations:
 
-The comparison llama.cpp service measured about 1,379 prompt tokens/s on a
-similar 9,212-token prompt and 34–38 decode tokens/s. These are initial
-correctness-baseline results, not a final performance result. Work continues on
-a faster serving configuration, including graph-enabled execution and decode
-path optimization.
+| Runtime | Mean decode | CV | Mean TTFT |
+| --- | ---: | ---: | ---: |
+| llama.cpp Unsloth UD-IQ1_M baseline | 32.67 tok/s | 0.1% | 109 ms |
+| vLLM WNA16, final packaged image | 60.82 tok/s | 0.1% | 239 ms |
+
+The vLLM result is about 86% faster on this single-stream decode workload. A
+matched eager ablation measured 4.96 tok/s, while graph-enabled runs before and
+after it measured 60.27 and 60.07 tok/s. This isolates breakable CUDA graph
+replay as the cause of the gain.
+
+Additional validation on the accepted profile:
+
+- three cache-busted 8,984-token prefill runs averaged 964.09 prompt tok/s;
+- exact needle retrieval passed through 120,476 tokens (91% of configured context);
+- concurrency 2 sustained 65.19 aggregate tok/s and 41.44 tok/s per stream;
+- concurrency 4 sustained 90.23 aggregate tok/s and 30.06 tok/s per stream;
+- both concurrency tests reported zero post-warm VRAM growth;
+- deterministic short generation, forced tool calling, and separated reasoning
+  output passed; and
+- the checksum-pinned final image repeated the decode result without source
+  bind mounts or serving-process swap.
+
+A 200K graph profile fit only with CPU weight offload in the tested runtime and
+measured 12.68–19.54 decode tok/s. The 131K profile is therefore the promoted
+performance configuration. The unexpectedly high non-KV GPU residency remains
+under investigation.
 
 ## Evaluation and limitations
 
-Quality evaluation stopped after the candidate failed the performance gate.
-Available evidence consists of:
+Available quality evidence consists of:
 
 - the 24-matrix reconstruction-error comparison;
-- one exact deterministic short response; and
-- one syntactically correct quicksort response that added prose despite an
-  “only code” instruction.
+- deterministic short-generation and parser canaries;
+- one exact 119,895-token needle retrieval; and
+- a syntactically correct quicksort response that still added Markdown fencing
+  despite an “only code” instruction.
 
-No broad quality suite, 200K needle test, concurrency stress test, or comparison
-against the official checkpoint was completed. Quality relative to the official
-checkpoint and Antirez or Unsloth GGUF quants has not been measured.
+No broad comparison against the official checkpoint or Antirez and Unsloth
+GGUF quants has been completed. The context tests prove selected retrieval
+cases, not general long-context quality. The repository stress suite passed all
+functional probes but failed its 1 GiB release-headroom gate: only 118 MiB per
+card remained after the 120,476-token rung. Treat 131K as a measured ceiling,
+not a safe sustained-agent operating point near full fill.
 
 Other limits:
 

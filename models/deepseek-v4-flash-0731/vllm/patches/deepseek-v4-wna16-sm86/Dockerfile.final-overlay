@@ -1,0 +1,17 @@
+# syntax=docker/dockerfile:1.7
+# The builder replaces this tag only after proving either the measured base
+# image ID or the exact fresh-host runtime tree and Dockerfile contract.
+ARG VERIFIED_BASE_IMAGE=club-3090/deepseek-v4-wna16-sm86:7f4c1900-cu130
+FROM ${VERIFIED_BASE_IMAGE}
+
+COPY --chmod=0755 materialize-runtime-model-view.py /usr/local/bin/materialize-deepseek-v4-wna16-runtime-view
+COPY --chmod=0755 start-final-runtime.sh /usr/local/bin/start-deepseek-v4-wna16-runtime
+
+COPY vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe_wna16.py \
+    /workspace/vllm/vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe_wna16.py
+COPY vllm/models/deepseek_v4/quant_config.py \
+    /workspace/vllm/vllm/models/deepseek_v4/quant_config.py
+COPY vllm/v1/attention/ops/rocm_aiter_mla_sparse.py \
+    /workspace/vllm/vllm/v1/attention/ops/rocm_aiter_mla_sparse.py
+
+ENTRYPOINT ["/usr/local/bin/start-deepseek-v4-wna16-runtime"]

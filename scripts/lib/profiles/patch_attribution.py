@@ -77,21 +77,15 @@ VALID_TRC = {"true", "false", "unverified"}
 VALID_ARCH_STATUS = {"verified", "unverified", "suspect"}
 VALID_CONFIDENCE = {"exact", "derived", "estimated-lower-bound"}
 
-# v0.8.2 CONTRACT-2b-i: the patch-attribution delivery vocabulary. The
-# v0.8.0 set (python_sidecar|site_package_overlay|install_script|none) had
-# no class for a model chat-template override (a vendored `.jinja` mounted
-# into the container and wired via `--chat-template`). Without a class, the
-# #141 generator + test-patch-attribution cannot SEE a behavior-critical
-# template (tool-call XML / reasoning delimiters / streaming — the #145
-# silent-break class), so a bad/regressed template silently degrades every
-# compose that ships it with ZERO attribution coverage. `chat_template` is
-# the additive class that brings it under the same load_bearing_when /
-# drift_guard safety net as every other load-bearing patch.
+# Patch delivery vocabulary. `chat_template` tracks behavior-critical model
+# templates. `runtime_image` tracks a checksum-pinned local image whose source
+# patches are baked into the image instead of mounted or applied at startup.
 VALID_DELIVERY_MECHANISM = {
     "python_sidecar",
     "site_package_overlay",
     "install_script",
     "chat_template",
+    "runtime_image",
     "none",
 }
 
@@ -439,6 +433,10 @@ def _spec_wiring_markers(patch: dict) -> tuple[list[str], list[str]]:
     if script:
         inv.append(Path(script).name)
 
+    image = spec.get("image")
+    if image:
+        inv.append(image)
+
     invoke = spec.get("invoke")
     # Only treat `invoke` as a literal body marker when it is an actual
     # command (e.g. "bash /etc/club3090/install-pr41800.sh"), not a
@@ -486,7 +484,7 @@ def _spec_wiring_present(patch: dict, body: str) -> bool:
 
     if wired_at == {"volumes"}:
         return bool(vol_markers) and vol_ok
-    if wired_at == {"entrypoint"}:
+    if wired_at in ({"entrypoint"}, {"image"}):
         return bool(inv_markers) and inv_ok
     if "volumes" in wired_at and "entrypoint" in wired_at:
         # Declared at both points — require the volume mount (the

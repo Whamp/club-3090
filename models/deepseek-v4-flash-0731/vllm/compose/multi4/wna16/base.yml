@@ -1,0 +1,101 @@
+# ===========================================================================
+# Profile (at-a-glance):
+#   Model:     DeepSeek-V4-Flash-0731 (imatrix-weighted W2A16 routed experts)
+#   Topology:  Four RTX 3090 PCIe (TP=4, no NVLink)
+#   Runtime:   haosdent/vLLM 12810046 + checksum-pinned SM86 WNA16 patches
+#   Drafter:   none — MTP permanently omitted from this artifact
+#   KV:        fp8_ds_mla (DeepSeek UE8M0 packed cache)
+#   Vision:    no
+#   Max ctx:   131,072 tokens
+#   Genesis:   N/A — Genesis is Qwen3-Next-specific
+#   Status:    🧪 Experimental — accepted 131K server60 profile
+#   Measured:  server60 4x RTX 3090, 2026-08-12: 60.82 decode tok/s mean,
+#              964.09 prefill tok/s at 8,984 tokens, 119,895-token NIAH pass,
+#              concurrency 2/4 aggregate 65.19/90.23 tok/s with no VRAM leak.
+#   Quality:   toolcall-15 11/15 (73%) · instructfollow-15 14/15 (93%)
+#              (`quality-test.sh --quick`; pass@3 total 26/30).
+#   Best for:  Four-RTX-3090 DeepSeek V4 serving through 131K context
+# ---------------------------------------------------------------------------
+# Limits: local custom image; no CPU weight offload; 131K cap; focused quality
+# evidence only; custom all-reduce disabled. The 120,476-token stress rung
+# recalled exactly but left only 118 MiB/card, below the 1 GiB release margin.
+# Plain `docker compose up` starts nothing. The authorized profile is explicit
+# because this service occupies all four GPUs. MODEL_SNAPSHOT must be the
+# immutable artifact revision 75d9286c37f3037f3ab390cfbc10747466eac714;
+# the image-owned materializer verifies its config and index before launch.
+# ===========================================================================
+services:
+  deepseek-v4-wna16-sm86:
+    profiles: [authorized-gpu-test]
+    image: ${VLLM_IMAGE:-club-3090/deepseek-v4-wna16-sm86:12b87bcd-cu130@sha256:ed5227673011058a04675b913c8f67b6bb83baba3d85f3b83675e765c51379c7}
+    container_name: ${CONTAINER_NAME:-vllm-deepseek-v4-wna16-sm86}
+    restart: ${CLUB3090_RESTART:-unless-stopped}
+    ports:
+      - "${BIND_HOST:-0.0.0.0}:${PORT:-8034}:8000"
+    volumes:
+      - ${MODEL_SNAPSHOT:?set MODEL_SNAPSHOT to immutable artifact snapshot}:/artifact:ro
+      - ${MODEL_BLOBS:?set MODEL_BLOBS to artifact blob directory}:/blobs:ro
+      - ${RUNTIME_CACHE_ROOT:?set RUNTIME_CACHE_ROOT}/humming:/root/.cache/humming
+      - ${RUNTIME_CACHE_ROOT:?set RUNTIME_CACHE_ROOT}/triton:/root/.triton/cache
+      - ${RUNTIME_CACHE_ROOT:?set RUNTIME_CACHE_ROOT}/torch_extensions:/root/.cache/torch_extensions
+    tmpfs:
+      - /runtime-model:size=16m,mode=0755
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      CUDA_VISIBLE_DEVICES: 0,1,2,3
+      HF_HUB_OFFLINE: 1
+      TRANSFORMERS_OFFLINE: 1
+      VLLM_NO_USAGE_STATS: 1
+      VLLM_WORKER_MULTIPROC_METHOD: spawn
+      NCCL_CUMEM_ENABLE: 0
+      OMP_NUM_THREADS: 1
+      HUMMING_CACHE_DIR: /root/.cache/humming
+      HUMMING_COMPILER: nvrtc
+      TRITON_CACHE_DIR: /root/.triton/cache
+      TORCH_EXTENSIONS_DIR: /root/.cache/torch_extensions
+      VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: 64
+      VLLM_SPARSE_DENSE_QUERY_BLOCK: 0
+    shm_size: "16gb"
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: [CMD-SHELL, "curl -fsS http://127.0.0.1:8000/health >/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15m
+    command:
+      - --model
+      - /runtime-model
+      - --served-model-name
+      - deepseek-v4-flash-0731-wna16
+      - --tensor-parallel-size
+      - "4"
+      - --max-model-len
+      - "${MAX_MODEL_LEN:-131072}"
+      - --gpu-memory-utilization
+      - "${GPU_MEMORY_UTILIZATION:-0.98}"
+      - --max-num-seqs
+      - "${MAX_NUM_SEQS:-4}"
+      - --max-num-batched-tokens
+      - "${MAX_NUM_BATCHED_TOKENS:-256}"
+      - --kv-cache-dtype
+      - fp8_ds_mla
+      - --disable-custom-all-reduce
+      - --enable-chunked-prefill
+      - --enable-auto-tool-choice
+      - --tool-call-parser
+      - deepseek_v4
+      - --reasoning-parser
+      - deepseek_v4
+      - --trust-remote-code
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"

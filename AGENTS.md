@@ -69,7 +69,7 @@ Pin engine images when **either** trigger holds: (1) we vendor patches into the 
 
 When adding the first vendored patch to a previously-rolling engine: pin in the same commit. When dropping the last patch: unpin in the same commit — unless the engine holds a trigger-(2) stability pin, which outlives its patches. Bump pins via PR with a `verify-full.sh` + `bench.sh` re-run, never silently.
 
-**Delivery model (vLLM):** patches reach the container by **volume-mounting into the pinned *stock* `vllm/vllm-openai` image** (python sidecars / site-package overlays / install scripts — see `delivery_mechanism` in `scripts/lib/profiles/patches.yml`), **not** by baking a custom image. The older baked-image path (`ghcr.io/noonghunna/vllm-club3090`, which shipped the release images through `club-v0.8.3`) is **retired** — no compose or engine-pin references it, and the `dockerfile_bake` `delivery:` block in `patches.yml` is legacy/test-only. The GHCR package is kept as historical release artifacts (users pinned to a `club-v0.8.x` tag can still pull); it is not deleted and not produced by anything in-repo.
+**Delivery model (vLLM):** patches normally reach the container by **volume-mounting into the pinned *stock* `vllm/vllm-openai` image** (python sidecars / site-package overlays / install scripts — see `delivery_mechanism` in `scripts/lib/profiles/patches.yml`). Use `delivery_mechanism: runtime_image` only when a private artifact or fork-level integration cannot run on a pinned stock image. That exception must pin the source tree, base/runtime contract, build inputs, final image, direct Compose wiring, and hardware acceptance evidence in `patches.yml`; keep it outside the public catalog when users cannot pull the artifact or image. The older generic baked-image path (`ghcr.io/noonghunna/vllm-club3090`, which shipped release images through `club-v0.8.3`) remains **retired**. The legacy `dockerfile_bake` `delivery:` block is test-only, and nothing in-repo produces new GHCR release images.
 
 ### File encoding — UTF-8 mode is the guarantee; `encoding="utf-8"` is the backstop
 
@@ -227,12 +227,12 @@ Read that doc before catalog work; the at-a-glance for agents:
 
 #### Where do experimental / unvalidated composes live?
 
-**Same directory as shipped composes, but kept untracked until validation passes.** Don't create a separate `experimental/` subdirectory — the relative paths to `../patches/...` and `../cache/...` are calibrated to the compose dir, and promoting an experiment from a sub-folder would require re-pathing every mount.
+**Same directory as shipped composes. Keep an unvalidated experiment untracked.** Commit an experimental direct-Compose profile only when its intended hardware acceptance has passed and the file is itself the reproducibility contract, such as a `runtime_image` profile excluded from the public registry. State every failed production gate in the header and keep that profile out of `COMPOSE_REGISTRY`. Don't create a separate `experimental/` subdirectory — the relative paths to `../patches/...` and `../cache/...` are calibrated to the compose dir, and promoting an experiment from a sub-folder would require re-pathing every mount.
 
 Workflow:
 
 1. **Author the compose** in `models/<model>/<engine>/compose/<topology>/<quant-slug>/<serving>.yml` with the standard profile schema header. Mark `Status: ⚠️ EXPERIMENTAL` (or `⚠️ PREVIEW` if quality issues are known) so readers know it's not validated.
-2. **Don't `git add`** until validation passes. The file shows up in `git status` as `??` — that's the signal. `git ls-tree -r HEAD` lists only shipped composes; the gap between that and `ls compose/*.yml` tells you what's pending validation.
+2. **Don't `git add` before the intended acceptance gate.** The file shows up in `git status` as `??` — that's the signal. `git ls-tree -r HEAD` lists only shipped composes; the gap between that and `ls compose/*.yml` tells you what's pending validation. For the direct-Compose exception above, preserve every failed production gate in the committed header.
 3. **Validation gates** before promoting: `verify-full.sh` 8/8, `verify-stress.sh` 7/7 (or documented failures with rationale), `bench.sh` (numbers added to BENCHMARKS.md), `soak-test.sh SOAK_MODE=continuous` (catches Cliff 2b), `quality-test.sh --quick` (no major regression on ToolCall / InstructFollow). For pin bumps and new quants, run `quality-test.sh --medium` and add the result line to the compose's `Quality:` schema field.
 4. **Promote**: drop the `Status: ⚠️ EXPERIMENTAL` line from the profile schema, `git add`, commit. Cross-rig validation can come later via the `numbers-from-your-rig` issue template.
 

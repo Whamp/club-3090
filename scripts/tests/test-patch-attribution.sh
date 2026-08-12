@@ -15,6 +15,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 python3 - "$ROOT_DIR" <<'PY'
 from __future__ import annotations
 
+import hashlib
 import re
 import sys
 from pathlib import Path
@@ -112,8 +113,11 @@ def reaches(patch: dict, compose_name: str) -> bool:
 for patch in patches:
     for lb in patch.get("load_bearing_when") or []:
         for compose_name in lb.get("composes") or []:
-            if compose_name not in COMPOSE_REGISTRY:
-                errors.append(f"{patch['id']} load_bearing_when references unknown compose {compose_name}")
+            if compose_name not in COMPOSE_REGISTRY and not (root / compose_name).is_file():
+                errors.append(
+                    f"{patch['id']} load_bearing_when references unknown compose "
+                    f"{compose_name}"
+                )
                 continue
             if reaches(patch, compose_name):
                 continue
@@ -136,7 +140,63 @@ for patch in patches:
             f"{sorted(pa.VALID_DELIVERY_MECHANISM)}"
         )
 
-# (2) chat_template patches: spec shape + a behavioral drift_guard whose
+# (2) runtime_image patches: source inputs and image identity must be
+# checksum-pinned. The compose reachability check above separately proves the
+# exact image tag appears in the load-bearing service body.
+runtime_image_patches = [
+    p for p in patches if p.get("delivery_mechanism") == "runtime_image"
+]
+for patch in runtime_image_patches:
+    spec = patch.get("delivery_spec") or {}
+    for key in (
+        "image",
+        "dockerfile",
+        "builder",
+        "runtime_dockerfile",
+        "runtime_builder",
+        "source_tree",
+        "base_image_digest",
+        "runtime_contract_sha256",
+        "file_sha256",
+        "wired_at",
+    ):
+        if not spec.get(key):
+            errors.append(f"{patch['id']} runtime_image delivery_spec missing {key}")
+    if spec.get("wired_at") != "image":
+        errors.append(f"{patch['id']} runtime_image wired_at must be image")
+    if not re.fullmatch(r"[0-9a-f]{40}", str(spec.get("source_tree", ""))):
+        errors.append(f"{patch['id']} runtime_image source_tree must be a Git tree hash")
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", str(spec.get("base_image_digest", ""))):
+        errors.append(f"{patch['id']} runtime_image base_image_digest must be sha256")
+    if not re.fullmatch(r"[0-9a-f]{64}", str(spec.get("runtime_contract_sha256", ""))):
+        errors.append(f"{patch['id']} runtime_image runtime_contract_sha256 must be sha256")
+    for key in ("dockerfile", "builder", "runtime_dockerfile", "runtime_builder"):
+        rel = spec.get(key)
+        if rel and not (root / rel).is_file():
+            errors.append(f"{patch['id']} runtime_image {key} missing on disk: {rel}")
+    file_sha256 = spec.get("file_sha256") or {}
+    if not isinstance(file_sha256, dict) or not file_sha256:
+        errors.append(f"{patch['id']} runtime_image file_sha256 must be a mapping")
+        continue
+    for rel, expected in file_sha256.items():
+        target = root / rel
+        if not target.is_file():
+            errors.append(f"{patch['id']} runtime_image checksum file missing: {rel}")
+            continue
+        if not re.fullmatch(r"[0-9a-f]{64}", str(expected)):
+            errors.append(f"{patch['id']} runtime_image invalid SHA-256 for {rel}")
+            continue
+        actual = hashlib.sha256(target.read_bytes()).hexdigest()
+        if actual != expected:
+            errors.append(
+                f"{patch['id']} runtime_image checksum mismatch for {rel}: "
+                f"got {actual}, expected {expected}"
+            )
+    drift_guard = patch.get("drift_guard") or {}
+    if drift_guard.get("kind") != "behavioral" or not drift_guard.get("check"):
+        errors.append(f"{patch['id']} runtime_image needs a behavioral drift_guard")
+
+# (3) chat_template patches: spec shape + a behavioral drift_guard whose
 #     check encodes the SELF-CONTAINED symmetric restart+settle protocol
 #     (the #150 lesson — a non-symmetric guard flaps and is ignored).
 chat_template_patches = [
@@ -163,7 +223,7 @@ for patch in chat_template_patches:
                 f"self-contained symmetric protocol (missing {token!r})"
             )
 
-# (3) Orphan-artifact discovery for vendored `.jinja` templates: every
+# (4) Orphan-artifact discovery for vendored `.jinja` templates: every
 #     chat-template `.jinja` under a model patches/ tree MUST be owned by a
 #     delivery_mechanism: chat_template patch (so a bad/regressed/re-vendored
 #     template can never ship with ZERO attribution coverage).
@@ -180,7 +240,7 @@ for jinja in sorted(
             f"{jinja.relative_to(root)}"
         )
 
-# (4) Effective coverage MUST use REAL Docker Compose merge semantics, NOT
+# (5) Effective coverage MUST use REAL Docker Compose merge semantics, NOT
 #     declared lines. The dangerous direction is the FALSE NEGATIVE: a child
 #     that !reset/overrides/REMOVES the mount must be caught as a coverage
 #     loss. Build a synthetic base+child fixture where the child re-declares
@@ -266,7 +326,7 @@ if chat_template_patches:
                 "reported covered (the literal #377 silent-drift mode)"
             )
 
-# (5) Rig-independent leak-assertion convention (mandatory — the V2 on-rig
+# (6) Rig-independent leak-assertion convention (mandatory — the V2 on-rig
 #     lesson). The chat_template effective-coverage path resolves the
 #     merged compose via `docker compose config`, which renders the mount
 #     SOURCE as an ABSOLUTE host path (e.g. /opt/ai/.../patches/...jinja).

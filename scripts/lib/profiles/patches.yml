@@ -1,7 +1,8 @@
 schema_version: 1
 # Phase A-prime (v0.8.0 #359/PR#147) added per-load-bearing-patch delivery
 # metadata for the #141 generator: `delivery_mechanism`
-# (python_sidecar|site_package_overlay|install_script|none), `delivery_spec`,
+# (python_sidecar|site_package_overlay|install_script|chat_template|runtime_image|none),
+# `delivery_spec`,
 # mandatory `drift_guard`, `capability`, `foundational`. Only the ~10 patches
 # with a non-empty `load_bearing_when` carry a real mechanism; diagnostics /
 # negative-local-result / Genesis-env patches are `delivery_mechanism: none`.
@@ -15,22 +16,46 @@ patches:
     model: [deepseek-v4-flash-0731]
     files:
       - models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86
-    load_bearing_when: []
+    load_bearing_when:
+      - composes:
+          - models/deepseek-v4-flash-0731/vllm/compose/multi4/wna16/base.yml
+        reason: "The DeepSeek V4 W2A16 artifact needs a local custom image with patched SM86 attention, native-FP8 plus WNA16 loading, Humming MoE, and sparse-decode fallback."
+        evidence: "models/deepseek-v4-flash-0731/MODEL_CARD.md#measured-results; .research/deepseek-v4-lowbit/VLLM-PERFORMANCE-PLAN.md"
     delivery:
       dockerfile_bake: false
       entrypoint_invoke: false
       genesis: false
     delivery_gaps: []
-    delivery_mechanism: none
-    delivery_spec: null
-    drift_guard: null
+    delivery_mechanism: runtime_image
+    delivery_spec:
+      image: club-3090/deepseek-v4-wna16-sm86:12b87bcd-cu130@sha256:ed5227673011058a04675b913c8f67b6bb83baba3d85f3b83675e765c51379c7
+      dockerfile: models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/Dockerfile.final-overlay
+      builder: models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/build-final-overlay-image.sh
+      runtime_dockerfile: models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/Dockerfile.runtime-cu130
+      runtime_builder: models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/build-runtime-image.sh
+      source_tree: 12b87bcd52bb2973685fa8f38b5fc8bbbfe7519c
+      base_image_digest: sha256:0e8cc6dc48081e907d553febc8002b1f6d61298454340840f27f18b3a2e66c6c
+      runtime_contract_sha256: 7d4ab7f124d1ca5fc68facaafec8c55b98683e249cf669a2c102ac8ba6013838
+      wired_at: image
+      file_sha256:
+        models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/Dockerfile.runtime-cu130: 7d4ab7f124d1ca5fc68facaafec8c55b98683e249cf669a2c102ac8ba6013838
+        models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/build-runtime-image.sh: 675eddf42c0877d8e617d503e34c8a8c51dc50e256d9a94903fb37cbb02e4f7c
+        models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/Dockerfile.final-overlay: e534d52dfbaf5e3b7fdd0c189404618ed4842d817b811086256bf5d472a283e0
+        models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/build-final-overlay-image.sh: e0be0ade09c56552dd282100eca1b98772c6f337b0ee7ab68b407093e7c412ee
+        models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/materialize-runtime-model-view.py: 8aff33ec192e0a67203c974918ad4c74bb875ec6d320ede6276077cce872d80c
+        models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/start-final-runtime.sh: 6bf86f1e90c58bd3e5964bca8938515dc73073b3d27fe9a41f6ba67b7ed0eeaa
+        models/deepseek-v4-flash-0731/vllm/compose/multi4/wna16/base.yml: 6b40d6f12b85f6c3918217d2f986067bc427380605342e2bf53c2342135c1272
+    drift_guard:
+      kind: behavioral
+      check: "On 4x RTX 3090, the exact image reaches healthy at 131072 context, returns deterministic HTTP 200 generation, preserves forced-tool and reasoning parsing, and repeats at least 60 decode tok/s over 3 warmups plus 5 measured 512-token runs."
+      on_fail: refuse-promotion
     capability: wna16-moe-sm86
     foundational: false
     upstream:
       ref: vllm-project/vllm#48918
       status: open
-      drop_when: "replace after upstream WNA16 Humming MoE support merges, propagates to the selected Ampere fork, and passes SM86 runtime validation"
-    status: suspect
+      drop_when: "replace after upstream WNA16 Humming MoE support merges, propagates to the selected Ampere runtime, and repeats the SM86 correctness and performance gates"
+    status: verified
 
   - id: qwen-sglang-autoround-fused-bf16
     deprecated_on: "2026-06-05"

@@ -7,7 +7,7 @@ Rent compute when it shortens the path, but define the job before creating the i
 The earlier all-W2 model-free RTN conversion established a useful storage baseline, but it did not choose the final quality recipe. The target is a calibrated, mixed-precision safetensors artifact that:
 
 - occupies about 75–85 GiB, subject to the actual four-RTX-3090 runtime envelope;
-- serves at least 200,000 tokens on server60;
+- originally targeted at least 200,000 tokens on server60; after measured performance testing, Will accepted 131,072 tokens for this campaign and moved the unexplained 200K capacity gap to a separate memory-residency audit;
 - loads through compressed-tensors into Humming WNA16 MoE kernels;
 - preserves or improves on the quality of the specific Antirez and Unsloth artifacts Will trusts, as far as practical to check with fast metrics before deeper evaluation;
 - improves enough on the current llama.cpp service in prefill speed, decode speed, throughput, or useful concurrency to justify switching.
@@ -56,7 +56,7 @@ Exact sizing over the official checkpoint at revision `7872f01b1d1fe23eabc4c98b4
 
 Humming stores W3 as ten values per 32-bit word, or about 3.2 packed bits before scales. A broad W3-down recipe exceeds 90 GiB. W3 remains a selective option, not a default middle tier.
 
-The four sizes show that the likely final artifact is in the right neighborhood; they are planning anchors, not a commitment to create four checkpoints. Expect to create one final artifact, with a second candidate only if a real quality/context decision remains unresolved. A 200K context is the minimum; more is better. Choose the recipe that gives the best practical balance between model quality and the context capacity left after weights and runtime allocations, rather than automatically choosing the largest artifact that reaches 200K.
+The four sizes show that the likely final artifact is in the right neighborhood; they are planning anchors, not a commitment to create four checkpoints. Expect to create one final artifact, with a second candidate only if a real quality/context decision remains unresolved. The initial 200K minimum was a planning requirement, not the final acceptance boundary: after the graph-enabled candidate exceeded llama.cpp decode at 131,072 tokens and 200K required throughput-killing CPU weight offload, Will accepted 131K for this goal. Choose the recipe that gives the best practical balance between model quality and context capacity rather than automatically choosing the largest artifact that boots.
 
 ## Proposed quantization method
 
@@ -132,12 +132,13 @@ Implementation status:
 14. The raw pilot now has a paired summarization contract: count error improvements/ties/regressions, report median weighted-error change by projection, and extrapolate measured quantize-and-pack time over all 43 × 256 routed experts. It deliberately leaves the quantizer decision unset and labels excluded full-run costs rather than turning a small method screen into an automatic gate.
 15. Server60 staged the immutable, then-private Hub revision directly into its standard `/mnt/models/huggingface/hub` cache on 2026-08-12, with Xet transients directed to the root filesystem. The download completed in 11 minutes 51 seconds without a second local artifact copy. A post-download audit matched all 54 snapshot files and all 82,464,249,582 bytes to the immutable Hub object digests. `/mnt/models` retained 22 GiB free. The existing `llama-cpp-deepseek-v4-fast-prefill` container stayed healthy throughout, GPU utilization remained at its pre-existing roughly 20–26%, and the only GPU process remained `/app/llama-server` PID 3402959. The artifact is staged but has not been loaded or executed.
 16. The exact `humming-kernels==0.1.10` PyPI artifact is a 184,889-byte pure-Python wheel with SHA-256 `4ded0998ff085afeddde70baf93f97c2929969ec3d4a63a52cfec5072bc972b4`, built from `inclusionAI/humming@4351af3a8fcdce1a8dee50104ba49566af2427fb`. It contains JIT CUDA sources but no packaged `.so`, PTX, cubin, or fatbin. Runtime reads the current device capability, maps exact capability 8.6 to dedicated `Sm86Heuristics` with a 99 KiB shared-memory limit and BF16 support, then passes `sm_86` to NVRTC or `compute_86,code=sm_86` to NVCC. Its compressed-tensors schema maps symmetric pack-quantized W2/group-128 to uint2 weights and BF16 scales. These facts prove a specific source/build path, not successful compilation or dispatch. Pinned upstream GPU tests cover dense uint2 and uint4 MoE separately but not uint2 + group-128 + BF16 MoE. vLLM commit `f4d05732a` adds that exact deterministic indexed-MoE numerical oracle at the real conversion/experts seam; it collects and skips on the CPU host, passes all applicable pre-commit hooks and slop checks, and remains deferred first to rental A100 for generic kernel correctness and then—only after explicit GPU-use authorization—to server60 for generated sm_86 cubin, numerical, and dispatch evidence.
-17. The private vLLM work is now portable without a third-party push. `models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/` vendors the three exact commits as SHA-256-listed mail patches plus a fail-closed installer. The installer accepts only clean `haosdent/vllm@12810046c799cbe874967e19b1c0fa134ab7b209` or the exact final tree `97a21943d9a68bcf1ef4ac3319d0a6e3e1c66267`, uses non-fuzzy `git am`, is idempotent on the final tree, and rejects base drift without modification. A fresh reconstructed worktree matched that tree, passed 43 focused CPU contracts with two optional-dependency skips, and collected/skipped the CUDA oracle. The patch is registered as research-only with no compose delivery, and vLLM PR #48918 is tracked in `docs/UPSTREAM.md`.
+17. The private vLLM work is portable without a third-party push. `models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/` vendors seven SHA-256-listed mail patches plus a fail-closed installer. The installer accepts only clean `haosdent/vllm@12810046c799cbe874967e19b1c0fa134ab7b209` or exact final tree `12b87bcd52bb2973685fa8f38b5fc8bbbfe7519c`, uses non-fuzzy `git am`, is idempotent on the final tree, and rejects base drift without modification. A checksum-pinned thin image now bakes the final three production files over the verified runtime base, creates the corrected model view at startup, and is wired to the direct-Compose 131K profile. The patch registry records this as verified `runtime_image` delivery. vLLM PR #48918 remains tracked in `docs/UPSTREAM.md`.
 18. `run-verda-vllm-w2-oracle.sh` stages the first GPU contract separately from quantization so time and failures remain attributable. It reconstructs the exact vLLM tree, uses vLLM's documented precompiled-extension editable install in an isolated Torch 2.13/cu130 environment, requires Humming 0.1.10 and A100 capability 8.0, runs the deterministic W2/group-128/BF16 indexed-MoE oracle under NVRTC, and records each generated cubin's SHA-256 and `cuobjdump` ELF report with an `sm_80` assertion. This A100 stage can validate the generic software/kernel path but cannot satisfy the later server60 SM86 compile, dispatch, or performance gates.
 19. Rental continuation now fails closed on the exact pilot handoff rather than accepting any 48-row JSON file. The pilot report binds its source index, selected source shards, and imatrix by SHA-256; the summary binds the report by SHA-256. Before full conversion, `deepseek-v4-validate-pilot` reconstructs the expected samples, tensors, source-shard assignments, W2 plain/weighted candidate set, device, and group size from the pinned input files, checks finite metrics, recomputes the summary, and rejects any stale, changed, incomplete, duplicate, or mismatched evidence.
 20. The artifact repository `hampsonw/DeepSeek-V4-Flash-0731-WNA16` was created private before the rental. The active shell's `HF_TOKEN` was read-only, while the stored `upload` credential had fine-grained `repo.write` permission. Rental setup transferred the upload credential without printing it. The full-run preflight validated the exact environment token's namespace write grant and required a private target repository before downloading the full checkpoint.
-21. The verified artifact was published after the experiment. Hub commit `18383644489821a6d2b7356b13f53b4bd6bc2ac4` replaces the copied upstream README with an artifact-specific model card covering the conversion, pinned inputs, runtime dependency, measured rejection result, limited quality evidence, credits, and license. Unauthenticated checks confirm that the repository is public and ungated, its MIT license and quantized-base-model metadata resolve, and the public README matches `models/deepseek-v4-flash-0731/MODEL_CARD.md` byte for byte.
+21. The verified artifact was published after the experiment. Hub commit `18383644489821a6d2b7356b13f53b4bd6bc2ac4` replaced the copied upstream README with an artifact-specific model card covering the conversion, pinned inputs, runtime dependency, initial eager result, limited quality evidence, credits, and license. The repository model card now records the later graph-enabled 131K promotion; republishing that update to the Hub is separate from this runtime goal.
 22. The selected 350 GB boot NVMe supplies about 325.96 GiB. The pinned source payload is 155.42 GiB and the all-W2 output payload is 76.77 GiB, leaving about 93.77 GiB before the OS, environments, metadata, headers, and transient state. The full-run 260 GiB free-space gate runs against `RENTAL_ROOT`; at that boundary, source plus output still leave about 27.81 GiB. Hugging Face local-directory downloads write payloads directly under the source directory and keep only bookkeeping under its `.cache`, avoiding a second full Hub-cache copy.
+23. The performance campaign superseded the eager rejection without changing the artifact. Matched graph → eager → graph arms measured 60.27 → 4.96 → 60.07 decode tokens/s. The accepted zero-offload 131,072-token profile measured 60.71 decode tokens/s, 964.09 prompt tokens/s at 8,984 tokens, exact NIAH retrieval at 119,895 tokens, and clean concurrency 2/4 at 65.19/90.23 aggregate tokens/s. The final overlay-free image repeated 60.82 decode tokens/s versus the matched llama.cpp baseline of 32.67. Tested 200K graph profiles required CPU weight offload and measured only 12.68–19.54 decode tokens/s. The 131K service is promoted; a separate audit now owns the unexplained GPU-residency overhead.
 
 ## Target-runtime fit check
 
@@ -222,27 +223,32 @@ Plan at least 450–500 GB of fast local storage if source, work files, and more
    composes native DeepSeek FP8 linears with routed WNA16 experts and routes
    SM86 sparse decode away from a split-K tile that exceeds the GPU's
    101,376-byte shared-memory limit.
-9. **Done; candidate rejected for replacement performance:** load all 45
-   shards at 200K on TP=4 with no CPU weight offload. The accepted eager
-   configuration used a 256-token chunk ceiling, a 64 MiB sparse-indexer
-   logits budget, the per-query sparse-prefill fallback, and an explicit
-   1 GiB packed KV allocation per GPU. It exposed 210,826 cache tokens
-   (1.05× one 200K request), returned an exact short smoke response, and
-   completed a 9,009-token prefill at 809 tok/s with 11.13-second TTFT.
-   Short code decode measured 5.55 tok/s. The running candidate used
-   24,066 MiB per card and left 61–62 MiB free. Preserved llama.cpp evidence
-   on this host is roughly 1,379 tok/s for a 9,212-token prefill, 403 tok/s
-   for a 199,488-token full-history prefill, and 34–38 decode tok/s. Both
-   accepted endpoints were configured for one active request; vLLM's packed
-   cache reported 1.05× maximum concurrency at 200K. No multi-request
-   throughput run followed because vLLM had already lost both single-stream
-   prefill and decode by material margins. The progressive gate also stopped
-   before a 200K needle or full quality packs. Basic quality evidence is one
-   exact short response plus syntactically correct quicksort; the latter
-   added prose despite an “only code” instruction. The trusted Unsloth IQ1_M
-   llama.cpp router was restored at 200K on port
-   8200; the former Antirez service could not be restored because its GGUF
-   was no longer present.
+9. **Done; eager 200K bring-up rejected, graph-enabled 131K profile promoted:**
+   the first accepted eager configuration loaded all 45 shards at 200K with a
+   256-token chunk ceiling, 64 MiB sparse-indexer logits budget, per-query
+   sparse-prefill fallback, and explicit 1 GiB packed KV allocation per GPU.
+   It exposed 210,826 cache tokens, returned an exact short response, measured
+   809 prompt tok/s at 9,009 tokens, and decoded at 5.55 tok/s. That was a
+   correctness result, not a fair vLLM performance baseline.
+
+   A later matched campaign measured thermally warm llama.cpp at 32.67 decode
+   tok/s. Breakable CUDA graphs raised vLLM from 4.96 tok/s in the matched eager
+   ablation to 60.27 tok/s; graph-after-eager repeated at 60.07. The accepted
+   zero-offload profile serves 131,072 tokens with `max_num_seqs=4` and
+   `max_num_batched_tokens=256`. It measured 60.71 decode tok/s, 964.09
+   cache-busted prompt tok/s at 8,984 tokens, exact NIAH retrieval at 119,895
+   tokens, and clean concurrency 2/4 at 65.19/90.23 aggregate tok/s. The
+   checksum-pinned final image repeated 60.82 decode tok/s with no source
+   overlays, no serving-process swap, and zero VRAM growth.
+
+   Tested graph-enabled 200K profiles fit only with CPU weight offload and
+   measured 12.68–19.54 decode tok/s. Will accepted 131,072 tokens for this
+   goal. The profile passed deterministic generation, forced tool calling,
+   separated reasoning, and `quality-test.sh --quick` at 25/30 pass@1. It
+   remains healthy on server60 port 8034 as Compose project
+   `dsv4-wna16-prod`. A separate memory-residency audit owns the unexplained
+   gap between the 76.8 GiB artifact and the reported 21.91 GiB per-rank
+   weights-plus-non-Torch footprint.
 
 ## Pinned evidence
 

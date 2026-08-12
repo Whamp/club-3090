@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
+import json
+import tempfile
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
+from unittest.mock import patch
 
 _REPOSITORY_ROOT = Path(__file__).parents[3]
 _RUNTIME_PATCH_DIRECTORY = (
@@ -11,6 +16,12 @@ _RUNTIME_PATCH_DIRECTORY = (
 )
 _DOCKERFILE = _RUNTIME_PATCH_DIRECTORY / "Dockerfile.runtime-cu130"
 _BUILD_SCRIPT = _RUNTIME_PATCH_DIRECTORY / "build-runtime-image.sh"
+_FINAL_DOCKERFILE = _RUNTIME_PATCH_DIRECTORY / "Dockerfile.final-overlay"
+_FINAL_BUILD_SCRIPT = _RUNTIME_PATCH_DIRECTORY / "build-final-overlay-image.sh"
+_FINAL_COMPOSE = (
+    _REPOSITORY_ROOT
+    / "models/deepseek-v4-flash-0731/vllm/compose/multi4/wna16/base.yml"
+)
 _PATCH_4 = _RUNTIME_PATCH_DIRECTORY / "0004-fix-load-hybrid-DeepSeek-FP8-linears.patch"
 _PATCH_5 = (
     _RUNTIME_PATCH_DIRECTORY / "0005-fix-forward-layer-to-Humming-MoE-kernel.patch"
@@ -26,6 +37,22 @@ _SM86_ORACLE_SCRIPT = _RUNTIME_PATCH_DIRECTORY / "run-sm86-oracle.sh"
 _SERVER60_ROLLBACK_SCRIPT = (
     _RUNTIME_PATCH_DIRECTORY / "run-server60-oracle-with-rollback.sh"
 )
+_MATERIALIZER = _RUNTIME_PATCH_DIRECTORY / "materialize-runtime-model-view.py"
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _load_materializer_module():
+    spec = importlib.util.spec_from_file_location(
+        "deepseek_v4_runtime_view_materializer", _MATERIALIZER
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot import {_MATERIALIZER}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class RuntimeImageContractTests(unittest.TestCase):
@@ -56,6 +83,175 @@ class RuntimeImageContractTests(unittest.TestCase):
         self.assertIn("status --porcelain --untracked-files=all", script)
         self.assertIn("exit 2", script)
         self.assertIn("org.opencontainers.image.revision", script)
+
+    def test_final_overlay_image_pins_base_tree_and_production_sources(self) -> None:
+        dockerfile = _FINAL_DOCKERFILE.read_text(encoding="utf-8")
+        script = _FINAL_BUILD_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("ARG VERIFIED_BASE_IMAGE=", dockerfile)
+        self.assertIn("FROM ${VERIFIED_BASE_IMAGE}", dockerfile)
+        self.assertIn(
+            'EXPECTED_BASE_IMAGE_DIGEST="'
+            "sha256:0e8cc6dc48081e907d553febc8002b1f6d61298454340840f27f18b3a2e66c6c",
+            script,
+        )
+        self.assertIn('BASE_IMAGE="${3:-$EXPECTED_BASE_IMAGE_DIGEST}"', script)
+        self.assertIn('docker image inspect "$BASE_IMAGE"', script)
+        self.assertIn("EXPECTED_RUNTIME_CONTRACT_SHA256=", script)
+        self.assertIn("org.club3090.runtime.contract-sha256", script)
+        self.assertIn('--build-arg "VERIFIED_BASE_IMAGE=$verified_base_tag"', script)
+        self.assertIn(
+            'EXPECTED_VLLM_TREE="12b87bcd52bb2973685fa8f38b5fc8bbbfe7519c"',
+            script,
+        )
+        for digest in (
+            "07e06cb5489f02f761b99422235014bc6f1cab8c1f799ea2bf7855112dd68910",
+            "880bf06530aab3bf8c7b60a8a125663e9c145a2a9ad27ac99cbe0b27cda50b62",
+            "ffdb2abe98456d8b1601bbac51cb113d7018bd3db0296ed65e51cf459cf6923a",
+        ):
+            self.assertIn(digest, script)
+        self.assertIn("status --porcelain --untracked-files=all", script)
+        self.assertIn("org.opencontainers.image.revision", script)
+        self.assertIn("org.club3090.runtime.base-digest", script)
+
+    def test_full_runtime_builder_pins_fresh_host_contract(self) -> None:
+        script = _BUILD_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn(
+            'EXPECTED_RUNTIME_DOCKERFILE_SHA256="'
+            "7d4ab7f124d1ca5fc68facaafec8c55b98683e249cf669a2c102ac8ba6013838",
+            script,
+        )
+        self.assertIn(
+            "org.club3090.runtime.contract-sha256=",
+            script,
+        )
+        self.assertIn("status --porcelain --untracked-files=all", script)
+
+    def test_final_compose_encodes_measured_graph_profile(self) -> None:
+        compose = _FINAL_COMPOSE.read_text(encoding="utf-8")
+        self.assertIn("${MODEL_SNAPSHOT:?", compose)
+        self.assertIn("${MODEL_BLOBS:?", compose)
+        self.assertIn("VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: 64", compose)
+        self.assertIn("VLLM_SPARSE_DENSE_QUERY_BLOCK: 0", compose)
+        self.assertIn("MAX_MODEL_LEN:-131072", compose)
+        self.assertIn("MAX_NUM_SEQS:-4", compose)
+        self.assertIn("MAX_NUM_BATCHED_TOKENS:-256", compose)
+        self.assertIn("--enable-auto-tool-choice", compose)
+        self.assertIn("--tool-call-parser", compose)
+        self.assertIn("--reasoning-parser", compose)
+        self.assertNotIn("--enforce-eager", compose)
+        self.assertNotIn("--cpu-offload-gb", compose)
+        self.assertNotIn("kv-cache-memory-bytes", compose)
+
+    def test_runtime_model_view_is_hash_bound_and_reproducible(self) -> None:
+        materializer = _load_materializer_module()
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            artifact = root / "artifact"
+            output = root / "runtime-model"
+            artifact.mkdir()
+            output.mkdir()
+            (output / "stale-file").write_text("stale", encoding="utf-8")
+            config = {
+                "club_3090_lowbit": {"source_quantization_method": "fp8"},
+                "quantization_config": {
+                    "config_groups": {"group_w2": {}},
+                    "quant_method": "compressed-tensors",
+                },
+            }
+            (artifact / "config.json").write_text(json.dumps(config), encoding="utf-8")
+            index = {"weight_map": {"model.weight": "model-00001.safetensors"}}
+            (artifact / "model.safetensors.index.json").write_text(
+                json.dumps(index), encoding="utf-8"
+            )
+            (artifact / "model-00001.safetensors").write_bytes(b"weights")
+            (artifact / "tokenizer.json").write_text("{}", encoding="utf-8")
+
+            expected_config = json.loads((artifact / "config.json").read_text())
+            expected_config["quantization_config"]["base_quant_method"] = (
+                "deepseek_v4_fp8"
+            )
+            expected_config["club_3090_lowbit"]["source_quantization_method"] = (
+                "compressed-tensors"
+            )
+            expected_rendering = (
+                json.dumps(expected_config, indent=2, sort_keys=True) + "\n"
+            )
+            with ExitStack() as patches:
+                patches.enter_context(
+                    patch.object(
+                        materializer,
+                        "EXPECTED_ARTIFACT_CONFIG_SHA256",
+                        _sha256(artifact / "config.json"),
+                    )
+                )
+                patches.enter_context(
+                    patch.object(
+                        materializer,
+                        "EXPECTED_ARTIFACT_INDEX_SHA256",
+                        _sha256(artifact / "model.safetensors.index.json"),
+                    )
+                )
+                patches.enter_context(
+                    patch.object(
+                        materializer,
+                        "EXPECTED_RUNTIME_CONFIG_SHA256",
+                        hashlib.sha256(expected_rendering.encode()).hexdigest(),
+                    )
+                )
+                materializer.materialize_runtime_model_view(artifact, output)
+
+            self.assertEqual(
+                (output / "config.json").read_text(encoding="utf-8"),
+                expected_rendering,
+            )
+            self.assertFalse((output / "stale-file").exists())
+            self.assertTrue((output / "model-00001.safetensors").is_symlink())
+            self.assertEqual(
+                (output / "model-00001.safetensors").resolve().read_bytes(),
+                b"weights",
+            )
+
+    def test_runtime_model_view_rejects_missing_indexed_shard(self) -> None:
+        materializer = _load_materializer_module()
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            artifact = root / "artifact"
+            artifact.mkdir()
+            (artifact / "config.json").write_text(
+                json.dumps(
+                    {
+                        "club_3090_lowbit": {"source_quantization_method": "fp8"},
+                        "quantization_config": {
+                            "config_groups": {"group_w2": {}},
+                            "quant_method": "compressed-tensors",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (artifact / "model.safetensors.index.json").write_text(
+                json.dumps({"weight_map": {"model.weight": "missing.safetensors"}}),
+                encoding="utf-8",
+            )
+            with ExitStack() as patches:
+                patches.enter_context(
+                    patch.object(
+                        materializer,
+                        "EXPECTED_ARTIFACT_CONFIG_SHA256",
+                        _sha256(artifact / "config.json"),
+                    )
+                )
+                patches.enter_context(
+                    patch.object(
+                        materializer,
+                        "EXPECTED_ARTIFACT_INDEX_SHA256",
+                        _sha256(artifact / "model.safetensors.index.json"),
+                    )
+                )
+                with self.assertRaisesRegex(RuntimeError, "missing indexed shard"):
+                    materializer.materialize_runtime_model_view(
+                        artifact, root / "runtime-model"
+                    )
 
     def test_hybrid_fp8_loader_patch_is_checksum_pinned(self) -> None:
         self.assertEqual(
