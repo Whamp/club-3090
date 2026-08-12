@@ -15,6 +15,9 @@ _PATCH_4 = _RUNTIME_PATCH_DIRECTORY / "0004-fix-load-hybrid-DeepSeek-FP8-linears
 _PATCH_5 = (
     _RUNTIME_PATCH_DIRECTORY / "0005-fix-forward-layer-to-Humming-MoE-kernel.patch"
 )
+_PATCH_6 = (
+    _RUNTIME_PATCH_DIRECTORY / "0006-fix-compose-DeepSeek-FP8-with-WNA16-experts.patch"
+)
 _SM86_ORACLE_SCRIPT = _RUNTIME_PATCH_DIRECTORY / "run-sm86-oracle.sh"
 _SERVER60_ROLLBACK_SCRIPT = (
     _RUNTIME_PATCH_DIRECTORY / "run-server60-oracle-with-rollback.sh"
@@ -43,7 +46,7 @@ class RuntimeImageContractTests(unittest.TestCase):
     def test_builder_rejects_drifted_or_dirty_vllm_source(self) -> None:
         script = _BUILD_SCRIPT.read_text(encoding="utf-8")
         self.assertIn(
-            'EXPECTED_VLLM_TREE="9a54d487051e937a9dd6c146b971d93ff422eb30"',
+            'EXPECTED_VLLM_TREE="b2cebe3ecbe8aa19b38234375bb1754ef28116a2"',
             script,
         )
         self.assertIn("status --porcelain --untracked-files=all", script)
@@ -71,6 +74,18 @@ class RuntimeImageContractTests(unittest.TestCase):
         self.assertIn(
             "f446a73a37b7715023f05aeec526b714fdadbefa80772268e242218c69efc34e"
             "  0005-fix-forward-layer-to-Humming-MoE-kernel.patch",
+            readme,
+        )
+
+    def test_hybrid_deepseek_quant_config_patch_is_checksum_pinned(self) -> None:
+        self.assertEqual(
+            hashlib.sha256(_PATCH_6.read_bytes()).hexdigest(),
+            "9af88957c5900e741794002907183a324510bcc7ebb7dd60fef22d66cd5ac005",
+        )
+        readme = (_RUNTIME_PATCH_DIRECTORY / "README.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "9af88957c5900e741794002907183a324510bcc7ebb7dd60fef22d66cd5ac005"
+            "  0006-fix-compose-DeepSeek-FP8-with-WNA16-experts.patch",
             readme,
         )
 
