@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly CLUB_3090_REVISION="5a36de6b856ab0795e1c8e1afe97eef1216b94d8"
+readonly CLUB_3090_REVISION="eeb00ad432f4462e722f6e213ef64ee94ba9a0f4"
 readonly CLUB_3090_REF="refs/heads/feat/deepseek-v4-lowbit-vllm"
 readonly DEEPSEEK_REVISION="7872f01b1d1fe23eabc4c98b48bffcef5a386062"
 readonly SOURCE_REPOSITORY="deepseek-ai/DeepSeek-V4-Flash-0731"

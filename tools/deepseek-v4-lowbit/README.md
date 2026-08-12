@@ -121,6 +121,15 @@ Use weighted RTN for the full artifact only if its measured weighted-error impro
 
 `rental/run-verda-quantizer-pilot.sh` is the idempotent, secret-free staging entry point for the selected Verda A100 pilot. It pins the conversion and AutoRound commits, official checkpoint and imatrix revisions, CUDA 13.0 Torch environment, representative downloads, imatrix checksum, and command above. It writes a durable JSON report and timestamped log under the supplied rental root.
 
+`rental/run-verda-vllm-w2-oracle.sh` is a separate, attributable A100
+stage. It reconstructs the exact haosdent vLLM patch tree from the vendored
+series and creates an isolated environment through vLLM's documented
+precompiled-extension development path. It requires
+`humming-kernels==0.1.10`, runs the W2/group-128/BF16 indexed-MoE numerical
+oracle under NVRTC, and records SHA-256 plus `cuobjdump` output for every
+`sm_80` cubin. Passing on A100 establishes generic integration correctness
+only. It cannot establish SM86 compilation, dispatch, or performance.
+
 ## Streamed conversion
 
 `deepseek-v4-convert` processes the official indexed checkpoint one source shard at a time. For each routed expert it delegates DeepSeek MXFP4/E8M0 normalization and dequantization to pinned AutoRound, optionally loads the matching expert imatrix vector, fits WNA16, emits compressed-tensors keys, releases transient tensors, and hands the completed shard to the resumable writer. Preserved tensors retain their values and dtypes; source routed scales are replaced; every `mtp.*` tensor is omitted.
