@@ -10,6 +10,8 @@ from pathlib import Path
 from statistics import mean, median
 from typing import Any
 
+from deepseek_v4_lowbit.shard_writer import file_sha256
+
 _EXPECTED_QUANTIZERS = {"plain-rtn", "imatrix-weighted-rtn"}
 _EXPERTS_PER_LAYER = 256
 _LAYER_COUNT = 43
@@ -160,7 +162,9 @@ def main(argv: list[str] | None = None) -> int:
     if not isinstance(raw_results, list):
         parser.error("pilot report results must be a list")
     summary = summarize_quantizer_pilot(raw_results)
-    _write_json_atomic(arguments.summary_report.resolve(), asdict(summary))
+    summary_payload = asdict(summary)
+    summary_payload["pilot_report_sha256"] = file_sha256(arguments.pilot_report)
+    _write_json_atomic(arguments.summary_report.resolve(), summary_payload)
     print(
         f"summarized pilot: pairs={summary.pair_count} "
         f"improved={summary.improved_count} tied={summary.tied_count} "

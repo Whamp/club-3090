@@ -21,8 +21,9 @@ def main(argv: list[str] | None = None) -> int:
     arguments = parser.parse_args(argv)
     source_directory = arguments.source_directory.resolve()
     imatrix_path = arguments.imatrix.resolve()
-    weight_map = _load_weight_map(source_directory / "model.safetensors.index.json")
-    samples = _expand_samples(arguments.sample, arguments.projection)
+    source_index_path = source_directory / "model.safetensors.index.json"
+    weight_map = _load_weight_map(source_index_path)
+    samples = expand_pilot_samples(arguments.sample, arguments.projection)
 
     with ImatrixFile.open(imatrix_path) as imatrix:
         imatrix.validate_deepseek_v4_geometry()
@@ -40,6 +41,8 @@ def main(argv: list[str] | None = None) -> int:
 
     used_shards = sorted({result.source_shard for result in results})
     report = {
+        "report_schema_version": 1,
+        "source_index_sha256": file_sha256(source_index_path),
         "imatrix_sha256": file_sha256(imatrix_path),
         "source_shards": {
             shard_name: file_sha256(source_directory / shard_name)
@@ -65,10 +68,11 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _expand_samples(
+def expand_pilot_samples(
     raw_samples: list[str],
     projections: list[str] | None,
 ) -> tuple[PilotSample, ...]:
+    """Expand LAYER:EXPERT pilot samples into sorted projection samples."""
     projection_names = projections or ["w1", "w2", "w3"]
     samples: set[PilotSample] = set()
     for raw_sample in raw_samples:

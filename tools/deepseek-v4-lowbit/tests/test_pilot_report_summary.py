@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
-from deepseek_v4_lowbit.pilot_report_summary import summarize_quantizer_pilot
+from deepseek_v4_lowbit.pilot_report_summary import main, summarize_quantizer_pilot
+from deepseek_v4_lowbit.shard_writer import file_sha256
 
 
 def candidate(
@@ -80,6 +84,38 @@ class PilotReportSummaryTests(unittest.TestCase):
         )
         self.assertIsNone(summary.decision)
         self.assertIn("excludes checkpoint download", summary.estimate_scope)
+
+    def test_cli_binds_summary_to_pilot_report_checksum(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            pilot_report = root / "pilot.json"
+            summary_report = root / "summary.json"
+            pilot_report.write_text(
+                json.dumps(
+                    {
+                        "results": [
+                            candidate(
+                                "layers.0.ffn.experts.0.w1.weight",
+                                "plain-rtn",
+                                duration=1.0,
+                                weighted_error=1.0,
+                            ),
+                            candidate(
+                                "layers.0.ffn.experts.0.w1.weight",
+                                "imatrix-weighted-rtn",
+                                duration=2.0,
+                                weighted_error=0.5,
+                            ),
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(main([str(pilot_report), str(summary_report)]), 0)
+
+            summary = json.loads(summary_report.read_text(encoding="utf-8"))
+            self.assertEqual(summary["pilot_report_sha256"], file_sha256(pilot_report))
 
     def test_rejects_incomplete_duplicate_and_zero_baseline_pairs(self) -> None:
         plain = candidate(
