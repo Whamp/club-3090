@@ -55,6 +55,23 @@ runner stores Hugging Face and Xet caches under the rental root, disables the
 Xet chunk cache, and fails if cache growth suggests duplicated model shards.
 Provisioning still requires the runner's fresh live contract check.
 
+SM86 runtime gate, 2026-08-13: the checksum-pinned acceptance image passed all
+seven projection/group cases on server60 in 328.36 seconds. The gate produced
+56 Humming cubins; all 56 contained `sm_86` device code. The cubin-manifest
+SHA-256 is `831fff2fa023c92056804b24247d48e8940ff8cc57297cf37674d7c1a3e65ad3`.
+This proves the W2/W4-down group-128/256/512 numerical and JIT-device-code gate,
+not full-model quality or performance.
+
+The first rollback attempt also exposed and then fixed a wrapper defect: an
+oracle `VLLM_IMAGE` override leaked into production Compose restoration and
+recreated the service with the acceptance-only image. The repaired wrapper uses
+`MIXED_GROUP_ORACLE_IMAGE` only for the oracle process, unsets `VLLM_IMAGE` for
+every production Compose command, and verifies Compose resolves the expected
+production digest before stopping service. Server60 was restored to exact image
+`sha256:0beb1f0cba2e41837f4ba5af01cc5c4686afde4f40ab1df5147a6ad945b0af1f`,
+model `deepseek-v4-flash-0731-wna16`, four TP workers, and zero system and
+per-process swap.
+
 The first full-model gate is one DeepSWE
 `superjson-error-stack-serialization` cell: one worker, one rep, max reasoning,
 Pi 0.84.1, temperature 1.0, top-p 0.95, 65,536 output tokens, and a 10,800-second

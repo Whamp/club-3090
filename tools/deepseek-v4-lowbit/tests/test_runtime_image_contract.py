@@ -217,6 +217,12 @@ class RuntimeImageContractTests(unittest.TestCase):
         self.assertIn("trap finish_server60_mixed_group_oracle EXIT", rollback)
         self.assertIn('--env-file "$COMPOSE_ENV_FILE"', rollback)
         self.assertIn("restore_promoted_service", rollback)
+        self.assertIn("MIXED_GROUP_ORACLE_IMAGE", rollback)
+        self.assertIn("env -u VLLM_IMAGE docker compose", rollback)
+        self.assertIn("resolved_production_image", rollback)
+        self.assertIn("Production Compose image was overridden", rollback)
+        self.assertIn('VLLM_IMAGE="$ORACLE_IMAGE"', rollback)
+        self.assertNotIn('ORACLE_IMAGE="${VLLM_IMAGE', rollback)
 
     def test_full_runtime_builder_pins_fresh_host_contract(self) -> None:
         script = _BUILD_SCRIPT.read_text(encoding="utf-8")

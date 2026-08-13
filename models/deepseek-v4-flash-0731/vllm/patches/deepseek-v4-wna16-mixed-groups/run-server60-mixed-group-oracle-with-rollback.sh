@@ -12,6 +12,7 @@ readonly EXPECTED_PRODUCTION_IMAGE_ID="sha256:0beb1f0cba2e41837f4ba5af01cc5c4686
 readonly EXPECTED_MODEL="deepseek-v4-flash-0731-wna16"
 readonly HEALTH_URL="${PROMOTED_HEALTH_URL:-http://100.92.238.117:8034}"
 readonly ORACLE_RUNNER="${ORACLE_RUNNER:-$PWD/run-mixed-group-sm86-oracle.sh}"
+readonly ORACLE_IMAGE="${MIXED_GROUP_ORACLE_IMAGE:-club-3090/deepseek-v4-wna16-sm86:mixed-group-oracle-f73b30cc}"
 readonly ORACLE_REPORT_DIRECTORY="${ORACLE_REPORT_DIRECTORY:-$PWD/mixed-group-sm86-oracle-report}"
 readonly ORACLE_TIMEOUT="${ORACLE_TIMEOUT:-20m}"
 service_stopped=0
@@ -50,7 +51,7 @@ require_promoted_service_health() {
 restore_promoted_service() {
     local restore_status=0
     ((service_stopped == 1)) || return 0
-    docker compose \
+    env -u VLLM_IMAGE docker compose \
         --project-name "$COMPOSE_PROJECT" \
         --env-file "$COMPOSE_ENV_FILE" \
         --profile authorized-gpu-test \
@@ -86,8 +87,20 @@ require_promoted_service_health || {
     echo "Server60 promoted WNA16 service is not the expected healthy baseline" >&2
     exit 2
 }
+resolved_production_image="$(
+    env -u VLLM_IMAGE docker compose \
+        --project-name "$COMPOSE_PROJECT" \
+        --env-file "$COMPOSE_ENV_FILE" \
+        --profile authorized-gpu-test \
+        --file "$COMPOSE_FILE" \
+        config --images
+)"
+[[ "$resolved_production_image" == *"@$EXPECTED_PRODUCTION_IMAGE_ID" ]] || {
+    echo "Production Compose image was overridden: $resolved_production_image" >&2
+    exit 2
+}
 
-docker compose \
+env -u VLLM_IMAGE docker compose \
     --project-name "$COMPOSE_PROJECT" \
     --env-file "$COMPOSE_ENV_FILE" \
     --profile authorized-gpu-test \
@@ -105,5 +118,6 @@ done
 }
 
 REPORT_DIRECTORY="$ORACLE_REPORT_DIRECTORY" \
+    VLLM_IMAGE="$ORACLE_IMAGE" \
     timeout --signal=TERM --kill-after=2m "$ORACLE_TIMEOUT" \
     "$ORACLE_RUNNER" I_AUTHORIZE_SERVER60_MIXED_GROUP_ORACLE
