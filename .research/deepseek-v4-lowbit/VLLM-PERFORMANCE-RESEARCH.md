@@ -1,13 +1,15 @@
 # DeepSeek V4 WNA16 on server60: vLLM performance research
 
-Research date: 2026-08-13
+Research date: 2026-08-12
 Runtime tree: `/home/will/projects/vllm/.worktrees/deepseek-v4-wna16-sm86`
-Runtime commit: `e147a78100bf6afd0c3a79d4e7a1f8fe9ce12e72`
+Promoted vLLM tree: `aeb62948e33074514a742d19c2f9a1a3c2ee3e1f`
 Ampere base: `haosdent/vllm@12810046c799cbe874967e19b1c0fa134ab7b209`
 
 ## Executive conclusion
 
-The first server60 benchmark was a valid **correctness and fit result**, but it was not a valid steady-state vLLM performance baseline. The subsequent campaign confirmed that conclusion: breakable CUDA graphs raised matched decode from 4.96 tokens/s in eager mode to about 60 tokens/s, and the final packaged 131K image repeated 60.82 tokens/s versus the matched llama.cpp baseline of 32.67.
+The first server60 benchmark was a valid **correctness and fit result**, but it was not a valid steady-state vLLM performance baseline. The subsequent campaign confirmed that conclusion: breakable CUDA graphs raised matched decode from 4.96 tokens/s in eager mode to about 60 tokens/s, and the first packaged 131K image repeated 60.82 tokens/s versus the matched llama.cpp baseline of 32.67.
+
+A follow-up residency audit found one avoidable allocation: two shared FP32 RoPE tables were materialized for the model's 1,048,576-token maximum even when the runtime served a shorter context. Bounding only those tables to runtime `max_model_len`, while preserving the original YaRN frequency span, removed about 407 MiB per rank at the selected 215K context. The resulting zero-offload TP=4 profile serves 215,000 tokens with `max_num_seqs=4`, measures 60.79 decode and 968.97 cache-busted prefill tokens/s, and retrieves an exact needle at 204,900 prompt tokens.
 
 Two settings changed the execution regime materially:
 
@@ -300,16 +302,72 @@ The campaign proved the hard functional points and the performance gate:
 - exact NIAH retrieval at 119,895 tokens; and
 - clean concurrency 2/4 at 65.19/90.23 aggregate tokens/s.
 
-The source prediction about `--enforce-eager` was correct. Graph replay closed the decode gap, so Nsight and kernel changes were not needed for the promotion decision. The accepted profile stops at 131,072 tokens. Tested 200K graph profiles required CPU weight offload and fell to 12.68–19.54 decode tokens/s.
+The source prediction about `--enforce-eager` was correct. Graph replay closed the decode gap, so Nsight and kernel changes were not needed for the promotion decision. The original profile stopped at 131,072 tokens because its full-length RoPE allocation hid the zero-offload 200K path.
 
-The remaining problem is capacity accounting, not replacement performance. The 76.8 GiB artifact leaves substantial naive room across four cards, yet the runtime reports about 21.91 GiB per rank for weights plus non-Torch memory. KV and graph pools explain less than 1 GiB per rank. A separate audit must inventory replicated parameters, post-load layouts, conversion buffers, JIT workspaces, allocator state, and communication/runtime overhead before proposing a 200K fix.
+## Residency and capacity result
+
+### The artifact/runtime gap
+
+The immutable safetensors tensor payload is 82,431,357,148 bytes, or 76.770184 GiB. Its 54 repository files total 82,464,249,582 bytes, or 76.800817 GiB. File headers and non-weight assets therefore explain only 0.030633 GiB; they do not explain runtime residency.
+
+A storage-deduplicated rank-0 inventory measured the pre-patch runtime after Humming postprocessing. Replacing only its two 256 MiB full-length RoPE storages with the deterministic 215,000-row allocation yields 21,718,678,044 registered bytes per rank, or 20.227095 GiB. Across four ranks that is 80.908381 GiB, 4.138197 GiB above the raw artifact payload.
+
+The per-rank difference from one quarter of the artifact is:
+
+| Family | Artifact quarter | Runtime rank | Difference |
+| --- | ---: | ---: | ---: |
+| Routed WNA16 experts | 17,544.13 MiB | 17,544.00 MiB | -0.13 MiB |
+| Embedding + LM head | 505.00 MiB | 505.00 MiB | 0.00 MiB |
+| Ordinary attention | 1,096.60 MiB | 1,304.93 MiB | +208.33 MiB |
+| Compressor + sparse indexer, aliases counted once | 190.99 MiB | 766.58 MiB | +575.59 MiB |
+| Shared experts | 258.02 MiB | 262.03 MiB | +4.02 MiB |
+| Hyperconnection | 32.31 MiB | 129.26 MiB | +96.94 MiB |
+| Router | 25.95 MiB | 94.92 MiB | +68.97 MiB |
+| Norms | 0.17 MiB | 0.68 MiB | +0.51 MiB |
+| Runtime-only RoPE tables at 215K | 0.00 MiB | 104.98 MiB | +104.98 MiB |
+| Other runtime FFN state | 0.00 MiB | 0.17 MiB | +0.17 MiB |
+
+The routed experts and vocabulary matrices are correctly TP-sharded. The remaining registered-storage gap is deliberate replication, transformed layouts, and runtime tables concentrated in attention, compressor/indexer, hyperconnection, router, and RoPE state. Humming postprocessing does not retain a large packed-weight duplicate: it reduced registered storage by about 365.6 MiB in the instrumented run.
+
+At 215K, startup reported 21.64 GiB per rank for weights plus non-Torch state, 0.35 GiB peak activation, 0.12 GiB CUDA graphs, and 1.09 GiB KV cache. These named buckets total 23.20 GiB. Warm NVML residency was 23,986 MiB, or 23.424 GiB, leaving about 0.224 GiB for allocator and runtime slack. Within the 21.64 GiB first bucket, registered model tensors account for 20.227 GiB and the remaining 1.413 GiB covers unregistered model/runtime allocations and non-Torch CUDA/NCCL/JIT state. The earlier instrumented 131K warm state independently decomposed the same classes into 20.625 GiB registered tensors, 1.815 GiB unregistered Torch allocations, 0.429 GiB Torch allocator cache, and 0.552 GiB non-Torch state. The exact values move with RoPE and KV sizing, but all major residency families are identified and measured rather than inferred from artifact size.
+
+### Matched llama.cpp comparison
+
+The controlled comparison used the exact 86,720,111,488-byte Antirez IQ2_XXS GGUF, pinned llama.cpp image, fixed layer split `1,1,0.95,1.05`, Q8_0 K/V cache, batch 8192, ubatch 384, parallelism 1, and context as the only changed input.
+
+At 200K:
+
+- llama.cpp used 85.158 GiB aggregate GPU memory after full-context prefill and the matched decode benchmark. Its logs account for 79.773 GiB of GPU model buffers, 0.986 GiB CPU-mapped model data, 0.681 GiB compressed KV, 0.011 GiB ordinary KV, 0.020 GiB recurrent state, and 1.475 GiB compute buffers. The remaining 3.197 GiB of GPU residency is CUDA-pool and other unlogged engine state.
+- vLLM used 93.742 GiB aggregate GPU memory after its 200K stress run, 8.584 GiB more than llama.cpp despite a raw artifact that is 3.994 GiB smaller. Its reconstructed registered tensors total 80.880 GiB at 200K; the rest is the larger vLLM KV pool, graph memory, unregistered Torch buffers, allocator retention, and CUDA/NCCL/JIT/workspace state.
+
+The engines make different tradeoffs. llama.cpp leaves 1,010 MiB of model data CPU-mapped and uses an uneven layer split. vLLM TP=4 shards routed experts and vocabulary tensors evenly but replicates several non-expert families, maintains a larger heterogeneous cache pool, and carries graph/distributed-runtime state. File size alone was therefore the wrong comparison boundary.
+
+### Cache-format and context decision
+
+The active cache is `fp8_ds_mla`: one inseparable UE8M0 block-scaled 584-byte MLA row per stored token, comprising 448 NoPE bytes, 128 RoPE bytes, and 8 scale bytes. This is the current Q8-equivalent storage path. The pinned SM86 backend requires it.
+
+Q4 and asymmetric Q8-K/Q4-V are not launch flags for this layout. DeepSeek V4 stores a latent MLA row rather than separable K and V arrays, and the pinned backend has no compatible Q4 writer, reader, sparse-indexer contract, or decode kernel. Decode context parallelism could reduce replicated history, but compressed-cache writes and compressor-state storage still reject DCP. Those options failed the support gate and were not implemented as speculative memory formats.
+
+The retained one-variable change is runtime-bounded RoPE materialization. It removed about 407 MiB per rank at 215K and enabled zero-offload long context without changing attention math, cache encoding, or YaRN frequencies.
+
+The measured frontier is:
+
+- 215K, `max_num_seqs=4`: ready with 233,817 cache tokens and 1.09x one-request concurrency; 60.79 decode tok/s; 968.97 prefill tok/s; exact retrieval at 204,900 prompt tokens; concurrency 2/4 at 65.47/89.94 aggregate tok/s; zero post-warm VRAM growth and zero serving-process swap after controlled restart.
+- 230K, `max_num_seqs=4`: rejected; 1.11 GiB KV required versus 1.05 GiB available, estimated maximum 215,552.
+- 230K, `max_num_seqs=2`: rejected; estimated maximum 223,488.
+- 220K, `max_num_seqs=2`: fits, but Will selected 215K/c4 because 5K more context does not justify halving supported concurrency.
+
+`verify-full` passed. `verify-stress` passed every functional class and all ceiling rungs through 197,580 tokens; it returned nonzero only because its generic 1 GiB free-VRAM policy saw 127 MiB per card. The vLLM acceptance contract instead required repeatable startup, zero serving-process swap, no post-warm growth or allocation failure under decode, prefill, near-ceiling, and concurrency workloads, correctness, and the 45.6/723 performance floors. The selected profile passed those gates. The 127 MiB minimum reserve remains a reported operational risk, not an automatic rejection.
+
+Club-3090 commit `26ae767aa98c14761ac4a69d4f492f418fd29578` publishes the exact patch and Compose contract. Server60 runs it as `dsv4-wna16-prod` with restart policy `unless-stopped`. A fail-closed rollback was exercised during canonical cutover: the first container reached API readiness, but the clean-tree checker rejected an evidence file written inside the detached checkout and restored the validated service. The corrected cutover then passed startup, `verify-full`, and a deterministic request after clearing cold host swap. At the recorded final-state capture, system swap and every serving process were at zero; the request caused no VRAM growth or logged runtime errors, GPU controls were unchanged, the KV pool held 233,817 tokens, and 141–142 MiB remained free per card. A later live check still found every serving process at zero swap. The final-state record is `/home/will/inference/runtime/deepseek-v4-wna16-sm86/canonical-promotion-20260812/FINAL-STATE.txt` (SHA-256 `6c7344498727f867116d1161da0aae36f86f822551d488f35d73afd4dd376bfb`).
 
 ## Sources
 
 ### Pinned local source
 
 - Runtime tree: `/home/will/projects/vllm/.worktrees/deepseek-v4-wna16-sm86`
-- Runtime commit: `e147a78100bf6afd0c3a79d4e7a1f8fe9ce12e72`
+- Published delivery: [`Whamp/club-3090@26ae767a`](https://github.com/Whamp/club-3090/commit/26ae767aa98c14761ac4a69d4f492f418fd29578)
+- Final vLLM tree: `aeb62948e33074514a742d19c2f9a1a3c2ee3e1f`
 - A100 campaign base: [`haosdent/vllm@12810046c`](https://github.com/haosdent/vllm/commit/12810046c799cbe874967e19b1c0fa134ab7b209)
 - A100 campaign record: `benchmarks/kernels/dsv4_sm80_refutations.md`
 - A100 benchmark harness: `benchmarks/kernels/benchmark_dsv4_sm80.py`

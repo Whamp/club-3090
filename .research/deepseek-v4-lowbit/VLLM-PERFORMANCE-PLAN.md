@@ -8,16 +8,18 @@ The goal was to make matched vLLM single-stream decode exceed llama.cpp on serve
 
 ## Outcome
 
-The goal passed without kernel changes or Verda spend. The causal discriminator was breakable CUDA graph replay:
+The performance goal passed without kernel changes or Verda spend. The causal discriminator was breakable CUDA graph replay:
 
 - matched eager arm: 4.96 decode tokens/s;
 - first graph arm: 60.27 decode tokens/s;
 - graph-after-eager repeat: 60.07 decode tokens/s; and
 - checksum-pinned final image: 60.82 decode tokens/s over 3 warmups and 5 measured 512-token runs, with 0.1% CV.
 
-The final result is 86% faster than the matched 32.67-token/s llama.cpp baseline. The accepted profile uses TP=4, 131,072-token context, `max_num_seqs=4`, `max_num_batched_tokens=256`, no CPU weight offload, and the existing SM86 attention guards. It measured 964.09 prompt tokens/s on the cache-busted 8,984-token guardrail, retrieved the exact needle at 119,895 tokens, and passed concurrency 2 and 4 at 65.19 and 90.23 aggregate tokens/s with zero post-warm VRAM growth.
+The first promoted result was 86% faster than the matched 32.67-token/s llama.cpp baseline at 131,072 tokens. A follow-up residency phase retained that execution path and added one scoped change: materialize DeepSeek V4's two shared FP32 RoPE tables to runtime `max_model_len` while preserving the original YaRN frequency span.
 
-The 200K graph profiles fit only with CPU weight offload in the tested runtime and fell to 12.68–19.54 decode tokens/s. Will accepted 131,072 tokens for this goal. The unexplained gap between the 76.8 GiB artifact and about 21.91 GiB of consumed memory per rank is tracked separately as `TODO-3be9650e`; it is not explained by the roughly 0.82 GiB KV cache or 0.12 GiB CUDA graph pool.
+The selected profile now uses TP=4, 215,000-token context, `max_num_seqs=4`, `max_num_batched_tokens=256`, no CPU weight offload, and the existing SM86 attention guards. It measured 60.79 decode tokens/s, 968.97 prompt tokens/s on the cache-busted 8,984-token guardrail, retrieved the exact needle at 204,900 prompt tokens, and passed concurrency 2 and 4 at 65.47 and 89.94 aggregate tokens/s with zero post-warm VRAM growth. The RoPE change removed about 407 MiB of registered storage per rank at 215K.
+
+The measured context frontier is 215K with concurrency 4. A 230K/c4 arm failed with an estimated 215,552-token maximum. Reducing `max_num_seqs` to 2 raised the estimate to 223,488; a 220K/c2 arm fit, but Will selected 215K/c4 because 5K more context did not justify halving supported concurrency.
 
 ## Approach
 
@@ -61,13 +63,18 @@ Expected boundary; exact source files will be narrowed only after tracing identi
 - [x] Run a matched breakable-graphs-versus-eager decode A/B. Graph replay produced about a 12.2× gain, and graph-after-eager reproduced the result.
 - [x] Stop before Nsight Systems: graph-enabled decode already exceeded the promotion threshold, so a timeline could not change the accept/reject decision.
 - [x] Stop before an Amdahl kernel budget: no remaining gap to llama.cpp required recovery.
-- [x] Implement the smallest delivery change. Keep the measured runtime behavior and bake the three production source files into a checksum-pinned thin image; do not add a speculative kernel change.
+- [x] Implement the first delivery change: bake patches 0005–0007's three production source files into a checksum-pinned thin image without a speculative kernel change. The later patch-0008 image expands the overlay to seven production files.
 - [x] Validate attribution with graph → eager → graph. The two graph arms measured 60.27 and 60.07 tokens/s; eager measured 4.96.
 - [x] Stop the optimization loop after the attributed graph change exceeded llama.cpp.
-- [x] Preserve prefill usability. The accepted 131K profile measured 964.09 prompt tokens/s on three cache-busted 8,984-token runs.
-- [x] Validate concurrency 2 and 4. They sustained 65.19 and 90.23 aggregate tokens/s with zero post-warm VRAM growth.
-- [x] Run final matched benchmarks and focused checks. The packaged image measured 60.82 decode tokens/s, returned exact deterministic generation, preserved forced-tool and reasoning parsing, and remained healthy without source overlays.
-- [x] Use no Verda credit; server60 answered every performance question needed for promotion.
+- [x] Preserve prefill usability. The first accepted 131K profile measured 964.09 prompt tokens/s on three cache-busted 8,984-token runs.
+- [x] Validate concurrency 2 and 4. They sustained 65.19 and 90.23 aggregate tokens/s with zero post-warm VRAM growth on the first profile.
+- [x] Run final matched benchmarks and focused checks. The first packaged image measured 60.82 decode tokens/s, returned exact deterministic generation, preserved forced-tool and reasoning parsing, and remained healthy without source overlays.
+- [x] Instrument storage-deduplicated model residency and reconcile the major per-rank allocation families.
+- [x] Compare the WNA16 runtime with a controlled Antirez IQ2_XXS llama.cpp run at 8K, 131K, and 200K.
+- [x] Implement and isolate runtime-bounded RoPE materialization. At 215K it removes about 407 MiB per rank without changing YaRN frequencies or position semantics.
+- [x] Re-establish context capacity with one-variable 200K, 215K, 220K/c2, and failed 230K admission arms. Select 215K/c4 by user decision.
+- [x] Validate the selected 215K profile with matched decode, prefill, 204,900-token retrieval, concurrency 2/4, `verify-full`, `verify-stress`, restart, zero serving-process swap, and VRAM-stability gates.
+- [x] Use no Verda credit; server60 answered every performance and capacity question needed for promotion.
 
 ## Signal-focused quality policy
 
@@ -100,13 +107,19 @@ Performance changes should preserve the same model behavior, so broad capability
 - Server60 may remain on the experimental runtime for as long as the campaign needs; restore llama.cpp only when recovery is required or the campaign ends without promotion.
 - Up to $30 of new Verda spend is authorized for deliberately bounded acceleration, but cloud results cannot replace server60 acceptance.
 - Diagnostic runs have no fixed 200K context floor; context may be reduced to expose the normal graph path, then capacity is re-established after decode is competitive.
+- The selected capacity/performance point is 215,000 tokens with `max_num_seqs=4`. A fitting 220K/seqs=2 arm is rejected because the extra 5K does not justify halving supported concurrency.
 
 ## Execution ledger
 
 - 2026-08-12: matched thermally warm llama.cpp fast-profile baseline on server60: 3 warmups + 5 measured, fixed 512-token code completion, chat endpoint, temperature 0.6, top_p 0.95. Decode mean 32.67 tokens/s, CV 0.1%; wall mean 32.44 tokens/s; TTFT mean 109 ms; 5/5 usable; capture status OK.
 - 2026-08-12: graph-enabled TP=4 discriminator reached 60.27 decode tokens/s. The one-variable eager ablation reached 4.96; graph-after-eager repeated at 60.07. This establishes breakable CUDA graph replay as the causal change.
 - 2026-08-12: the zero-offload 131,072-token profile measured 60.71 decode tokens/s, 964.09 cache-busted prefill tokens/s at 8,984 tokens, exact NIAH retrieval at 119,895 tokens, and clean concurrency 2/4 at 65.19/90.23 aggregate tokens/s.
-- 2026-08-12: tested graph-enabled 200K profiles required CPU weight offload and measured only 12.68–19.54 decode tokens/s. The accepted 131K profile therefore favors decode performance; 200K capacity is a separate memory-residency investigation.
-- 2026-08-12: promoted local image `sha256:ed5227673011058a04675b913c8f67b6bb83baba3d85f3b83675e765c51379c7`, source tree `12b87bcd52bb2973685fa8f38b5fc8bbbfe7519c`, over base image `sha256:0e8cc6dc48081e907d553febc8002b1f6d61298454340840f27f18b3a2e66c6c`. The overlay-free image reproduced 60.82 decode tokens/s with 0.1% CV, no serving-process swap, and zero VRAM growth. It remains healthy as Compose project `dsv4-wna16-prod` on port 8034 with restart policy `unless-stopped`.
-- 2026-08-12: repository `verify-full` passed all applicable checks. `verify-stress` passed all eight functional probe classes, including exact recall at 120,476 tokens, but exited 1 because only 118 MiB/card remained at the ceiling rung versus its 1 GiB safety threshold. The profile remains experimental; this headroom failure reinforces the separate GPU-residency audit.
-- Full server evidence is under `/home/will/inference/runtime/deepseek-v4-wna16-sm86/performance-20260812/` and `/home/will/inference/runtime/deepseek-v4-wna16-sm86/final-promotion-20260812/`.
+- 2026-08-12: tested graph-enabled 200K profiles on the pre-RoPE-fix runtime required CPU weight offload and measured only 12.68–19.54 decode tokens/s. The first accepted profile therefore stopped at 131K and opened a separate memory-residency investigation.
+- 2026-08-12: promoted local image `sha256:ed5227673011058a04675b913c8f67b6bb83baba3d85f3b83675e765c51379c7`, source tree `12b87bcd52bb2973685fa8f38b5fc8bbbfe7519c`, over base image `sha256:0e8cc6dc48081e907d553febc8002b1f6d61298454340840f27f18b3a2e66c6c`. At that promotion point, the overlay-free image reproduced 60.82 decode tokens/s with 0.1% CV, no serving-process swap, and zero VRAM growth as Compose project `dsv4-wna16-prod` on port 8034.
+- 2026-08-12: repository `verify-full` passed all applicable checks. `verify-stress` passed all eight functional probe classes, including exact recall at 120,476 tokens, but exited 1 because only 118 MiB/card remained at the ceiling rung versus its 1 GiB safety threshold. This triggered the separate GPU-residency audit.
+- 2026-08-12: storage-deduplicated instrumentation measured 22,145,468,956 registered bytes per rank before the RoPE change. Routed WNA16 experts and vocabulary tensors were correctly TP-sharded; two model-maximum RoPE tables consumed 512 MiB per rank and were the largest isolated avoidable allocation.
+- 2026-08-12: patch 0008 bounded only materialized RoPE rows to runtime context while retaining the model's original YaRN frequency span. The exact image `sha256:0beb1f0cba2e41837f4ba5af01cc5c4686afde4f40ab1df5147a6ad945b0af1f` uses vLLM tree `aeb62948e33074514a742d19c2f9a1a3c2ee3e1f`.
+- 2026-08-12: the selected zero-offload 215K/c4 profile reported 233,817 cache tokens and 1.09x one-request concurrency. It measured 60.79 decode and 968.97 prefill tokens/s, recalled the exact needle at 204,900 prompt tokens, and passed short-request concurrency 2/4 at 65.47/89.94 aggregate tokens/s with zero VRAM growth.
+- 2026-08-12: `verify-full` passed. `verify-stress` passed every functional class and all ceiling rungs through 197,580 tokens, returning nonzero only on its generic 1 GiB margin policy. The observed minimum reserve was 127 MiB/card; controlled restart and all serving processes remained swap-free.
+- 2026-08-12: club-3090 commit `26ae767aa98c14761ac4a69d4f492f418fd29578` published patch 0008 and the canonical 215K/c4 Compose. Server60 cut over to that exact detached checkout as `dsv4-wna16-prod` with restart policy `unless-stopped`. The first attempt intentionally rolled back after an evidence file made the checkout fail its clean-tree checker despite API readiness; the validated service recovered. The corrected cutover passed `verify-full` and a deterministic post-clear request. At the recorded final-state capture, system swap and every serving process were at zero; stable GPU use was 23,986 MiB/card with 141–142 MiB free, unchanged GPU controls, and no rollback timer. A later live check still found every serving process at zero swap.
+- Full server evidence is under `/home/will/inference/runtime/deepseek-v4-wna16-sm86/performance-20260812/`, `/home/will/inference/runtime/deepseek-v4-wna16-sm86/final-promotion-20260812/`, `/home/will/inference/runtime/deepseek-v4-wna16-sm86/memory-audit-20260812/`, `/home/will/inference/runtime/deepseek-v4-wna16-sm86/llamacpp-antirez-memory-audit-20260813/`, `/home/will/inference/runtime/deepseek-v4-wna16-sm86/rope-capacity-20260812/`, and `/home/will/inference/runtime/deepseek-v4-wna16-sm86/canonical-promotion-20260812/`.
