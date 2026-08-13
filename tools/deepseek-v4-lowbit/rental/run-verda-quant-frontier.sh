@@ -4,7 +4,7 @@ set -euo pipefail
 export PYTHONUTF8="${PYTHONUTF8:-1}"
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 
-readonly CLUB_3090_REVISION="__CLUB_3090_REVISION__"
+readonly CLUB_3090_REVISION="0f4736e050e539a2a50990fd442fa7bf563707e8"
 readonly CLUB_3090_REF="refs/heads/feat/deepseek-v4-quant-frontier"
 readonly AUTO_ROUND_REVISION="f17d9cd4b36982006bad21ff87127aac739072e3"
 readonly DEEPSEEK_REVISION="7872f01b1d1fe23eabc4c98b48bffcef5a386062"
@@ -79,8 +79,8 @@ checkout_pinned_repository() {
     require_clean_checkout "$destination"
 }
 
-[[ "$CLUB_3090_REVISION" != __CLUB_3090_REVISION__ ]] || {
-    echo "Frontier rental runner has not been pinned to a published revision" >&2
+[[ "$CLUB_3090_REVISION" =~ ^[0-9a-f]{40}$ ]] || {
+    echo "Frontier rental runner requires a full published Git revision" >&2
     exit 2
 }
 [[ -n "${HF_TOKEN:-}" ]] || {

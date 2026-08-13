@@ -122,7 +122,11 @@ class RentalScriptContractTests(unittest.TestCase):
 
     def test_frontier_runner_is_pinned_and_low_disk(self) -> None:
         script = _FRONTIER_SCRIPT.read_text(encoding="utf-8")
-        self.assertIn('CLUB_3090_REVISION="__CLUB_3090_REVISION__"', script)
+        self.assertIn(
+            'CLUB_3090_REVISION="0f4736e050e539a2a50990fd442fa7bf563707e8"',
+            script,
+        )
+        self.assertNotIn("__CLUB_3090_REVISION__", script)
         self.assertIn('CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"', script)
         self.assertIn("requires at least 160 GiB host RAM", script)
         self.assertIn("requires at least 280 GiB free", script)
