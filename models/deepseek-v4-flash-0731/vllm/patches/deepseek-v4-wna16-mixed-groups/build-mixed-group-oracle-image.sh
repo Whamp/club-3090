@@ -51,11 +51,15 @@ production_tree="$(
     exit 2
 }
 
+verified_base_tag="club-3090/deepseek-v4-wna16-sm86:mixed-group-oracle-base-${BASHPID}"
 temporary_context="$(mktemp -d)"
 cleanup_mixed_group_oracle_build() {
     rm -rf "$temporary_context"
+    docker image rm "$verified_base_tag" >/dev/null 2>&1 || true
 }
 trap cleanup_mixed_group_oracle_build EXIT
+
+docker tag "$production_image_id" "$verified_base_tag"
 mkdir -p \
     "$temporary_context/vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe" \
     "$temporary_context/tests/kernels/moe" \
@@ -72,7 +76,7 @@ cp -- \
 
 docker build \
     --pull=false \
-    --build-arg "VERIFIED_PRODUCTION_IMAGE=$PRODUCTION_IMAGE" \
+    --build-arg "VERIFIED_PRODUCTION_IMAGE=$verified_base_tag" \
     --file "$DOCKERFILE" \
     --label "org.opencontainers.image.revision=$EXPECTED_ACCEPTANCE_TREE" \
     --label "org.club3090.runtime.production-base=$EXPECTED_PRODUCTION_IMAGE_ID" \

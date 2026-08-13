@@ -191,6 +191,16 @@ class RuntimeImageContractTests(unittest.TestCase):
             builder,
         )
         self.assertIn("org.club3090.runtime.scope=mixed-group-oracle-only", builder)
+        self.assertIn("verified_base_tag=", builder)
+        self.assertIn('docker tag "$production_image_id" "$verified_base_tag"', builder)
+        self.assertIn(
+            '--build-arg "VERIFIED_PRODUCTION_IMAGE=$verified_base_tag"',
+            builder,
+        )
+        self.assertNotIn(
+            '--build-arg "VERIFIED_PRODUCTION_IMAGE=$PRODUCTION_IMAGE"',
+            builder,
+        )
         self.assertIn("test_humming_wna16_grouped_indexed_numerical_oracle", oracle)
         for oracle_case in (
             "w2-g128-g128",
