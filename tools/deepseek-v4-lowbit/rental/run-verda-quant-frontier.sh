@@ -4,7 +4,7 @@ set -euo pipefail
 export PYTHONUTF8="${PYTHONUTF8:-1}"
 unset CUDA_VISIBLE_DEVICES
 
-readonly CLUB_3090_REVISION="0f4736e050e539a2a50990fd442fa7bf563707e8"
+readonly CLUB_3090_REVISION="4213eeae4b1fc45b68014e729d2dbd74ff950b6c"
 readonly CLUB_3090_REF="refs/heads/feat/deepseek-v4-quant-frontier"
 readonly AUTO_ROUND_REVISION="f17d9cd4b36982006bad21ff87127aac739072e3"
 readonly DEEPSEEK_REVISION="7872f01b1d1fe23eabc4c98b48bffcef5a386062"
