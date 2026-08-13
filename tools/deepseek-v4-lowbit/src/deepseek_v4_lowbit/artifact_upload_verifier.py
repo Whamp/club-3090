@@ -125,12 +125,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("local_directory", type=Path)
     parser.add_argument("repository")
     parser.add_argument("report", type=Path)
+    parser.add_argument(
+        "--revision",
+        help="Exact branch, tag, or commit to verify instead of repository main.",
+    )
     arguments = parser.parse_args(argv)
 
     huggingface_hub = _import_optional("huggingface_hub")
     huggingface_api = _import_optional("huggingface_hub.hf_api")
     api = huggingface_hub.HfApi()
-    model_info = api.model_info(arguments.repository)
+    model_info = api.model_info(
+        arguments.repository,
+        revision=arguments.revision,
+    )
     revision = model_info.sha
     remote_files = []
     for item in api.list_repo_tree(

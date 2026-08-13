@@ -57,6 +57,27 @@ patches:
       drop_when: "replace after upstream WNA16 Humming MoE support merges, propagates to the selected Ampere runtime, and repeats the SM86 correctness and performance gates"
     status: verified
 
+  - id: deepseek-v4-vllm-wna16-mixed-groups
+    model: [deepseek-v4-flash-0731]
+    files:
+      - models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-mixed-groups
+    load_bearing_when: []
+    delivery:
+      dockerfile_bake: false
+      entrypoint_invoke: false
+      genesis: false
+    delivery_gaps: []
+    delivery_mechanism: none
+    delivery_spec: null
+    drift_guard: null
+    capability: wna16-projection-group-sizes
+    foundational: false
+    upstream:
+      ref: Whamp/vllm#1
+      status: experimental-incubation
+      drop_when: "replace after equivalent projection-specific WNA16 group sizing reaches the selected Ampere runtime and passes the SM86 and DeepSWE gates"
+    status: suspect
+
   - id: qwen-sglang-autoround-fused-bf16
     deprecated_on: "2026-06-05"
     deprecation_reason: "SGLang path parked; no functional compose uses it (#254)."

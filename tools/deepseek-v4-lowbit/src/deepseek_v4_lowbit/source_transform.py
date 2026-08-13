@@ -61,6 +61,7 @@ class TransformOptions:
 class TensorTransformMetric:
     tensor_name: str
     bits: int
+    group_size: int
     unweighted_error: float
     weighted_error: float
 
@@ -105,7 +106,7 @@ def transform_source_shard(
     if completed is not None:
         return ShardTransformResult(
             receipt=completed,
-            metrics=_metrics_from_receipt(completed),
+            metrics=metrics_from_shard_receipt(completed),
             resumed=True,
         )
 
@@ -183,17 +184,22 @@ def _transform_routed_weight(
         )
 
     bits = context.recipe.bits_for(identity.layer, identity.projection)
+    group_size = context.recipe.group_size_for(
+        identity.layer,
+        identity.projection,
+        fallback=context.options.group_size,
+    )
     candidate = quantize_symmetric(
         dequantized,
         bits=bits,
-        group_size=context.options.group_size,
+        group_size=group_size,
         importance=importance,
         optimize_scales=optimize_scales,
     )
     packed = pack_quantized_tensor(
         candidate,
         bits=bits,
-        group_size=context.options.group_size,
+        group_size=group_size,
     )
     checkpoint_tensors = {
         name: tensor.to("cpu")
@@ -202,6 +208,7 @@ def _transform_routed_weight(
     metric = TensorTransformMetric(
         tensor_name=tensor_name,
         bits=bits,
+        group_size=group_size,
         unweighted_error=candidate.unweighted_error,
         weighted_error=candidate.weighted_error,
     )
@@ -216,12 +223,16 @@ def _metric_payload(metric: TensorTransformMetric) -> dict[str, Any]:
     return {
         "tensor_name": metric.tensor_name,
         "bits": metric.bits,
+        "group_size": metric.group_size,
         "unweighted_error": metric.unweighted_error,
         "weighted_error": metric.weighted_error,
     }
 
 
-def _metrics_from_receipt(receipt: ShardReceipt) -> tuple[TensorTransformMetric, ...]:
+def metrics_from_shard_receipt(
+    receipt: ShardReceipt,
+) -> tuple[TensorTransformMetric, ...]:
+    """Recover finite per-tensor transform metrics from a verified receipt."""
     raw_metrics = receipt.metadata.get("transform_metrics")
     if not isinstance(raw_metrics, list):
         raise ResumeConflictError(
@@ -232,6 +243,7 @@ def _metrics_from_receipt(receipt: ShardReceipt) -> tuple[TensorTransformMetric,
             TensorTransformMetric(
                 tensor_name=raw["tensor_name"],
                 bits=int(raw["bits"]),
+                group_size=_metric_group_size(receipt, raw),
                 unweighted_error=float(raw["unweighted_error"]),
                 weighted_error=float(raw["weighted_error"]),
             )
@@ -245,6 +257,7 @@ def _metrics_from_receipt(receipt: ShardReceipt) -> tuple[TensorTransformMetric,
         if (
             not metric.tensor_name
             or metric.bits not in {2, 3, 4, 8}
+            or metric.group_size <= 0
             or not math.isfinite(metric.unweighted_error)
             or not math.isfinite(metric.weighted_error)
         ):
@@ -254,25 +267,38 @@ def _metrics_from_receipt(receipt: ShardReceipt) -> tuple[TensorTransformMetric,
     return metrics
 
 
+def _metric_group_size(receipt: ShardReceipt, raw_metric: Any) -> int:
+    raw_group_size = raw_metric.get("group_size")
+    if raw_group_size is not None:
+        return int(raw_group_size)
+    tensor_name = raw_metric["tensor_name"]
+    bits = int(raw_metric["bits"])
+    prefix = tensor_name.removesuffix(".weight")
+    packed_record = receipt.tensors[f"{prefix}.weight_packed"]
+    scale_record = receipt.tensors[f"{prefix}.weight_scale"]
+    packed_shape = packed_record["shape"]
+    scale_shape = scale_record["shape"]
+    if len(packed_shape) != 2 or len(scale_shape) != 2 or scale_shape[1] <= 0:
+        raise ValueError("cannot infer legacy metric group size")
+    input_width = packed_shape[1] * (32 // bits)
+    if input_width % scale_shape[1]:
+        raise ValueError("cannot infer legacy metric group size")
+    return input_width // scale_shape[1]
+
+
 def transform_recipe_sha256(
     recipe: ArtifactRecipe,
     options: TransformOptions,
 ) -> str:
     layer_payload = {
-        str(layer): {
-            "w13_bits": quantization.w13_bits,
-            "w2_bits": quantization.w2_bits,
-        }
+        str(layer): _layer_quantization_payload(quantization)
         for layer, quantization in sorted(recipe.layers.items())
     }
     return canonical_json_sha256(
         {
             "schema_version": _TRANSFORM_SCHEMA_VERSION,
             "artifact": {
-                "default": {
-                    "w13_bits": recipe.default.w13_bits,
-                    "w2_bits": recipe.default.w2_bits,
-                },
+                "default": _layer_quantization_payload(recipe.default),
                 "layers": layer_payload,
                 "mtp": "omit",
             },
@@ -288,6 +314,19 @@ def transform_recipe_sha256(
             },
         }
     )
+
+
+def _layer_quantization_payload(quantization: Any) -> dict[str, Any]:
+    payload = {
+        "w13_bits": quantization.w13_bits,
+        "w2_bits": quantization.w2_bits,
+    }
+    if quantization.group_size is not None:
+        payload["group_size"] = quantization.group_size
+    elif quantization.w13_group_size is not None:
+        payload["w13_group_size"] = quantization.w13_group_size
+        payload["w2_group_size"] = quantization.w2_group_size
+    return payload
 
 
 def _validate_source_pairs(source_names: set[str]) -> None:

@@ -13,6 +13,63 @@ that exact Compose. At the final-state capture, system swap and every serving
 process were at zero; a later live check still found every serving process at
 zero. The remaining operational risk is only 141–142 MiB of free VRAM per card.
 
+Quality correction, 2026-08-13: the artifact is rejected for coding-agent
+promotion. It degenerated on DeepSWE's
+`superjson-error-stack-serialization` task and repeated the failure with one
+worker and no concurrent requests. The historical quick suite and reconstruction
+metrics did not detect this. The runtime and performance results remain valid;
+the artifact-quality conclusion does not.
+
+## Replacement quant direction
+
+The replacement keeps WNA16 and group sizes 128, 256, and 512 available, but
+rejects uniform precision across routed projections. Its allocator enforces
+that down projections never use a coarser group size than gate/up and adds the
+trusted Antirez/Unsloth layer priors before spending residual bytes by measured
+error reduction:
+
+- **cliff:** W2 gate/up group-512, W2 down group-256 with the most sensitive
+  down layers upgraded to group-128; 74.25 GiB ceiling;
+- **capacity:** all down projections at W2/group-128, then measured gate/up
+  group upgrades; 74.875 GiB ceiling;
+- **balanced:** capacity plus gate/up group-128 anchors at layer 26 and layers
+  37–42, and W4 down at layers 26 and 42; 76.25 GiB ceiling;
+- **quality:** balanced plus W4 down throughout layers 37–42; 78.75 GiB ceiling.
+
+Exact planning over all 72,317 source tensor headers yields modeled payloads of
+74.238934, 74.863934, 76.238934, and 78.738934 GiB when every positive-value
+budget move is filled. Final layer assignments still require the checksum-bound
+screen.
+
+Generate the quality candidate first because it best preserves the demonstrated
+projection/layer pattern. Do not generate all four before behavioral evidence.
+If quality fits the runtime and passes the early gate, generate a smaller point
+only when a real quality-versus-context tradeoff remains. If it cannot fit,
+fall back to balanced rather than weakening quality blindly.
+
+The guarded rental default, verified without provisioning on 2026-08-13, is one
+on-demand `2A100.44V` in FIN-01: 2× A100 80 GB, 240 GB host RAM, a 350 GiB boot
+volume, and Ubuntu 24.04 CUDA 13.0. The live estimate was $3.6759/hour and
+$29.4072 for the eight-hour watchdog limit against a $31.64546 balance. The
+runner stores Hugging Face and Xet caches under the rental root, disables the
+Xet chunk cache, and fails if cache growth suggests duplicated model shards.
+Provisioning still requires the runner's fresh live contract check.
+
+The first full-model gate is one DeepSWE
+`superjson-error-stack-serialization` cell: one worker, one rep, max reasoning,
+Pi 0.84.1, temperature 1.0, top-p 0.95, 65,536 output tokens, and a 10,800-second
+cell timeout after a clean vLLM restart and idle-KV check. Use
+`Whamp/deep-swe-bench@4645f56d14137ed0e1aa409aee0d60e59215150e` and its
+confirmed-plan `coding-agent-early-gate-v1` degeneration-watchdog profile.
+Compile a fresh
+one-cell plan for the exact served model/config and get approval for its plan
+identity before launch. Monitor Pi and vLLM with bounded watchdogs. Repetitive
+reads without progress, one enormous unfinished response, no implementation or
+tests, or an empty patch fail immediately. A pass requires normal multi-turn
+tool use, implementation edits, relevant tests, a nonempty patch, and verifier
+completion. Report patch bytes, feature and preservation pass rates, partial
+reward, turns, tool calls, output tokens, wall time, and repetition.
+
 ## Original decision
 
 The following section preserves the pre-execution decision. Later implementation

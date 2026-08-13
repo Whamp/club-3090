@@ -42,8 +42,13 @@ class TensorHeader:
 
 @dataclass(frozen=True)
 class LayerQuantization:
+    """Routed-expert bit widths and shared or projection scale group sizes."""
+
     w13_bits: int
     w2_bits: int
+    group_size: int | None = None
+    w13_group_size: int | None = None
+    w2_group_size: int | None = None
 
     def __post_init__(self) -> None:
         for projection, bits in (("w13", self.w13_bits), ("w2", self.w2_bits)):
@@ -52,18 +57,59 @@ class LayerQuantization:
                 raise ValueError(
                     f"{projection}_bits must be one of {supported}, got {bits}"
                 )
+        group_sizes = {
+            "group_size": self.group_size,
+            "w13_group_size": self.w13_group_size,
+            "w2_group_size": self.w2_group_size,
+        }
+        for field_name, value in group_sizes.items():
+            if value is not None and value <= 0:
+                raise ValueError(f"layer {field_name} must be positive, got {value}")
+        has_w13_group_size = self.w13_group_size is not None
+        has_w2_group_size = self.w2_group_size is not None
+        if has_w13_group_size != has_w2_group_size:
+            raise ValueError(
+                "projection group sizes require both w13_group_size and w2_group_size"
+            )
+        if self.group_size is not None and has_w13_group_size:
+            raise ValueError(
+                "shared group_size cannot be combined with projection group sizes"
+            )
 
     def bits_for(self, projection: str) -> int:
         return self.w2_bits if projection == "w2" else self.w13_bits
 
+    def group_size_for(self, projection: str, *, fallback: int) -> int:
+        """Resolve the scale group size for one routed-expert projection."""
+        if fallback <= 0:
+            raise ValueError(f"fallback group size must be positive, got {fallback}")
+        if projection == "w2":
+            projection_group_size = self.w2_group_size
+        elif projection in {"w1", "w3", "w13"}:
+            projection_group_size = self.w13_group_size
+        else:
+            raise ValueError(f"unsupported routed-expert projection: {projection}")
+        return projection_group_size or self.group_size or fallback
+
 
 @dataclass(frozen=True)
 class ArtifactRecipe:
+    """Resolve layer quantization while preserving a caller-supplied fallback."""
+
     default: LayerQuantization
     layers: Mapping[int, LayerQuantization] = field(default_factory=dict)
 
+    def layer_quantization(self, layer: int) -> LayerQuantization:
+        return self.layers.get(layer, self.default)
+
     def bits_for(self, layer: int, projection: str) -> int:
-        return self.layers.get(layer, self.default).bits_for(projection)
+        return self.layer_quantization(layer).bits_for(projection)
+
+    def group_size_for(self, layer: int, projection: str, *, fallback: int) -> int:
+        return self.layer_quantization(layer).group_size_for(
+            projection,
+            fallback=fallback,
+        )
 
 
 @dataclass(frozen=True)
@@ -202,7 +248,11 @@ def plan_artifact(
             weight_bytes, scale_bytes, shape_bytes = _planned_wna16_bytes(
                 header,
                 bits=recipe.bits_for(identity.layer, identity.projection),
-                group_size=group_size,
+                group_size=recipe.group_size_for(
+                    identity.layer,
+                    identity.projection,
+                    fallback=group_size,
+                ),
             )
             accumulator.quantized_weight_bytes += weight_bytes
             accumulator.quantized_scale_bytes += scale_bytes
@@ -215,13 +265,35 @@ def plan_artifact(
 def _load_layer_quantization(value: Any, location: str) -> LayerQuantization:
     if not isinstance(value, dict):
         raise ValueError(f"{location} must be a JSON object")
-    if set(value) != {"w13_bits", "w2_bits"}:
-        raise ValueError(f"{location} must contain only w13_bits and w2_bits")
+    required_fields = {"w13_bits", "w2_bits"}
+    group_size_fields = {"group_size", "w13_group_size", "w2_group_size"}
+    allowed_fields = required_fields | group_size_fields
+    if not required_fields <= set(value) or not set(value) <= allowed_fields:
+        raise ValueError(
+            f"{location} must contain w13_bits and w2_bits, with optional "
+            "shared or projection group sizes"
+        )
     w13_bits = value["w13_bits"]
     w2_bits = value["w2_bits"]
+    group_size = value.get("group_size")
+    w13_group_size = value.get("w13_group_size")
+    w2_group_size = value.get("w2_group_size")
     if not isinstance(w13_bits, int) or not isinstance(w2_bits, int):
         raise ValueError(f"{location} bit widths must be integers")
-    return LayerQuantization(w13_bits=w13_bits, w2_bits=w2_bits)
+    for field_name, field_value in (
+        ("group_size", group_size),
+        ("w13_group_size", w13_group_size),
+        ("w2_group_size", w2_group_size),
+    ):
+        if field_value is not None and not isinstance(field_value, int):
+            raise ValueError(f"{location} {field_name} must be an integer")
+    return LayerQuantization(
+        w13_bits=w13_bits,
+        w2_bits=w2_bits,
+        group_size=group_size,
+        w13_group_size=w13_group_size,
+        w2_group_size=w2_group_size,
+    )
 
 
 def _parse_header(shard: str, name: str, metadata: Any) -> TensorHeader:

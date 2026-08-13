@@ -98,6 +98,46 @@ class ResumableShardWriterTests(unittest.TestCase):
         self.assertTrue(receipt.is_file())
         self.assertFalse(partial_receipt.exists())
 
+    def test_reuses_verified_shard_with_new_recipe_identity(self) -> None:
+        torch = importlib.import_module("torch")
+
+        from deepseek_v4_lowbit.shard_writer import (
+            ResumableSafetensorsWriter,
+            ShardIdentity,
+        )
+
+        source_directory = self.output_directory / "source"
+        candidate_directory = self.output_directory / "candidate"
+        shard_name = "model-00001-of-00001.safetensors"
+        source_writer = ResumableSafetensorsWriter(source_directory)
+        source_receipt = source_writer.write_shard(
+            shard_name,
+            {"weight": torch.ones(1)},
+            ShardIdentity(source_sha256="source-a", recipe_sha256="recipe-a"),
+        )
+        candidate_writer = ResumableSafetensorsWriter(candidate_directory)
+        candidate_identity = ShardIdentity(
+            source_sha256="source-a",
+            recipe_sha256="recipe-b",
+        )
+
+        receipt = candidate_writer.reuse_shard(
+            shard_name,
+            source_receipt,
+            candidate_identity,
+        )
+
+        self.assertEqual(receipt.identity, candidate_identity)
+        self.assertEqual(receipt.output_sha256, source_receipt.output_sha256)
+        self.assertEqual(
+            receipt.output_path.stat().st_ino,
+            source_receipt.output_path.stat().st_ino,
+        )
+        self.assertEqual(
+            candidate_writer.completed_shard(shard_name, candidate_identity),
+            receipt,
+        )
+
     def test_rejects_recipe_change_for_completed_shard(self) -> None:
         torch = importlib.import_module("torch")
 

@@ -89,12 +89,13 @@ It contains 54 files totaling 82,464,249,582 bytes, including 45 model shards.
 This checkpoint requires the experimental integration in
 [`Whamp/vllm#1`](https://github.com/Whamp/vllm/pull/1), based on
 [`haosdent/vllm@12810046c799cbe874967e19b1c0fa134ab7b209`](https://github.com/haosdent/vllm/tree/12810046c799cbe874967e19b1c0fa134ab7b209).
-The canonical source branch is
-[`incubate/deepseek-v4-wna16-sm86`](https://github.com/Whamp/vllm/tree/incubate/deepseek-v4-wna16-sm86).
-Club-3090 retains a
+The tested uniform-artifact runtime is canonical commit
+[`216e5bb15`](https://github.com/Whamp/vllm/commit/216e5bb15b7826e8dca63f0a853f1ee53d49d5fc)
+and the
 [checksum-pinned deployment mirror](https://github.com/Whamp/club-3090/tree/26ae767aa98c14761ac4a69d4f492f418fd29578/models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86).
-Both paths produce the final tested vLLM tree
-`aeb62948e33074514a742d19c2f9a1a3c2ee3e1f`.
+Both produce tested tree `aeb62948e33074514a742d19c2f9a1a3c2ee3e1f`.
+The moving canonical branch now also carries a mixed-projection-group extension;
+that later source is not part of this immutable artifact's accepted image.
 
 The patches provide:
 
@@ -151,7 +152,15 @@ stops at 215,000 tokens.
 
 ## Evaluation and limitations
 
-Available quality evidence consists of:
+This artifact is rejected for coding-agent promotion. On DeepSWE's
+`superjson-error-stack-serialization` task, one run emitted 166 mostly
+repetitive tool calls, made no edits, produced an empty patch, and exhausted the
+65,536-token response limit. Will reproduced the same execution-control
+failure with one worker and no concurrent requests. The stopped single-worker
+turn was not fully persisted, so its recurrence is operator-observed rather
+than independently countable from the saved trace.
+
+Earlier quality evidence remains useful only as smoke evidence:
 
 - the 24-matrix reconstruction-error comparison;
 - deterministic short-generation and parser canaries;
@@ -159,9 +168,9 @@ Available quality evidence consists of:
 - a syntactically correct quicksort response that still added Markdown fencing
   despite an “only code” instruction.
 
-The historical benchlocal quick result is smoke evidence only. The capability
-quality gate will use DeepSWE through `~/evals/deep-swe-bench/`; no broader
-benchlocal run is planned for this path.
+The historical benchlocal quick result did not detect the DeepSWE failure. New
+artifacts must pass the approved single-worker DeepSWE gate before broader
+quality, concurrency, long-context, or performance testing.
 
 No broad comparison against the official checkpoint or Antirez and Unsloth
 GGUF quants has been completed. The context tests prove selected retrieval

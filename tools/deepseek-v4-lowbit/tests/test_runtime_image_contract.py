@@ -18,6 +18,26 @@ _DOCKERFILE = _RUNTIME_PATCH_DIRECTORY / "Dockerfile.runtime-cu130"
 _BUILD_SCRIPT = _RUNTIME_PATCH_DIRECTORY / "build-runtime-image.sh"
 _FINAL_DOCKERFILE = _RUNTIME_PATCH_DIRECTORY / "Dockerfile.final-overlay"
 _FINAL_BUILD_SCRIPT = _RUNTIME_PATCH_DIRECTORY / "build-final-overlay-image.sh"
+_MIXED_GROUP_PATCH_DIRECTORY = (
+    _REPOSITORY_ROOT
+    / "models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-mixed-groups"
+)
+_MIXED_GROUP_RUNTIME_DOCKERFILE = (
+    _MIXED_GROUP_PATCH_DIRECTORY / "Dockerfile.runtime-overlay"
+)
+_MIXED_GROUP_RUNTIME_BUILD_SCRIPT = (
+    _MIXED_GROUP_PATCH_DIRECTORY / "build-runtime-overlay-image.sh"
+)
+_MIXED_GROUP_DOCKERFILE = _MIXED_GROUP_PATCH_DIRECTORY / "Dockerfile.mixed-group-oracle"
+_MIXED_GROUP_BUILD_SCRIPT = (
+    _MIXED_GROUP_PATCH_DIRECTORY / "build-mixed-group-oracle-image.sh"
+)
+_MIXED_GROUP_ORACLE_SCRIPT = (
+    _MIXED_GROUP_PATCH_DIRECTORY / "run-mixed-group-sm86-oracle.sh"
+)
+_MIXED_GROUP_ROLLBACK_SCRIPT = (
+    _MIXED_GROUP_PATCH_DIRECTORY / "run-server60-mixed-group-oracle-with-rollback.sh"
+)
 _FINAL_COMPOSE = (
     _REPOSITORY_ROOT
     / "models/deepseek-v4-flash-0731/vllm/compose/multi4/wna16/base.yml"
@@ -36,6 +56,10 @@ _PATCH_7 = (
 _PATCH_8 = (
     _RUNTIME_PATCH_DIRECTORY
     / "0008-fix-bound-DeepSeek-V4-RoPE-cache-to-runtime-context.patch"
+)
+_PATCH_9 = (
+    _MIXED_GROUP_PATCH_DIRECTORY
+    / "0009-feat-support-mixed-WNA16-MoE-projection-groups.patch"
 )
 _SM86_ORACLE_SCRIPT = _RUNTIME_PATCH_DIRECTORY / "run-sm86-oracle.sh"
 _SERVER60_ROLLBACK_SCRIPT = (
@@ -127,6 +151,62 @@ class RuntimeImageContractTests(unittest.TestCase):
         self.assertIn("status --porcelain --untracked-files=all", script)
         self.assertIn("org.opencontainers.image.revision", script)
         self.assertIn("org.club3090.runtime.base-digest", script)
+
+    def test_mixed_group_runtime_is_isolated_from_promoted_image(self) -> None:
+        dockerfile = _MIXED_GROUP_RUNTIME_DOCKERFILE.read_text(encoding="utf-8")
+        builder = _MIXED_GROUP_RUNTIME_BUILD_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("FROM ${VERIFIED_PRODUCTION_IMAGE}", dockerfile)
+        self.assertEqual(dockerfile.count("COPY "), 1)
+        self.assertIn("compressed_tensors_moe_wna16.py", dockerfile)
+        self.assertIn(
+            'EXPECTED_VLLM_TREE="f73b30cc5a2ed9de200ca2e4de3cdef1a06f6538"',
+            builder,
+        )
+        self.assertIn(
+            'EXPECTED_PRODUCTION_IMAGE_ID="sha256:'
+            '0beb1f0cba2e41837f4ba5af01cc5c4686afde4f40ab1df5147a6ad945b0af1f"',
+            builder,
+        )
+        self.assertIn(
+            "org.club3090.runtime.scope=mixed-projection-groups-candidate",
+            builder,
+        )
+        self.assertNotIn("docker compose", builder)
+
+    def test_mixed_group_oracle_image_is_acceptance_only(self) -> None:
+        dockerfile = _MIXED_GROUP_DOCKERFILE.read_text(encoding="utf-8")
+        builder = _MIXED_GROUP_BUILD_SCRIPT.read_text(encoding="utf-8")
+        oracle = _MIXED_GROUP_ORACLE_SCRIPT.read_text(encoding="utf-8")
+        rollback = _MIXED_GROUP_ROLLBACK_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("FROM ${VERIFIED_PRODUCTION_IMAGE}", dockerfile)
+        self.assertEqual(dockerfile.count("COPY tests/"), 2)
+        self.assertIn("compressed_tensors_moe_wna16.py", dockerfile)
+        self.assertIn(
+            'EXPECTED_ACCEPTANCE_TREE="f73b30cc5a2ed9de200ca2e4de3cdef1a06f6538"',
+            builder,
+        )
+        self.assertIn(
+            'EXPECTED_PRODUCTION_IMAGE_ID="sha256:'
+            '0beb1f0cba2e41837f4ba5af01cc5c4686afde4f40ab1df5147a6ad945b0af1f"',
+            builder,
+        )
+        self.assertIn("org.club3090.runtime.scope=mixed-group-oracle-only", builder)
+        self.assertIn("test_humming_wna16_grouped_indexed_numerical_oracle", oracle)
+        for oracle_case in (
+            "w2-g128-g128",
+            "w2-g256-g128",
+            "w2-g512-g256",
+            "w2-g512-g512",
+            "w4-g512-g128",
+            "w4-g512-g256",
+            "w4-g512-g512",
+        ):
+            self.assertIn(oracle_case, oracle)
+        self.assertIn("sm_86", oracle)
+        self.assertIn("require_promoted_service_health", rollback)
+        self.assertIn("trap finish_server60_mixed_group_oracle EXIT", rollback)
+        self.assertIn('--env-file "$COMPOSE_ENV_FILE"', rollback)
+        self.assertIn("restore_promoted_service", rollback)
 
     def test_full_runtime_builder_pins_fresh_host_contract(self) -> None:
         script = _BUILD_SCRIPT.read_text(encoding="utf-8")
@@ -272,6 +352,20 @@ class RuntimeImageContractTests(unittest.TestCase):
                     materializer.materialize_runtime_model_view(
                         artifact, root / "runtime-model"
                     )
+
+    def test_mixed_group_oracle_patch_is_checksum_pinned(self) -> None:
+        self.assertEqual(
+            hashlib.sha256(_PATCH_9.read_bytes()).hexdigest(),
+            "48095e6d336f6f852d699ddce74e1c192c4b0c9f9bee566e56a15478a95b1def",
+        )
+        readme = (_MIXED_GROUP_PATCH_DIRECTORY / "README.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "48095e6d336f6f852d699ddce74e1c192c4b0c9f9bee566e56a15478a95b1def"
+            "  0009-feat-support-mixed-WNA16-MoE-projection-groups.patch",
+            readme,
+        )
 
     def test_hybrid_fp8_loader_patch_is_checksum_pinned(self) -> None:
         self.assertEqual(

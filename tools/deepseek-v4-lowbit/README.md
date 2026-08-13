@@ -9,19 +9,29 @@ The planner reads captured safetensors headers without loading model weights. It
 - preserves non-MTP, non-routed-expert tensors byte-for-byte;
 - omits every `mtp.*` tensor;
 - replaces routed-expert `w1`, `w3`, and `w2` weights and source scales
-  with symmetric group-size-128 Humming WNA16 weights, FP16 scales, and INT64
-  logical-shape tensors;
-- supports one `w13` bit width and one `w2` bit width per layer; and
+  with symmetric Humming WNA16 weights, FP16 scales, and INT64 logical-shape
+  tensors;
+- supports separate `w13` and `w2` bit widths and group sizes per layer, with
+  group sizes 128, 256, and 512; and
 - rejects dimensions that the pinned vLLM Humming loader cannot pack.
 
 Create a recipe such as:
 
 ```json
 {
-  "default": {"w13_bits": 2, "w2_bits": 2},
+  "default": {
+    "w13_bits": 2,
+    "w2_bits": 2,
+    "w13_group_size": 512,
+    "w2_group_size": 256
+  },
   "layers": {
-    "26": {"w13_bits": 4, "w2_bits": 4},
-    "42": {"w13_bits": 2, "w2_bits": 4}
+    "26": {
+      "w13_bits": 2,
+      "w2_bits": 4,
+      "w13_group_size": 128,
+      "w2_group_size": 128
+    }
   }
 }
 ```
@@ -58,7 +68,12 @@ with ImatrixFile.open(Path("routed-moe-imatrix.dat")) as imatrix:
     )
 ```
 
-The parser contract follows `antirez/ds4@84cc882352757baf628a1776badf7cc54d584e28`. The published imatrix itself still needs a direct checksum and full-geometry check when staged for the pilot.
+The parser contract follows
+`antirez/ds4@84cc882352757baf628a1776badf7cc54d584e28`. Frontier runs pin
+`antirez/deepseek-v4-gguf@e7f04037032990db0346398d249baf9fb9df1ccc`
+and require imatrix SHA-256
+`02a7c78c29875e4653d6ce21d8821c02161e83ed90c506bdd8d275f76d4ac97e`
+plus the complete 43-layer geometry.
 
 ## Quantizer comparison
 
@@ -177,11 +192,79 @@ For an imatrix-weighted run, use `--quantizer imatrix-weighted-rtn --imatrix /du
 - copies tokenizer, model-code, and other non-weight assets atomically; and
 - writes `conversion-metrics.json` from metrics retained in shard receipts.
 
-The transform recipe checksum includes layer bits, group size, quantizer, imatrix checksum, compute device, and pinned AutoRound/compressed-tensors revisions. Resume fails closed if any of these change.
+The transform recipe checksum includes per-layer projection bits and group
+sizes, quantizer, imatrix checksum, compute device, and pinned
+AutoRound/compressed-tensors revisions. Resume fails closed if any of these
+change.
 
 After a Hugging Face upload, `deepseek-v4-verify-upload LOCAL_DIRECTORY REPOSITORY REPORT` compares the exact local and remote inventories. It verifies LFS/Xet objects with content SHA-256, ordinary files with their Git blob SHA-1, and byte sizes for every file; only Hub-managed `.gitattributes` may be extra. A successful upload command alone is not sufficient evidence for deleting the rental.
 
 `rental/run-verda-full-conversion.sh QUANTIZER [RENTAL_ROOT] [HF_REPOSITORY]` is the corresponding resumable full-run entry point. `QUANTIZER` must be the explicit pilot decision (`plain-rtn` or `imatrix-weighted-rtn`); the script does not choose by threshold. It requires the completed 48-candidate pilot report, A100 compute capability 8.0, at least 260 GiB free on the `RENTAL_ROOT` filesystem, and `HF_TOKEN` in the environment before downloading the remaining checkpoint. The token must grant `repo.write` to the target namespace, and the existing target repository must be private. An ambient read-only token can shadow a stored upload credential, so verify the exact transferred environment token. The script creates one all-W2, MTP-free artifact, uploads it privately, and runs `deepseek-v4-verify-upload`. Copy rental scripts outside the source checkout before execution because they deliberately replace that checkout with pinned revisions.
+
+## Projection-sensitive frontier
+
+The uniform all-W2/group-128 artifact failed the intended coding-agent workload.
+The replacement frontier keeps W2 and WNA16 but treats gate/up and down
+projections separately. `deepseek-v4-run-frontier-screen` gathers independent
+`w13` and `w2` reconstruction evidence. `deepseek-v4-build-frontier-recipes`
+then applies two quality priors before measured byte allocation:
+
+- down group size may never be coarser than gate/up;
+- layers 26 and 42 anchor W4 down in `balanced`, while layers 37–42 anchor W4
+  down in `quality`.
+
+For the exact 72,317-tensor source header capture, the four bounded recipes are:
+
+| Candidate | Modeled payload | Protected pattern |
+| --- | ---: | --- |
+| `cliff` | 74.238934 GiB | W2, coarse gate/up, finer down |
+| `capacity` | 74.863934 GiB | W2/group-128 down throughout |
+| `balanced` | 76.238934 GiB | W4 down at layers 26 and 42 |
+| `quality` | 78.738934 GiB | W4 down at layer 26 and layers 37–42 |
+
+The generated `config.json`, candidate manifest, and model card pin
+`Whamp/vllm@dd2d1fd6779addccc73094f77fa4ada7d9106a41`, required tree
+`f73b30cc5a2ed9de200ca2e4de3cdef1a06f6538`. This runtime is not promoted. It
+must first pass the rollback-wrapped seven-case SM86 numerical/cubin oracle in
+`models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-mixed-groups/`.
+
+`rental/run-verda-frontier-host.sh` is the bounded host orchestrator. Its guarded
+default is one on-demand `2A100.44V` in FIN-01 with 2× A100 80 GB, 240 GB host
+RAM, a 350 GiB boot volume, and Ubuntu 24.04 CUDA 13.0. The 2026-08-13 dry run
+measured $3.6759/hour including storage, or $29.4072 for the eight-hour cap,
+against a $31.64546 balance. The orchestrator rechecks live price, balance,
+capacity, image, and SSH key before every create call; records exact VM and
+volume IDs; arms a persistent deletion watchdog before provisioning; and proves
+zero VMs, zero volumes, and zero running cost after completion.
+`VERDA_FRONTIER_DRY_RUN=1` performs those checks without creating resources.
+The host exports `VERDA_PROFILE` from `VERDA_FRONTIER_PROFILE`, which defaults
+to `main`; it never mutates the active profile with `auth use`. Using another
+profile is an explicit budget decision, not an automatic fallback. The host
+accepts completion only after the remote process exits and an atomic receipt
+binds the candidate revision to the final publication report hash.
+The remote runner pins `HF_HOME`, `HF_HUB_CACHE`, and `HF_XET_CACHE` under the
+rental root, disables the Xet chunk cache, and aborts if residual Hugging Face
+cache data exceeds 2 GiB after source download.
+
+Each rental campaign names exactly one candidate through
+`VERDA_FRONTIER_CANDIDATE`; the default and first candidate is `quality`. The
+remote runner captures source provenance, screens all routed experts, builds
+the complete recipe bundle, converts only the selected candidate, publishes it
+as a one-commit branch directly over immutable parent revision
+`75d9286c37f3037f3ab390cfbc10747466eac714`, independently verifies its remote
+inventory and branch history, and only then deletes local candidate bytes. A
+failed verification preserves local output. Do not generate the remaining
+ladder before the selected artifact passes the approved one-worker DeepSWE
+`superjson-error-stack-serialization` gate. That gate requires
+`Whamp/deep-swe-bench@4645f56d14137ed0e1aa409aee0d60e59215150e` with the
+confirmed-plan `coding-agent-early-gate-v1` watchdog profile; the exact plan
+identity still requires approval before execution.
+
+The copied rental runner refuses to execute while
+`CLUB_3090_REVISION` is unpinned. Publish and checksum-pin the exact source
+revision before provisioning. An ambient `HF_TOKEN` can shadow the intended
+stored credential; the runner verifies namespace write access without printing
+the token.
 
 ## W3 constraint
 

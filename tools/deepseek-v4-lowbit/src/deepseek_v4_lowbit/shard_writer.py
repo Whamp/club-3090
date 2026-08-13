@@ -71,6 +71,49 @@ class ResumableSafetensorsWriter:
         self._verify_receipt(receipt, identity)
         return receipt
 
+    def reuse_shard(
+        self,
+        shard_name: str,
+        source_receipt: ShardReceipt,
+        identity: ShardIdentity,
+    ) -> ShardReceipt:
+        """Hardlink a verified shard under a new whole-artifact recipe identity."""
+        shard_name = _validate_shard_name(shard_name)
+        self._require_receipt_shard(source_receipt, shard_name)
+        self._verify_external_receipt(source_receipt)
+        completed = self.completed_shard(shard_name, identity)
+        if completed is not None:
+            return completed
+
+        output_path = self._output_path(shard_name)
+        partial_receipt_path = self._partial_receipt_path(shard_name)
+        if output_path.exists():
+            raise ResumeConflictError(
+                f"output shard {shard_name} exists without a verifiable receipt"
+            )
+        partial_receipt_path.unlink(missing_ok=True)
+        try:
+            os.link(source_receipt.output_path, output_path)
+        except OSError as error:
+            raise ResumeConflictError(
+                f"cannot hardlink reusable shard {shard_name}; candidate outputs "
+                "must share a filesystem"
+            ) from error
+        _sync_directory(self.output_directory)
+        receipt = ShardReceipt(
+            shard_name=shard_name,
+            identity=identity,
+            output_path=output_path,
+            output_sha256=source_receipt.output_sha256,
+            output_bytes=source_receipt.output_bytes,
+            tensors=source_receipt.tensors,
+            metadata=source_receipt.metadata,
+        )
+        _write_json_atomic_target(partial_receipt_path, _receipt_payload(receipt))
+        os.replace(partial_receipt_path, self._receipt_path(shard_name))
+        _sync_directory(self.receipt_directory)
+        return receipt
+
     def write_shard(
         self,
         shard_name: str,
@@ -208,7 +251,16 @@ class ResumableSafetensorsWriter:
 
     def _verify_output(self, receipt: ShardReceipt) -> None:
         expected_path = self._output_path(receipt.shard_name)
-        if receipt.output_path != expected_path or not expected_path.is_file():
+        if receipt.output_path != expected_path:
+            raise ResumeConflictError(
+                f"output shard {receipt.shard_name} is missing or moved"
+            )
+        self._verify_external_receipt(receipt)
+
+    @staticmethod
+    def _verify_external_receipt(receipt: ShardReceipt) -> None:
+        expected_path = receipt.output_path
+        if not expected_path.is_file():
             raise ResumeConflictError(
                 f"output shard {receipt.shard_name} is missing or moved"
             )

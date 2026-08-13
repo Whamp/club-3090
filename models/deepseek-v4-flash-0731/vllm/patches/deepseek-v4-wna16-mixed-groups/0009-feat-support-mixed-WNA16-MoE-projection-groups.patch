@@ -1,0 +1,361 @@
+From dd2d1fd6779addccc73094f77fa4ada7d9106a41 Mon Sep 17 00:00:00 2001
+From: Will Hampson <whamp@ggl.slmail.me>
+Date: Thu, 13 Aug 2026 08:25:18 -0700
+Subject: [PATCH] feat: support mixed WNA16 MoE projection groups
+
+Signed-off-by: Will Hampson <whamp@ggl.slmail.me>
+---
+ tests/kernels/moe/test_moe.py                 | 83 +++++++++++++++----
+ .../models/test_deepseek_v4_weight_mapper.py  | 37 +++++++++
+ tests/quantization/test_compressed_tensors.py | 45 +++++++++-
+ .../compressed_tensors_moe_wna16.py           | 35 ++++----
+ 4 files changed, 164 insertions(+), 36 deletions(-)
+
+diff --git a/tests/kernels/moe/test_moe.py b/tests/kernels/moe/test_moe.py
+index 43fe6f5ee..698f4fb48 100644
+--- a/tests/kernels/moe/test_moe.py
++++ b/tests/kernels/moe/test_moe.py
+@@ -1186,6 +1186,7 @@ def _make_humming_indexed_experts(
+     activation: MoEActivation,
+     *,
+     weight_schema: Any = None,
++    weight_schemas: dict[str, Any] | None = None,
+     tensor_factory: Callable[..., torch.Tensor] | None = None,
+     top_k: int = 6,
+     num_experts: int = 12,
+@@ -1218,7 +1219,12 @@ def _make_humming_indexed_experts(
+         ("w13", gate_up_size, hidden_size, num_w13_stacks),
+         ("w2", hidden_size, intermediate_size, 1),
+     ):
+-        tensor_attrs = weight_schema.get_tensors_attrs(
++        sublayer_weight_schema = (
++            weight_schemas.get(sublayer_name, weight_schema)
++            if weight_schemas is not None
++            else weight_schema
++        )
++        tensor_attrs = sublayer_weight_schema.get_tensors_attrs(
+             shape_n=shape_n,
+             shape_k=shape_k,
+             param_dtype=layer.params_dtype,
+@@ -1228,6 +1234,7 @@ def _make_humming_indexed_experts(
+         for tensor_name, attrs in tensor_attrs.items():
+             tensor = (
+                 tensor_factory(
++                    sublayer_name=sublayer_name,
+                     tensor_name=tensor_name,
+                     attrs=attrs,
+                     shape_n=shape_n,
+@@ -1249,6 +1256,7 @@ def _make_humming_indexed_experts(
+     humming_utils.convert_to_humming_moe_kernel_format(
+         layer,
+         weight_schema=weight_schema,
++        weight_schemas=weight_schemas,
+         input_schema=humming.HummingInputSchema(a_dtype=humming.dtypes.bfloat16),
+     )
+ 
+@@ -1366,22 +1374,52 @@ def test_humming_indexed_writes_supplied_output_buffer():
+ 
+ 
+ @pytest.mark.skipif(not current_platform.is_cuda(), reason="Requires CUDA")
+-def test_humming_w2_group128_indexed_numerical_oracle():
++@pytest.mark.parametrize(
++    ("w13_group_size", "w2_group_size", "down_bits"),
++    [
++        (128, 128, 2),
++        (256, 128, 2),
++        (512, 256, 2),
++        (512, 512, 2),
++        (512, 128, 4),
++        (512, 256, 4),
++        (512, 512, 4),
++    ],
++    ids=[
++        "w2-g128-g128",
++        "w2-g256-g128",
++        "w2-g512-g256",
++        "w2-g512-g512",
++        "w4-g512-g128",
++        "w4-g512-g256",
++        "w4-g512-g512",
++    ],
++)
++def test_humming_wna16_grouped_indexed_numerical_oracle(
++    w13_group_size, w2_group_size, down_bits
++):
+     from vllm.forward_context import set_forward_context
+     from vllm.utils import humming
+ 
+     weight_scale = 2**-10
+-    weight_schema = humming.CompressedTensorsWeightSchema(
+-        format="pack-quantized",
+-        type="int",
+-        num_bits=2,
+-        strategy="group",
+-        symmetric=True,
+-        group_size=128,
+-    )
++    weight_schemas = {
++        sublayer_name: humming.CompressedTensorsWeightSchema(
++            format="pack-quantized",
++            type="int",
++            num_bits=bits,
++            strategy="group",
++            symmetric=True,
++            group_size=group_size,
++        )
++        for sublayer_name, bits, group_size in (
++            ("w13", 2, w13_group_size),
++            ("w2", down_bits, w2_group_size),
++        )
++    }
+ 
+     def make_positive_unit_weights(
+         *,
++        sublayer_name: str,
+         tensor_name: str,
+         attrs: dict[str, Any],
+         shape_n: int,
+@@ -1389,10 +1427,14 @@ def test_humming_w2_group128_indexed_numerical_oracle():
+         num_experts: int,
+     ) -> torch.Tensor:
+         if tensor_name == "weight_packed":
+-            # Compressed-tensors offsets signed W2 code +1 to uint2 code 3.
++            # Compressed-tensors offsets signed codes into unsigned lanes.
++            # W2 +1 is lane 0b11; W4 +1 is lane 0b1001.
++            packed_positive_one = -1 if sublayer_name == "w13" else -1717986919
++            if sublayer_name == "w2" and down_bits == 2:
++                packed_positive_one = -1
+             return torch.full(
+                 attrs["shape"],
+-                -1,
++                packed_positive_one,
+                 dtype=attrs["dtype"],
+                 device="cuda",
+             )
+@@ -1413,19 +1455,26 @@ def test_humming_w2_group128_indexed_numerical_oracle():
+     activation = MoEActivation.SILU
+     experts = _make_humming_indexed_experts(
+         activation,
+-        weight_schema=weight_schema,
++        weight_schemas=weight_schemas,
+         tensor_factory=make_positive_unit_weights,
+         top_k=2,
+         num_experts=4,
+         hidden_size=512,
+-        intermediate_size=256,
++        intermediate_size=512,
+     )
+     layer = experts.layer
+-    for sublayer_name in ("w13", "w2"):
++    for sublayer_name, expected_dtype, expected_group_size in (
++        ("w13", humming.dtypes.uint2, w13_group_size),
++        (
++            "w2",
++            humming.dtypes.uint2 if down_bits == 2 else humming.dtypes.uint4,
++            w2_group_size,
++        ),
++    ):
+         meta = layer.humming_metas[sublayer_name]
+         assert meta.a_dtype == humming.dtypes.bfloat16
+-        assert meta.b_dtype == humming.dtypes.uint2
+-        assert meta.weight_scale_group_size == 128
++        assert meta.b_dtype == expected_dtype
++        assert meta.weight_scale_group_size == expected_group_size
+ 
+     num_tokens = 4
+     top_k = experts.moe_config.experts_per_token
+diff --git a/tests/models/test_deepseek_v4_weight_mapper.py b/tests/models/test_deepseek_v4_weight_mapper.py
+index 3d17039cb..aa98c618c 100644
+--- a/tests/models/test_deepseek_v4_weight_mapper.py
++++ b/tests/models/test_deepseek_v4_weight_mapper.py
+@@ -66,6 +66,43 @@ def test_hybrid_config_delegates_only_routed_experts(monkeypatch) -> None:
+     assert method is delegated_method
+ 
+ 
++def test_hybrid_config_resolves_projection_specific_group_sizes(monkeypatch) -> None:
++    from vllm.models.deepseek_v4 import quant_config as quant_config_module
++
++    class FakeRoutedExperts:
++        moe_config = object()
++
++    monkeypatch.setattr(quant_config_module, "RoutedExperts", FakeRoutedExperts)
++    config_payload = _hybrid_quantization_config()
++    gate_group = config_payload["config_groups"]["experts"]
++    gate_group["targets"] = [
++        "model.layers.0.ffn.experts.0.gate_proj",
++        "model.layers.0.ffn.experts.0.up_proj",
++    ]
++    gate_group["weights"]["group_size"] = 512
++    config_payload["config_groups"]["down"] = {
++        **gate_group,
++        "targets": ["model.layers.0.ffn.experts.0.down_proj"],
++        "weights": {**gate_group["weights"], "group_size": 128},
++    }
++
++    config = DeepseekV4FP8Config.from_config(config_payload)
++    compressed_config = config._compressed_tensors_config
++    assert compressed_config is not None
++    gate = compressed_config.get_scheme_dict(
++        FakeRoutedExperts(),
++        "model.layers.0.ffn.experts.0.gate_proj",
++    )
++    down = compressed_config.get_scheme_dict(
++        FakeRoutedExperts(),
++        "model.layers.0.ffn.experts.0.down_proj",
++    )
++
++    assert gate is not None and down is not None
++    assert gate["weights"].group_size == 512
++    assert down["weights"].group_size == 128
++
++
+ def test_hybrid_mapper_keeps_native_fp8_linear_scale_name() -> None:
+     mapper = _make_deepseek_v4_weights_mapper("fp4")
+ 
+diff --git a/tests/quantization/test_compressed_tensors.py b/tests/quantization/test_compressed_tensors.py
+index 3437dae70..7a0f82397 100644
+--- a/tests/quantization/test_compressed_tensors.py
++++ b/tests/quantization/test_compressed_tensors.py
+@@ -1064,10 +1064,53 @@ def test_compressed_tensors_moe_allocates_separate_w13_w2_bit_widths(monkeypatch
+     assert method.get_weight_shape("w2_weight", 1, 128, 128) == (1, 128, 16)
+ 
+ 
++def test_compressed_tensors_moe_allocates_projection_group_scales(monkeypatch):
++    from vllm.model_executor.layers.fused_moe.oracle.int_wna16 import WNA16MoEBackend
++    from vllm.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa: E501
++        compressed_tensors_moe_wna16 as wna16_module,
++    )
++
++    def quant_args(group_size):
++        return QuantizationArgs(
++            num_bits=2,
++            type=QuantizationType.INT,
++            strategy=QuantizationStrategy.GROUP,
++            symmetric=True,
++            dynamic=False,
++            group_size=group_size,
++        )
++
++    monkeypatch.setattr(
++        wna16_module,
++        "select_wna16_moe_backend",
++        lambda **_kwargs: (WNA16MoEBackend.HUMMING, object),
++    )
++    method = wna16_module.CompressedTensorsWNA16MoEMethod(
++        quant_args(512),
++        None,
++        Mock(is_act_and_mul=True),
++        w2_weight_quant=quant_args(128),
++    )
++    layer = torch.nn.Module()
++
++    method.create_weights(
++        layer,
++        num_experts=2,
++        hidden_size=512,
++        intermediate_size_per_partition=512,
++        intermediate_size_full=512,
++        params_dtype=torch.bfloat16,
++    )
++
++    assert layer.w13_weight_scale.shape == (2, 1024, 1)
++    assert layer.w2_weight_scale.shape == (2, 512, 4)
++    assert method.w13_group_size == 512
++    assert method.w2_group_size == 128
++
++
+ @pytest.mark.parametrize(
+     "w2_bits,w2_group_size,backend,error_match",
+     [
+-        (2, 64, "HUMMING", "same group size"),
+         (4, 128, "MARLIN", "requires the Humming backend"),
+     ],
+ )
+diff --git a/vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe_wna16.py b/vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe_wna16.py
+index 7ae593e86..f7cf597b0 100644
+--- a/vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe_wna16.py
++++ b/vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe_wna16.py
+@@ -77,7 +77,9 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
+         self.w2_packed_factor = 32 // self.w2_weight_quant.num_bits
+         self.packed_factor = self.w13_packed_factor
+         self.strategy = weight_quant.strategy
+-        self.group_size = weight_quant.group_size
++        self.w13_group_size = self.w13_weight_quant.group_size
++        self.w2_group_size = self.w2_weight_quant.group_size
++        self.group_size = self.w13_group_size
+         self.actorder = weight_quant.actorder
+ 
+         # Extract quant_type and create weight key for oracle selection
+@@ -124,10 +126,6 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
+         )
+ 
+         if self.has_projection_specific_quant:
+-            if self.w13_weight_quant.group_size != self.w2_weight_quant.group_size:
+-                raise ValueError(
+-                    "Mixed WNA16 MoE projections must use the same group size."
+-                )
+             shared_layout_fields = ("type", "strategy", "symmetric", "actorder")
+             if any(
+                 getattr(self.w13_weight_quant, field)
+@@ -135,7 +133,8 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
+                 for field in shared_layout_fields
+             ):
+                 raise ValueError(
+-                    "Mixed WNA16 MoE projections may differ only in bit width."
++                    "Mixed WNA16 MoE projections may differ only in bit width "
++                    "and group size."
+                 )
+             if self.wna16_backend != WNA16MoEBackend.HUMMING:
+                 raise ValueError(
+@@ -328,36 +327,36 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
+ 
+         load_full_w2, w2_scales_size, self.is_k_full = self._w2_scale_sharding(
+             self.actorder,
+-            self.group_size,
++            self.w2_group_size,
+             intermediate_size_per_partition,
+             intermediate_size_full,
+         )
+ 
+         if self.strategy == "channel":
+             num_groups_w2 = num_groups_w13 = 1
+-            self.group_size = -1
++            self.w13_group_size = self.w2_group_size = self.group_size = -1
+         else:
+-            if hidden_size % self.group_size != 0:
++            if hidden_size % self.w13_group_size != 0:
+                 raise ValueError(
+-                    "CompressedTensors WNA16 MoE requires hidden_size "
+-                    f"({hidden_size}) to be divisible by group_size "
+-                    f"({self.group_size})."
++                    "CompressedTensors WNA16 MoE gate/up hidden_size "
++                    f"({hidden_size}) must be divisible by w13 group size "
++                    f"({self.w13_group_size})."
+                 )
+             if (
+                 not load_full_w2
+-                and intermediate_size_per_partition % self.group_size != 0
++                and intermediate_size_per_partition % self.w2_group_size != 0
+             ):
+                 raise ValueError(
+-                    "CompressedTensors WNA16 MoE with static group "
+-                    "scales requires the MoE intermediate size per "
++                    "CompressedTensors WNA16 MoE down-projection static group "
++                    "scales require the MoE intermediate size per "
+                     "tensor-parallel partition "
+                     f"({intermediate_size_per_partition}) to be divisible by "
+-                    f"group_size ({self.group_size}). Scale groups would "
++                    f"w2 group size ({self.w2_group_size}). Scale groups would "
+                     "otherwise cross TP shard boundaries; use a compatible TP "
+                     "size or enable expert parallelism."
+                 )
+-            num_groups_w2 = w2_scales_size // self.group_size
+-            num_groups_w13 = hidden_size // self.group_size
++            num_groups_w2 = w2_scales_size // self.w2_group_size
++            num_groups_w13 = hidden_size // self.w13_group_size
+ 
+         layer.num_groups_w13 = num_groups_w13
+         layer.num_groups_w2 = num_groups_w2
+-- 
+2.55.0
+

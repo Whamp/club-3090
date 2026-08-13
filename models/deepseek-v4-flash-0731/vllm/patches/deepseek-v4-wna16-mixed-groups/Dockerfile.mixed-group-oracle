@@ -1,0 +1,12 @@
+# syntax=docker/dockerfile:1.7
+ARG VERIFIED_PRODUCTION_IMAGE
+FROM ${VERIFIED_PRODUCTION_IMAGE}
+
+COPY vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe_wna16.py \
+    /workspace/vllm/vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe_wna16.py
+COPY tests/kernels/moe/test_moe.py \
+    /workspace/vllm/tests/kernels/moe/test_moe.py
+COPY tests/models/test_deepseek_v4_weight_mapper.py \
+    /workspace/vllm/tests/models/test_deepseek_v4_weight_mapper.py
+
+ENTRYPOINT ["/bin/bash"]

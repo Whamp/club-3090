@@ -89,6 +89,95 @@ class ArtifactPlanTests(unittest.TestCase):
 
         self.assertEqual(plan.quantized_weight_bytes, 384)
 
+    def test_layer_group_size_override_changes_scale_storage(self) -> None:
+        recipe = ArtifactRecipe(
+            default=LayerQuantization(w13_bits=2, w2_bits=2),
+            layers={
+                0: LayerQuantization(
+                    w13_bits=2,
+                    w2_bits=2,
+                    group_size=64,
+                )
+            },
+        )
+
+        plan = plan_artifact(self.headers, recipe, group_size=32)
+
+        # Three matrices contain eight output rows total. Group-64 stores
+        # two FP16 scales per row instead of four at the group-32 fallback.
+        self.assertEqual(plan.quantized_scale_bytes, 32)
+
+    def test_projection_group_sizes_change_scale_storage_independently(self) -> None:
+        recipe = ArtifactRecipe(
+            default=LayerQuantization(
+                w13_bits=2,
+                w2_bits=2,
+                w13_group_size=64,
+                w2_group_size=32,
+            )
+        )
+
+        plan = plan_artifact(self.headers, recipe, group_size=128)
+
+        # Gate/up each store two groups for two rows; down stores four groups
+        # for four rows. Every scale is FP16.
+        self.assertEqual(plan.quantized_scale_bytes, 48)
+
+    def test_loads_optional_per_layer_group_sizes(self) -> None:
+        recipe_path = Path(self.temp_dir.name) / "recipe.json"
+        recipe_path.write_text(
+            json.dumps(
+                {
+                    "default": {
+                        "w13_bits": 2,
+                        "w2_bits": 2,
+                        "group_size": 512,
+                    },
+                    "layers": {
+                        "26": {
+                            "w13_bits": 2,
+                            "w2_bits": 4,
+                            "group_size": 128,
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        from deepseek_v4_lowbit.artifact_plan import load_artifact_recipe
+
+        recipe = load_artifact_recipe(recipe_path)
+
+        self.assertEqual(recipe.group_size_for(0, "w1", fallback=256), 512)
+        self.assertEqual(recipe.group_size_for(0, "w2", fallback=256), 512)
+        self.assertEqual(recipe.group_size_for(26, "w1", fallback=256), 128)
+        self.assertEqual(recipe.group_size_for(26, "w2", fallback=256), 128)
+
+    def test_loads_projection_specific_group_sizes(self) -> None:
+        recipe_path = Path(self.temp_dir.name) / "projection-recipe.json"
+        recipe_path.write_text(
+            json.dumps(
+                {
+                    "default": {
+                        "w13_bits": 2,
+                        "w2_bits": 2,
+                        "w13_group_size": 512,
+                        "w2_group_size": 128,
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        from deepseek_v4_lowbit.artifact_plan import load_artifact_recipe
+
+        recipe = load_artifact_recipe(recipe_path)
+
+        self.assertEqual(recipe.group_size_for(0, "w1", fallback=256), 512)
+        self.assertEqual(recipe.group_size_for(0, "w3", fallback=256), 512)
+        self.assertEqual(recipe.group_size_for(0, "w2", fallback=256), 128)
+
     def test_rejects_w3_when_runtime_dimension_is_not_packable(self) -> None:
         recipe = ArtifactRecipe(default=LayerQuantization(w13_bits=3, w2_bits=2))
 

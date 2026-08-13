@@ -245,6 +245,7 @@ def _write_metrics_report(
                     {
                         "tensor_name": metric.tensor_name,
                         "bits": metric.bits,
+                        "group_size": metric.group_size,
                         "unweighted_error": metric.unweighted_error,
                         "weighted_error": metric.weighted_error,
                     }
@@ -259,6 +260,12 @@ def _write_metrics_report(
             "shards": shards,
         },
     )
+
+
+# Reuse seams for frontier conversion. Keep the original private names so
+# existing callers and structural checks retain their established contract.
+materialize_converted_model_assets = _materialize_model_assets
+write_conversion_metrics_report = _write_metrics_report
 
 
 def _copy_file_atomic(source: Path, destination: Path) -> None:

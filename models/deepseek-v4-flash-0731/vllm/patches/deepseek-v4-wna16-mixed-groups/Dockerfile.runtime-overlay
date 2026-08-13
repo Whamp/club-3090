@@ -1,0 +1,6 @@
+# syntax=docker/dockerfile:1.7
+ARG VERIFIED_PRODUCTION_IMAGE
+FROM ${VERIFIED_PRODUCTION_IMAGE}
+
+COPY vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe_wna16.py \
+    /workspace/vllm/vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe_wna16.py

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -107,6 +108,7 @@ class SourceShardTransformTests(unittest.TestCase):
             self.assertFalse(result.resumed)
             self.assertEqual(len(result.metrics), 1)
             self.assertEqual(result.metrics[0].tensor_name, weight_name)
+            self.assertEqual(result.metrics[0].group_size, 16)
             self.assertEqual(
                 set(output),
                 {
@@ -130,6 +132,24 @@ class SourceShardTransformTests(unittest.TestCase):
             )
             self.assertTrue(resumed.resumed)
             self.assertEqual(resumed.metrics, result.metrics)
+
+            receipt_path = (
+                output_directory
+                / ".conversion-state"
+                / "receipts"
+                / "model-00001-of-00001.safetensors.json"
+            )
+            receipt_payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+            del receipt_payload["metadata"]["transform_metrics"][0]["group_size"]
+            receipt_path.write_text(json.dumps(receipt_payload), encoding="utf-8")
+            legacy_resumed = transform_source_shard(
+                source_path,
+                "model-00001-of-00001.safetensors",
+                writer=writer,
+                recipe=recipe,
+                options=options,
+            )
+            self.assertEqual(legacy_resumed.metrics[0].group_size, 16)
 
     @unittest.skipUnless(
         _HAS_FULL_TOOLCHAIN,

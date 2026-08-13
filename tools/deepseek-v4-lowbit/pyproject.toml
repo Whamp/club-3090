@@ -12,6 +12,15 @@ deepseek-v4-summarize-pilot = "deepseek_v4_lowbit.pilot_report_summary:main"
 deepseek-v4-validate-pilot = "deepseek_v4_lowbit.pilot_handoff:main"
 deepseek-v4-verify-upload = "deepseek_v4_lowbit.artifact_upload_verifier:main"
 deepseek-v4-plan = "deepseek_v4_lowbit.plan_cli:main"
+deepseek-v4-capture-source-headers = "deepseek_v4_lowbit.source_headers_cli:main"
+deepseek-v4-screen-frontier = "deepseek_v4_lowbit.frontier_screen_cli:main"
+deepseek-v4-run-frontier-screen = "deepseek_v4_lowbit.frontier_campaign_cli:main"
+deepseek-v4-build-frontier-recipes = "deepseek_v4_lowbit.frontier_recipe_cli:main"
+deepseek-v4-select-frontier-boundaries = "deepseek_v4_lowbit.frontier_boundary_cli:main"
+deepseek-v4-screen-frontier-full = "deepseek_v4_lowbit.frontier_full_screen_cli:main"
+deepseek-v4-convert-frontier = "deepseek_v4_lowbit.frontier_convert_cli:main"
+deepseek-v4-run-frontier-batch = "deepseek_v4_lowbit.frontier_batch_cli:main"
+deepseek-v4-publish-frontier = "deepseek_v4_lowbit.frontier_publish_cli:main"
 
 [build-system]
 requires = ["hatchling"]

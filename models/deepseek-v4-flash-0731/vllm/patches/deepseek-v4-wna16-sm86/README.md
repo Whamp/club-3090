@@ -9,9 +9,9 @@ DeepSeek V4 Flash W2A16 artifact. The patches apply only to
 `dsv4-flash-a100`.
 
 The haosdent fork owns the selected SM8x DeepSeek V4 attention, cache, indexer,
-MHC, and model-dispatch integration. Develop and review the eight downstream
-vLLM changes in `Whamp/vllm`; refresh this mirror only when that canonical
-branch changes.
+MHC, and model-dispatch integration. This directory freezes the eight changes
+in the promoted runtime. Later canonical changes live behind separate sibling
+extensions until they pass their own acceptance gates.
 
 ## Contents
 
@@ -70,9 +70,10 @@ f4dec6b898ec327a06b8bd85841ad9e662eb9be7ab59a6cd3a75f60e4c0bc672  0007-fix-gate-
 ```
 
 The expected final Git tree is
-`aeb62948e33074514a742d19c2f9a1a3c2ee3e1f`. The canonical fork branch and a
-clean installation from this mirror produce that same tree. Patch 0008 passed
-its server60 GPU acceptance gates and is part of the promoted image.
+`aeb62948e33074514a742d19c2f9a1a3c2ee3e1f`. A clean installation from this
+mirror produces that tree. Patch 0008 passed its server60 GPU acceptance gates
+and is part of the promoted image. The candidate mixed-group extension is in
+[`../deepseek-v4-wna16-mixed-groups/`](../deepseek-v4-wna16-mixed-groups/).
 
 ## Apply
 
