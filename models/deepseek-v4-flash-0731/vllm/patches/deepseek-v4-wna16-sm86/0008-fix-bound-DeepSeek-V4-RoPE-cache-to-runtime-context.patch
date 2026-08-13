@@ -1,0 +1,230 @@
+From 119e08f0eb2628cf5e8d729e53d6c2e476f98d18 Mon Sep 17 00:00:00 2001
+From: Will Hampson <whamp@ggl.slmail.me>
+Date: Wed, 12 Aug 2026 17:51:51 -0700
+Subject: [PATCH] fix: bound DeepSeek V4 RoPE cache to runtime context
+
+Signed-off-by: Will Hampson <whamp@ggl.slmail.me>
+---
+ tests/models/test_deepseek_v4_rope_cache.py   | 101 ++++++++++++++++++
+ .../layers/rotary_embedding/__init__.py       |   2 +
+ .../rotary_embedding/deepseek_scaling_rope.py |   8 +-
+ vllm/models/deepseek_v4/attention.py          |  11 +-
+ vllm/models/deepseek_v4/common/rope.py        |   3 +-
+ 5 files changed, 116 insertions(+), 9 deletions(-)
+ create mode 100644 tests/models/test_deepseek_v4_rope_cache.py
+
+diff --git a/tests/models/test_deepseek_v4_rope_cache.py b/tests/models/test_deepseek_v4_rope_cache.py
+new file mode 100644
+index 000000000..15d46c2fe
+--- /dev/null
++++ b/tests/models/test_deepseek_v4_rope_cache.py
+@@ -0,0 +1,101 @@
++# SPDX-License-Identifier: Apache-2.0
++# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
++
++from types import SimpleNamespace
++
++import pytest
++import torch
++
++import vllm.model_executor.custom_op as custom_op
++from vllm.model_executor.layers.rotary_embedding.deepseek_scaling_rope import (
++    DeepseekV4ScalingRotaryEmbedding,
++)
++from vllm.models.deepseek_v4.common.rope import build_deepseek_v4_rope
++
++
++@pytest.fixture
++def should_do_global_cleanup_after_test() -> bool:
++    return False
++
++
++def _deepseek_v4_rope_config() -> SimpleNamespace:
++    return SimpleNamespace(
++        rope_parameters={
++            "rope_type": "yarn",
++            "factor": 4,
++            "original_max_position_embeddings": 16,
++            "beta_fast": 32,
++            "beta_slow": 1,
++        },
++        rope_theta=10_000,
++        compress_rope_theta=160_000,
++    )
++
++
++@pytest.fixture(autouse=True)
++def disable_optional_rope_backend_probe(monkeypatch: pytest.MonkeyPatch) -> None:
++    compilation_config = SimpleNamespace(
++        custom_ops=["none"],
++        enabled_custom_ops=set(),
++        disabled_custom_ops=set(),
++    )
++    monkeypatch.setattr(
++        custom_op,
++        "get_cached_compilation_config",
++        lambda: compilation_config,
++    )
++    monkeypatch.setattr(
++        DeepseekV4ScalingRotaryEmbedding,
++        "enabled",
++        classmethod(lambda cls: False),
++    )
++
++
++def test_deepseek_v4_rope_cache_is_bounded_by_runtime_context() -> None:
++    bounded = build_deepseek_v4_rope(
++        _deepseek_v4_rope_config(),
++        head_dim=8,
++        rope_head_dim=4,
++        max_position_embeddings=64,
++        max_model_len=20,
++        compress_ratio=1,
++    )
++    full = build_deepseek_v4_rope(
++        _deepseek_v4_rope_config(),
++        head_dim=8,
++        rope_head_dim=4,
++        max_position_embeddings=64,
++        max_model_len=80,
++        compress_ratio=1,
++    )
++
++    assert bounded.cos_sin_cache.shape == (20, 4)
++    assert full.cos_sin_cache.shape == (64, 4)
++    torch.testing.assert_close(
++        bounded.cos_sin_cache,
++        full.cos_sin_cache[:20],
++        rtol=0,
++        atol=0,
++    )
++    assert bounded is not full
++
++
++def test_deepseek_v4_rope_cache_reuses_matching_runtime_context() -> None:
++    first = build_deepseek_v4_rope(
++        _deepseek_v4_rope_config(),
++        head_dim=8,
++        rope_head_dim=4,
++        max_position_embeddings=64,
++        max_model_len=20,
++        compress_ratio=4,
++    )
++    second = build_deepseek_v4_rope(
++        _deepseek_v4_rope_config(),
++        head_dim=8,
++        rope_head_dim=4,
++        max_position_embeddings=64,
++        max_model_len=20,
++        compress_ratio=4,
++    )
++
++    assert first is second
+diff --git a/vllm/model_executor/layers/rotary_embedding/__init__.py b/vllm/model_executor/layers/rotary_embedding/__init__.py
+index 0a69b3b3f..49e7dd319 100644
+--- a/vllm/model_executor/layers/rotary_embedding/__init__.py
++++ b/vllm/model_executor/layers/rotary_embedding/__init__.py
+@@ -298,8 +298,10 @@ def get_rope(
+                 "mscale_all_dim",
+             )
+         }
++        cls: type[DeepseekScalingRotaryEmbedding]
+         if rope_parameters.get("is_deepseek_v4", False):
+             cls = DeepseekV4ScalingRotaryEmbedding
++            extra_kwargs["cache_max_position_embeddings"] = max_position
+         else:
+             cls = DeepseekScalingRotaryEmbedding
+         rotary_emb = cls(
+diff --git a/vllm/model_executor/layers/rotary_embedding/deepseek_scaling_rope.py b/vllm/model_executor/layers/rotary_embedding/deepseek_scaling_rope.py
+index bfaf81ad0..48beb1262 100644
+--- a/vllm/model_executor/layers/rotary_embedding/deepseek_scaling_rope.py
++++ b/vllm/model_executor/layers/rotary_embedding/deepseek_scaling_rope.py
+@@ -243,14 +243,20 @@ class DeepseekV4ScalingRotaryEmbedding(DeepseekScalingRotaryEmbedding):
+     def __init__(self, *args, **kwargs):
+         # Avoid compute cache repeatedly
+         kwargs.pop("init_cache", None)
++        self.cache_max_position_embeddings = kwargs.pop(
++            "cache_max_position_embeddings", None
++        )
+         super().__init__(*args, **kwargs, init_cache=False)
+         cache_fp32 = self._compute_cos_sin_cache()
+         self.register_buffer("cos_sin_cache", cache_fp32, persistent=False)
+ 
+     def _compute_cos_sin_cache(self) -> torch.Tensor:
+         inv_freq = self._compute_inv_freq(self.scaling_factor)
++        cache_size = int(self.max_position_embeddings * self.scaling_factor)
++        if self.cache_max_position_embeddings is not None:
++            cache_size = min(cache_size, self.cache_max_position_embeddings)
+         t = torch.arange(
+-            self.max_position_embeddings * self.scaling_factor,
++            cache_size,
+             device=inv_freq.device,
+             dtype=torch.float32,
+         )
+diff --git a/vllm/models/deepseek_v4/attention.py b/vllm/models/deepseek_v4/attention.py
+index 5d30a5972..6b32fd47f 100644
+--- a/vllm/models/deepseek_v4/attention.py
++++ b/vllm/models/deepseek_v4/attention.py
+@@ -218,9 +218,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
+             # just that the flag is on. Only the ratio-4 layers carry the
+             # merged input trio; every layer carries fused_wqa_wkv.
+             n_layers = config.num_hidden_layers
+-            n_trio = sum(
+-                1 for r in config.compress_ratios[:n_layers] if max(1, r) == 4
+-            )
++            n_trio = sum(1 for r in config.compress_ratios[:n_layers] if max(1, r) == 4)
+             reached = n_layers if self._unreplicate_all_layers else n_trio
+             logger.info_once(
+                 "VLLM_UNREPLICATE_ATTN_GEMMS: token-sharding fused_wqa_wkv on "
+@@ -313,6 +311,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
+             head_dim=self.head_dim,
+             rope_head_dim=self.rope_head_dim,
+             max_position_embeddings=config.max_position_embeddings,
++            max_model_len=vllm_config.model_config.max_model_len,
+             compress_ratio=self.compress_ratio,
+         )
+         self.indexer_rotary_emb = self.rotary_emb
+@@ -587,8 +586,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
+                 self.ln_events[0],
+                 self.ln_events[1:4],
+                 aux_streams,
+-                enable=hidden_states.shape[0]
+-                <= self._multi_stream_threshold,
++                enable=hidden_states.shape[0] <= self._multi_stream_threshold,
+             )
+             if sharded:
+                 qr_kv = self._gather_tokens(qr_kv, rows)
+@@ -650,8 +648,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
+             self.ln_events[0],
+             self.ln_events[1:4],
+             aux_streams,
+-            enable=hidden_states.shape[0]
+-            <= self._multi_stream_threshold,
++            enable=hidden_states.shape[0] <= self._multi_stream_threshold,
+         )
+         if sharded:
+             qr_kv = self._gather_tokens(qr_kv, rows)
+diff --git a/vllm/models/deepseek_v4/common/rope.py b/vllm/models/deepseek_v4/common/rope.py
+index 44ae3286e..54eabec6f 100644
+--- a/vllm/models/deepseek_v4/common/rope.py
++++ b/vllm/models/deepseek_v4/common/rope.py
+@@ -12,6 +12,7 @@ def build_deepseek_v4_rope(
+     head_dim: int,
+     rope_head_dim: int,
+     max_position_embeddings: int,
++    max_model_len: int,
+     compress_ratio: int,
+ ) -> RotaryEmbedding:
+     rope_parameters = config.rope_parameters
+@@ -30,7 +31,7 @@ def build_deepseek_v4_rope(
+     rope_parameters["rope_dim"] = rope_head_dim
+     return get_rope(
+         head_dim,
+-        max_position=max_position_embeddings,
++        max_position=min(max_position_embeddings, max_model_len),
+         rope_parameters=rope_parameters,
+         is_neox_style=False,
+     )
+-- 
+2.55.0
+

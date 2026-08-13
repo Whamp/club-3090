@@ -2,7 +2,7 @@
 set -euo pipefail
 
 readonly PINNED_BASE="12810046c799cbe874967e19b1c0fa134ab7b209"
-readonly EXPECTED_FINAL_TREE="12b87bcd52bb2973685fa8f38b5fc8bbbfe7519c"
+readonly EXPECTED_FINAL_TREE="aeb62948e33074514a742d19c2f9a1a3c2ee3e1f"
 PATCH_DIRECTORY="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly PATCH_DIRECTORY
 readonly TARGET_REPOSITORY="${1:?usage: install.sh /path/to/vllm}"

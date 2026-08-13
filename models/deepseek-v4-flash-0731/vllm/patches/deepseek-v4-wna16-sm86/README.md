@@ -43,6 +43,13 @@ Apply these patches in filename order:
 7. `0007-fix-gate-sparse-split-K-decode-by-shared-memory.patch`
    - Keeps split-K sparse decode on CUDA devices that can launch its tile.
    - Routes lower-shared-memory devices such as SM86 to the existing single-pass decode.
+8. `0008-fix-bound-DeepSeek-V4-RoPE-cache-to-runtime-context.patch`
+   - Keeps DeepSeek V4 YaRN frequencies and scaling based on the original model
+     configuration.
+   - Bounds the two shared FP32 RoPE cache tables to the served context instead
+     of always materializing the full 1,048,576-token model maximum.
+   - Requires direct GPU residency, capacity, output, and performance validation
+     before promotion.
 
 Patch SHA-256 values:
 
@@ -54,10 +61,12 @@ f88b96897566663411d9d09a41e3f3eec54bd9b958fd34165412a2d288310d2b  0001-feat-supp
 f446a73a37b7715023f05aeec526b714fdadbefa80772268e242218c69efc34e  0005-fix-forward-layer-to-Humming-MoE-kernel.patch
 9af88957c5900e741794002907183a324510bcc7ebb7dd60fef22d66cd5ac005  0006-fix-compose-DeepSeek-FP8-with-WNA16-experts.patch
 f4dec6b898ec327a06b8bd85841ad9e662eb9be7ab59a6cd3a75f60e4c0bc672  0007-fix-gate-sparse-split-K-decode-by-shared-memory.patch
+173dc71a669f1ab7cbffd19256b4eb2dd30329597bf9de54b7f95cec8dc76c52  0008-fix-bound-DeepSeek-V4-RoPE-cache-to-runtime-context.patch
 ```
 
 The expected final Git tree is
-`12b87bcd52bb2973685fa8f38b5fc8bbbfe7519c`.
+`aeb62948e33074514a742d19c2f9a1a3c2ee3e1f`. Patch 0008 passed its
+server60 GPU acceptance gates and is part of the promoted image.
 
 ## Apply
 
@@ -91,16 +100,17 @@ vLLM's precompiled native extensions from upstream base
 `62195e9784ebec1ece42b88a861734e0702cc2d5`, and verifies
 `humming-kernels==0.1.10`.
 
-The promoted server60 image is a thin final layer over a verified runtime base.
-`build-final-overlay-image.sh` accepts either the measured server60 base image
+The promoted server60 image is a thin final layer over a verified runtime
+base. `build-final-overlay-image.sh` accepts either the measured server60 base
+image
 `sha256:0e8cc6dc48081e907d553febc8002b1f6d61298454340840f27f18b3a2e66c6c`
-or a freshly built base carrying both exact vLLM tree
-`12b87bcd52bb2973685fa8f38b5fc8bbbfe7519c` and runtime-Dockerfile contract
+or a freshly built base carrying both the exact vLLM tree
+`aeb62948e33074514a742d19c2f9a1a3c2ee3e1f` and runtime-Dockerfile contract
 SHA-256 `7d4ab7f124d1ca5fc68facaafec8c55b98683e249cf669a2c102ac8ba6013838`.
-It also verifies the three production source files plus both startup scripts by
-SHA-256. It then:
+It verifies all seven production source files changed by patches 0005–0008 plus
+both startup scripts by SHA-256. It then:
 
-- bakes patches 0005–0007 into `/workspace/vllm` instead of mounting source;
+- bakes patches 0005–0008 into `/workspace/vllm` instead of mounting source;
 - adds a fail-closed model-view materializer;
 - checks the immutable artifact config and tensor-index hashes;
 - verifies that all 45 indexed shards exist;
@@ -113,7 +123,7 @@ On server60, where the measured base exists locally:
 ```bash
 ./build-final-overlay-image.sh \
   /path/to/patched-vllm \
-  club-3090/deepseek-v4-wna16-sm86:12b87bcd-cu130
+  club-3090/deepseek-v4-wna16-sm86:aeb62948-rope-cu130
 ```
 
 On a fresh host, build the full pinned base first and pass it explicitly:
@@ -121,21 +131,21 @@ On a fresh host, build the full pinned base first and pass it explicitly:
 ```bash
 ./build-runtime-image.sh \
   /path/to/patched-vllm \
-  club-3090/deepseek-v4-wna16-sm86:runtime-12b87bcd-cu130
+  club-3090/deepseek-v4-wna16-sm86:runtime-aeb62948-cu130
 
 ./build-final-overlay-image.sh \
   /path/to/patched-vllm \
-  club-3090/deepseek-v4-wna16-sm86:local-12b87bcd-cu130 \
-  club-3090/deepseek-v4-wna16-sm86:runtime-12b87bcd-cu130
+  club-3090/deepseek-v4-wna16-sm86:local-aeb62948-cu130 \
+  club-3090/deepseek-v4-wna16-sm86:runtime-aeb62948-cu130
 ```
 
 The promoted server60 image is
-`sha256:ed5227673011058a04675b913c8f67b6bb83baba3d85f3b83675e765c51379c7`.
-It is not published to a registry. The direct Compose profile pins that
-validated local image ID. A fresh build may have a different manifest ID even
-when its source and runtime contracts match; launch it only through an explicit
-`VLLM_IMAGE=club-3090/deepseek-v4-wna16-sm86:local-12b87bcd-cu130` override and
-repeat the GPU acceptance gates. This is not a portable public-image release.
+`club-3090/deepseek-v4-wna16-sm86:aeb62948-rope-cu130` at
+`sha256:0beb1f0cba2e41837f4ba5af01cc5c4686afde4f40ab1df5147a6ad945b0af1f`.
+It is not published to a registry. The direct Compose profile pins that exact
+local image ID. A fresh build may have a different manifest ID even when its
+source and runtime contracts match; repeat the GPU acceptance gates before
+changing the Compose digest. This is not a portable public-image release.
 
 ## Launch
 
@@ -153,7 +163,7 @@ docker compose \
 ```
 
 Plain `docker compose up` starts nothing. The authorized profile occupies all
-four GPUs. The measured defaults are TP=4, 131,072-token context,
+four GPUs. The measured defaults are TP=4, 215,000-token context,
 `max_num_seqs=4`, `max_num_batched_tokens=256`, breakable CUDA graphs, no CPU
 weight offload, a 64 MiB sparse-indexer logits cap, and the SM86 per-query
 sparse-prefill fallback.
@@ -167,21 +177,29 @@ The deferred GPU gates are complete:
    `sm_86` cubins.
 3. The real 45-shard artifact loaded through native DeepSeek FP8 linears and
    Humming W2/group-128/BF16 routed experts on TP=4.
-4. The accepted 131K profile returned exact deterministic generation, a
+4. The pre-0008 131K profile returned exact deterministic generation, a
    structured forced tool call, separated reasoning, and an exact needle at
    119,895 tokens.
-5. The final packaged image measured 60.82 decode tokens/s over 3 warmups and 5
-   measured 512-token runs, versus 32.67 tokens/s for the matched llama.cpp
-   baseline. Concurrency 2 and 4 sustained 65.19 and 90.23 aggregate tokens/s
-   with zero post-warm VRAM growth.
-6. `quality-test.sh --quick` scored tool calling 11/15 and instruction following
+5. The pre-0008 packaged image measured 60.82 decode tokens/s over 3 warmups
+   and 5 measured 512-token runs, versus 32.67 tokens/s for the matched
+   llama.cpp baseline.
+6. Patch 0008 reduced the two materialized RoPE caches from 512 MiB to about
+   105 MiB per rank at 215K while preserving the original YaRN frequency span.
+   The selected 215K profile measured 60.79 decode tokens/s and 968.97
+   cache-busted prefill tokens/s, retrieved an exact needle at 204,900 tokens,
+   and sustained concurrency 2 and 4 at 65.47 and 89.94 aggregate tokens/s
+   with zero post-warm VRAM growth or serving-process swap.
+7. `verify-full` passed. `verify-stress` passed every functional class and all
+   five ceiling rungs through 197,580 tokens; its only nonzero result was the
+   repository's llama.cpp-oriented 1 GiB free-VRAM warning. The observed
+   minimum reserve was 127 MiB per card.
+8. A 230K/`max_num_seqs=4` arm failed admission with an estimated 215,552-token
+   maximum. Reducing `max_num_seqs` to 2 moved the estimate to 223,488 but did
+   not justify losing concurrency 4; the selected profile therefore stops at
+   215,000 tokens.
+9. `quality-test.sh --quick` scored tool calling 11/15 and instruction following
    14/15 at pass@1 (25/30 total; 26/30 at pass@3). This is limited evidence, not
    a broad quality claim.
-
-The graph-enabled 200K profiles required CPU weight offload and measured only
-12.68–19.54 decode tokens/s. The promoted profile therefore stops at 131,072
-tokens. The unexpectedly high non-KV residency is a separate investigation;
-do not treat generic UVA weight offload as its solution.
 
 `humming-kernels==0.1.10` remains a pure-Python JIT package. The generated
 cubins and runtime dispatch evidence are specific to the pinned software,

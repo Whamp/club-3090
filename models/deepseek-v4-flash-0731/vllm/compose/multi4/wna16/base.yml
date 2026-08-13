@@ -6,19 +6,22 @@
 #   Drafter:   none — MTP permanently omitted from this artifact
 #   KV:        fp8_ds_mla (DeepSeek UE8M0 packed cache)
 #   Vision:    no
-#   Max ctx:   131,072 tokens
+#   Max ctx:   215,000 tokens
 #   Genesis:   N/A — Genesis is Qwen3-Next-specific
-#   Status:    🧪 Experimental — accepted 131K server60 profile
-#   Measured:  server60 4x RTX 3090, 2026-08-12: 60.82 decode tok/s mean,
-#              964.09 prefill tok/s at 8,984 tokens, 119,895-token NIAH pass,
-#              concurrency 2/4 aggregate 65.19/90.23 tok/s with no VRAM leak.
+#   Status:    🧪 Experimental — accepted 215K server60 profile
+#   Measured:  server60 4x RTX 3090, 2026-08-12: 60.79 decode tok/s mean,
+#              968.97 prefill tok/s at 8,984 tokens, 204,900-token NIAH pass,
+#              concurrency 2/4 aggregate 65.47/89.94 tok/s with no VRAM leak.
 #   Quality:   toolcall-15 11/15 (73%) · instructfollow-15 14/15 (93%)
 #              (`quality-test.sh --quick`; pass@3 total 26/30).
-#   Best for:  Four-RTX-3090 DeepSeek V4 serving through 131K context
+#   Best for:  Four-RTX-3090 DeepSeek V4 serving through 215K context
 # ---------------------------------------------------------------------------
-# Limits: local custom image; no CPU weight offload; 131K cap; focused quality
-# evidence only; custom all-reduce disabled. The 120,476-token stress rung
-# recalled exactly but left only 118 MiB/card, below the 1 GiB release margin.
+# Limits: local custom image; no CPU weight offload; focused quality evidence
+# only; custom all-reduce disabled. The standard stress ladder recalled exactly
+# through 197,580 tokens with 127 MiB/card observed free. That narrow reserve
+# passed repeated decode, prefill, near-ceiling, and short concurrency tests
+# without serving-process swap, VRAM growth, or allocation failure. Concurrency
+# 4 is validated for short requests, not four simultaneous 215K requests.
 # Plain `docker compose up` starts nothing. The authorized profile is explicit
 # because this service occupies all four GPUs. MODEL_SNAPSHOT must be the
 # immutable artifact revision 75d9286c37f3037f3ab390cfbc10747466eac714;
@@ -27,7 +30,7 @@
 services:
   deepseek-v4-wna16-sm86:
     profiles: [authorized-gpu-test]
-    image: ${VLLM_IMAGE:-club-3090/deepseek-v4-wna16-sm86:12b87bcd-cu130@sha256:ed5227673011058a04675b913c8f67b6bb83baba3d85f3b83675e765c51379c7}
+    image: ${VLLM_IMAGE:-club-3090/deepseek-v4-wna16-sm86:aeb62948-rope-cu130@sha256:0beb1f0cba2e41837f4ba5af01cc5c4686afde4f40ab1df5147a6ad945b0af1f}
     container_name: ${CONTAINER_NAME:-vllm-deepseek-v4-wna16-sm86}
     restart: ${CLUB3090_RESTART:-unless-stopped}
     ports:
@@ -78,7 +81,7 @@ services:
       - --tensor-parallel-size
       - "4"
       - --max-model-len
-      - "${MAX_MODEL_LEN:-131072}"
+      - "${MAX_MODEL_LEN:-215000}"
       - --gpu-memory-utilization
       - "${GPU_MEMORY_UTILIZATION:-0.98}"
       - --max-num-seqs

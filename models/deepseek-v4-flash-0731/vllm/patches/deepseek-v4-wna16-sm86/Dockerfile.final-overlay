@@ -7,8 +7,16 @@ FROM ${VERIFIED_BASE_IMAGE}
 COPY --chmod=0755 materialize-runtime-model-view.py /usr/local/bin/materialize-deepseek-v4-wna16-runtime-view
 COPY --chmod=0755 start-final-runtime.sh /usr/local/bin/start-deepseek-v4-wna16-runtime
 
+COPY vllm/model_executor/layers/rotary_embedding/__init__.py \
+    /workspace/vllm/vllm/model_executor/layers/rotary_embedding/__init__.py
+COPY vllm/model_executor/layers/rotary_embedding/deepseek_scaling_rope.py \
+    /workspace/vllm/vllm/model_executor/layers/rotary_embedding/deepseek_scaling_rope.py
 COPY vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe_wna16.py \
     /workspace/vllm/vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe_wna16.py
+COPY vllm/models/deepseek_v4/attention.py \
+    /workspace/vllm/vllm/models/deepseek_v4/attention.py
+COPY vllm/models/deepseek_v4/common/rope.py \
+    /workspace/vllm/vllm/models/deepseek_v4/common/rope.py
 COPY vllm/models/deepseek_v4/quant_config.py \
     /workspace/vllm/vllm/models/deepseek_v4/quant_config.py
 COPY vllm/v1/attention/ops/rocm_aiter_mla_sparse.py \

@@ -28,26 +28,26 @@ patches:
     delivery_gaps: []
     delivery_mechanism: runtime_image
     delivery_spec:
-      image: club-3090/deepseek-v4-wna16-sm86:12b87bcd-cu130@sha256:ed5227673011058a04675b913c8f67b6bb83baba3d85f3b83675e765c51379c7
+      image: club-3090/deepseek-v4-wna16-sm86:aeb62948-rope-cu130@sha256:0beb1f0cba2e41837f4ba5af01cc5c4686afde4f40ab1df5147a6ad945b0af1f
       dockerfile: models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/Dockerfile.final-overlay
       builder: models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/build-final-overlay-image.sh
       runtime_dockerfile: models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/Dockerfile.runtime-cu130
       runtime_builder: models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/build-runtime-image.sh
-      source_tree: 12b87bcd52bb2973685fa8f38b5fc8bbbfe7519c
+      source_tree: aeb62948e33074514a742d19c2f9a1a3c2ee3e1f
       base_image_digest: sha256:0e8cc6dc48081e907d553febc8002b1f6d61298454340840f27f18b3a2e66c6c
       runtime_contract_sha256: 7d4ab7f124d1ca5fc68facaafec8c55b98683e249cf669a2c102ac8ba6013838
       wired_at: image
       file_sha256:
         models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/Dockerfile.runtime-cu130: 7d4ab7f124d1ca5fc68facaafec8c55b98683e249cf669a2c102ac8ba6013838
-        models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/build-runtime-image.sh: 675eddf42c0877d8e617d503e34c8a8c51dc50e256d9a94903fb37cbb02e4f7c
-        models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/Dockerfile.final-overlay: e534d52dfbaf5e3b7fdd0c189404618ed4842d817b811086256bf5d472a283e0
-        models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/build-final-overlay-image.sh: e0be0ade09c56552dd282100eca1b98772c6f337b0ee7ab68b407093e7c412ee
+        models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/build-runtime-image.sh: c066dd69dcef938689fc8c09afe7a3773d3686a7d223c7223442af556d4da15a
+        models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/Dockerfile.final-overlay: 68294c48a11d8f8f0b20d4284a2877798dee7d51cf1cc7237c1de92cabc0ab4a
+        models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/build-final-overlay-image.sh: ff8837e7e46368b5c8b095cea6bfb5b1a21a2ecd4f079c9f590feb126d05ef9b
         models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/materialize-runtime-model-view.py: 8aff33ec192e0a67203c974918ad4c74bb875ec6d320ede6276077cce872d80c
         models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/start-final-runtime.sh: 6bf86f1e90c58bd3e5964bca8938515dc73073b3d27fe9a41f6ba67b7ed0eeaa
-        models/deepseek-v4-flash-0731/vllm/compose/multi4/wna16/base.yml: 6b40d6f12b85f6c3918217d2f986067bc427380605342e2bf53c2342135c1272
+        models/deepseek-v4-flash-0731/vllm/compose/multi4/wna16/base.yml: 8116ac968f0c8cb668ea6f7c1f80edca3742411c3abbb08fae5949c189e3d475
     drift_guard:
       kind: behavioral
-      check: "On 4x RTX 3090, the exact image reaches healthy at 131072 context, returns deterministic HTTP 200 generation, preserves forced-tool and reasoning parsing, and repeats at least 60 decode tok/s over 3 warmups plus 5 measured 512-token runs."
+      check: "On 4x RTX 3090, the exact image reaches healthy at 215000 context with max_num_seqs=4, returns deterministic HTTP 200 generation, preserves forced-tool and reasoning parsing, retrieves exactly beyond 200K prompt tokens, and repeats at least 45.6 decode and 723 cache-busted prefill tok/s without serving-process swap or post-warm VRAM growth."
       on_fail: refuse-promotion
     capability: wna16-moe-sm86
     foundational: false
