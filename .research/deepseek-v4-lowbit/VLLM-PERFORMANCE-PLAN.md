@@ -85,7 +85,7 @@ Performance changes should preserve the same model behavior, so broad capability
 - **Attention/cache changes:** add one short-context and one longest-supported NIAH check because that mechanism can corrupt context behavior without changing easy prompts.
 - **Concurrency changes:** compare each request at concurrency 2 and 4 with its isolated deterministic result to detect cross-request state or ordering defects.
 - **Escalation:** run only a small pinned set of known-fragile code/agent scenarios if deterministic outputs diverge or the change intentionally alters numerical order. Do not run `--medium`, `--full`, or `--reasoning` by default.
-- **Promotion compliance:** if the profile is promoted from incubating, run the repository-required `quality-test.sh --quick` once. Treat it as a release gate, not as the mechanism test; rerun only failed scenarios when investigating. A broader pack needs a specific observed risk or capability claim.
+- **Promotion compliance:** the repository-required `quality-test.sh --quick` ran once and remains historical smoke evidence. Do not expand benchlocal for this path. Evaluate model capability with DeepSWE through `~/evals/deep-swe-bench/` before claiming quality parity or broader promotion readiness.
 
 ## Verification
 

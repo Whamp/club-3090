@@ -1,12 +1,17 @@
 # DeepSeek V4 WNA16 SM86 vLLM patch series
 
-This private research patch series supports the MTP-free DeepSeek V4 Flash
-W2A16 artifact. It applies only to
+The canonical experimental source is
+[`Whamp/vllm#1`](https://github.com/Whamp/vllm/pull/1) on branch
+[`incubate/deepseek-v4-wna16-sm86`](https://github.com/Whamp/vllm/tree/incubate/deepseek-v4-wna16-sm86).
+This directory remains the checksum-pinned deployment mirror for the MTP-free
+DeepSeek V4 Flash W2A16 artifact. The patches apply only to
 `haosdent/vllm@12810046c799cbe874967e19b1c0fa134ab7b209` on branch
 `dsv4-flash-a100`.
 
-That fork owns the selected SM8x DeepSeek V4 attention, cache, indexer, MHC,
-and model-dispatch integration.
+The haosdent fork owns the selected SM8x DeepSeek V4 attention, cache, indexer,
+MHC, and model-dispatch integration. Develop and review the eight downstream
+vLLM changes in `Whamp/vllm`; refresh this mirror only when that canonical
+branch changes.
 
 ## Contents
 
@@ -65,8 +70,9 @@ f4dec6b898ec327a06b8bd85841ad9e662eb9be7ab59a6cd3a75f60e4c0bc672  0007-fix-gate-
 ```
 
 The expected final Git tree is
-`aeb62948e33074514a742d19c2f9a1a3c2ee3e1f`. Patch 0008 passed its
-server60 GPU acceptance gates and is part of the promoted image.
+`aeb62948e33074514a742d19c2f9a1a3c2ee3e1f`. The canonical fork branch and a
+clean installation from this mirror produce that same tree. Patch 0008 passed
+its server60 GPU acceptance gates and is part of the promoted image.
 
 ## Apply
 
@@ -197,9 +203,11 @@ The deferred GPU gates are complete:
    maximum. Reducing `max_num_seqs` to 2 moved the estimate to 223,488 but did
    not justify losing concurrency 4; the selected profile therefore stops at
    215,000 tokens.
-9. `quality-test.sh --quick` scored tool calling 11/15 and instruction following
-   14/15 at pass@1 (25/30 total; 26/30 at pass@3). This is limited evidence, not
-   a broad quality claim.
+9. The historical `quality-test.sh --quick` smoke scored tool calling 11/15
+   and instruction following 14/15 at pass@1 (25/30 total; 26/30 at pass@3).
+   It is not the capability acceptance gate. Model quality will be evaluated
+   with DeepSWE through `~/evals/deep-swe-bench/`; no broader benchlocal run is
+   planned for this path.
 
 `humming-kernels==0.1.10` remains a pure-Python JIT package. The generated
 cubins and runtime dispatch evidence are specific to the pinned software,

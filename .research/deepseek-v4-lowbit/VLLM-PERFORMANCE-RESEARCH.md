@@ -3,6 +3,7 @@
 Research date: 2026-08-12
 Runtime tree: `/home/will/projects/vllm/.worktrees/deepseek-v4-wna16-sm86`
 Promoted vLLM tree: `aeb62948e33074514a742d19c2f9a1a3c2ee3e1f`
+Canonical experiment: [`Whamp/vllm#1`](https://github.com/Whamp/vllm/pull/1)
 Ampere base: `haosdent/vllm@12810046c799cbe874967e19b1c0fa134ab7b209`
 
 ## Executive conclusion
@@ -363,10 +364,12 @@ Club-3090 commit `26ae767aa98c14761ac4a69d4f492f418fd29578` publishes the exact 
 
 ## Sources
 
-### Pinned local source
+### Pinned source
 
+- Canonical experiment: [`Whamp/vllm#1`](https://github.com/Whamp/vllm/pull/1)
+- Canonical branch: [`incubate/deepseek-v4-wna16-sm86`](https://github.com/Whamp/vllm/tree/incubate/deepseek-v4-wna16-sm86)
 - Runtime tree: `/home/will/projects/vllm/.worktrees/deepseek-v4-wna16-sm86`
-- Published delivery: [`Whamp/club-3090@26ae767a`](https://github.com/Whamp/club-3090/commit/26ae767aa98c14761ac4a69d4f492f418fd29578)
+- Published deployment mirror: [`Whamp/club-3090@26ae767a`](https://github.com/Whamp/club-3090/commit/26ae767aa98c14761ac4a69d4f492f418fd29578)
 - Final vLLM tree: `aeb62948e33074514a742d19c2f9a1a3c2ee3e1f`
 - A100 campaign base: [`haosdent/vllm@12810046c`](https://github.com/haosdent/vllm/commit/12810046c799cbe874967e19b1c0fa134ab7b209)
 - A100 campaign record: `benchmarks/kernels/dsv4_sm80_refutations.md`

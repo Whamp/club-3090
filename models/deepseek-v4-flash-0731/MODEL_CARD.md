@@ -86,11 +86,14 @@ It contains 54 files totaling 82,464,249,582 bytes, including 45 model shards.
 
 ## Runtime compatibility
 
-This checkpoint requires a research integration based on
-[`haosdent/vllm@12810046c799cbe874967e19b1c0fa134ab7b209`](https://github.com/haosdent/vllm/tree/12810046c799cbe874967e19b1c0fa134ab7b209)
-plus the checksum-pinned patches in
-[club-3090](https://github.com/Whamp/club-3090/tree/26ae767aa98c14761ac4a69d4f492f418fd29578/models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86).
-The final tested vLLM tree was
+This checkpoint requires the experimental integration in
+[`Whamp/vllm#1`](https://github.com/Whamp/vllm/pull/1), based on
+[`haosdent/vllm@12810046c799cbe874967e19b1c0fa134ab7b209`](https://github.com/haosdent/vllm/tree/12810046c799cbe874967e19b1c0fa134ab7b209).
+The canonical source branch is
+[`incubate/deepseek-v4-wna16-sm86`](https://github.com/Whamp/vllm/tree/incubate/deepseek-v4-wna16-sm86).
+Club-3090 retains a
+[checksum-pinned deployment mirror](https://github.com/Whamp/club-3090/tree/26ae767aa98c14761ac4a69d4f492f418fd29578/models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86).
+Both paths produce the final tested vLLM tree
 `aeb62948e33074514a742d19c2f9a1a3c2ee3e1f`.
 
 The patches provide:
@@ -156,6 +159,10 @@ Available quality evidence consists of:
 - a syntactically correct quicksort response that still added Markdown fencing
   despite an “only code” instruction.
 
+The historical benchlocal quick result is smoke evidence only. The capability
+quality gate will use DeepSWE through `~/evals/deep-swe-bench/`; no broader
+benchlocal run is planned for this path.
+
 No broad comparison against the official checkpoint or Antirez and Unsloth
 GGUF quants has been completed. The context tests prove selected retrieval
 cases, not general long-context quality. The repository stress suite passed all
@@ -184,6 +191,7 @@ selected Compose contract are pinned in
 [`Whamp/club-3090@26ae767a`](https://github.com/Whamp/club-3090/commit/26ae767aa98c14761ac4a69d4f492f418fd29578).
 Start with:
 
+- [the canonical vLLM experiment](https://github.com/Whamp/vllm/pull/1)
 - [`tools/deepseek-v4-lowbit/README.md`](https://github.com/Whamp/club-3090/blob/26ae767aa98c14761ac4a69d4f492f418fd29578/tools/deepseek-v4-lowbit/README.md)
 - [the final experiment record](https://github.com/Whamp/club-3090/blob/d10ccf25da5551cbddbac42e228d3260856e8db4/.research/deepseek-v4-lowbit/PLAN.md)
 - [the vLLM patch series](https://github.com/Whamp/club-3090/tree/26ae767aa98c14761ac4a69d4f492f418fd29578/models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86)
