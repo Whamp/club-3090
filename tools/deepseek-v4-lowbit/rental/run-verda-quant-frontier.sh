@@ -2,7 +2,7 @@
 set -euo pipefail
 
 export PYTHONUTF8="${PYTHONUTF8:-1}"
-export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+unset CUDA_VISIBLE_DEVICES
 
 readonly CLUB_3090_REVISION="0f4736e050e539a2a50990fd442fa7bf563707e8"
 readonly CLUB_3090_REF="refs/heads/feat/deepseek-v4-quant-frontier"
@@ -42,6 +42,12 @@ readonly CLUB_3090_DIRECTORY="$RENTAL_ROOT/club-3090"
 readonly AUTO_ROUND_DIRECTORY="$RENTAL_ROOT/auto-round"
 readonly PYTHON_ENVIRONMENT="$RENTAL_ROOT/python-environment"
 readonly RENTAL_LOG="$REPORT_DIRECTORY/run-verda-quant-frontier.log"
+readonly -a FRONTIER_GPU_DEVICES=(0)
+gpu_arguments=()
+for device in "${FRONTIER_GPU_DEVICES[@]}"; do
+    gpu_arguments+=(--gpu-device "$device")
+done
+readonly -a gpu_arguments
 
 mkdir -p \
     "$REPORT_DIRECTORY" \
@@ -112,23 +118,23 @@ gpu_inventory="$(nvidia-smi \
 python3 - "$gpu_inventory" <<'PY'
 import sys
 rows = [row.strip() for row in sys.argv[1].splitlines() if row.strip()]
-if len(rows) != 2:
+if len(rows) != 1:
     raise SystemExit(
-        "Frontier rental requires exactly two A100 80GB GPUs, "
+        "Frontier rental requires exactly one A100 80GB GPU, "
         f"found {len(rows)}"
     )
 for row in rows:
     name, capability, memory_mib = (field.strip() for field in row.split(",", 2))
     if "A100" not in name or capability != "8.0" or int(memory_mib) < 80_000:
         raise SystemExit(
-            "Frontier rental requires exactly two A100 80GB GPUs at "
+            "Frontier rental requires exactly one A100 80GB GPU at "
             f"compute capability 8.0, found {row}"
         )
-print("gpu_contract=2x-a100-80gb-sm80")
+print("gpu_contract=1x-a100-80gb-sm80")
 PY
 memory_kib="$(awk '/MemTotal:/ {print $2}' /proc/meminfo)"
-((memory_kib >= 160 * 1024 * 1024)) || {
-    echo "Frontier rental requires at least 160 GiB host RAM" >&2
+((memory_kib >= 110 * 1024 * 1024)) || {
+    echo "Frontier rental requires at least 110 GiB host RAM" >&2
     exit 2
 }
 
@@ -161,21 +167,28 @@ uv pip install --python "$PYTHON_ENVIRONMENT/bin/python" \
     --editable "$CLUB_3090_DIRECTORY/tools/deepseek-v4-lowbit"
 uv pip check --python "$PYTHON_ENVIRONMENT/bin/python"
 
+log_frontier_step "Verify four dedicated spawned CUDA workers"
+"$PYTHON_ENVIRONMENT/bin/deepseek-v4-inspect-frontier-gpus" \
+    "${gpu_arguments[@]}"
+
 log_frontier_step "Verify exact selected CUDA device and write-capable public Hub target"
 "$PYTHON_ENVIRONMENT/bin/python" - "$HUGGINGFACE_REPOSITORY" <<'PY'
 import os
 import sys
 import torch
 from huggingface_hub import HfApi
-if not torch.cuda.is_available():
-    raise SystemExit("Frontier rental CUDA check failed")
-if torch.cuda.get_device_capability() != (8, 0):
-    raise SystemExit("Frontier rental requires compute capability 8.0")
-if "A100" not in torch.cuda.get_device_name(0):
-    raise SystemExit("Frontier rental selected CUDA device must be an A100")
+if not torch.cuda.is_available() or torch.cuda.device_count() != 1:
+    raise SystemExit("Frontier rental requires one visible CUDA device")
+for device_index in range(torch.cuda.device_count()):
+    if torch.cuda.get_device_capability(device_index) != (8, 0):
+        raise SystemExit("Frontier rental requires compute capability 8.0")
+    if "A100" not in torch.cuda.get_device_name(device_index):
+        raise SystemExit("Frontier rental selected CUDA devices must be A100s")
 print(
     f"torch={torch.__version__} cuda={torch.version.cuda} "
-    f"gpu={torch.cuda.get_device_name(0)} cc={torch.cuda.get_device_capability()}"
+    f"gpus={torch.cuda.device_count()} "
+    f"gpu0={torch.cuda.get_device_name(0)} "
+    f"cc0={torch.cuda.get_device_capability(0)}"
 )
 repository_id = sys.argv[1]
 namespace = repository_id.partition("/")[0]
@@ -249,7 +262,8 @@ log_frontier_step "Run and stabilize mixed-group frontier screen"
     "$PLANNER_HEADERS" \
     "$SCREEN_DIRECTORY" \
     --samples-per-projection 8 \
-    --device cuda
+    --device cuda \
+    "${gpu_arguments[@]}"
 
 log_frontier_step "Build exact cliff/capacity/balanced/quality recipes"
 "$PYTHON_ENVIRONMENT/bin/deepseek-v4-build-frontier-recipes" \
@@ -264,29 +278,39 @@ log_frontier_step "Build exact cliff/capacity/balanced/quality recipes"
 
 log_frontier_step "Verify measured source plus projected transition disk bound"
 "$PYTHON_ENVIRONMENT/bin/python" - \
-    "$SOURCE_DIRECTORY" "$BASELINE_DIRECTORY" "$RECIPE_BUNDLE" "$RENTAL_ROOT" <<'PY'
+    "$SOURCE_DIRECTORY" "$BASELINE_DIRECTORY" "$RECIPE_BUNDLE" "$RENTAL_ROOT" \
+    "$FRONTIER_CANDIDATE" <<'PY'
 import json
 import shutil
 import sys
 from pathlib import Path
-source, baseline, recipe_path, rental_root = map(Path, sys.argv[1:])
+source, baseline, recipe_path, rental_root = map(Path, sys.argv[1:5])
+selected_candidate = sys.argv[5]
 recipe = json.loads(recipe_path.read_text(encoding="utf-8"))
 source_bytes = sum(path.stat().st_size for path in source.rglob("*") if path.is_file())
 baseline_bytes = sum(
     path.stat().st_size for path in baseline.rglob("*") if path.is_file()
 )
-local_peak = recipe["storage_summary"]["projected_local_peak_model_payload_bytes"]
-required = source_bytes + baseline_bytes + local_peak + 8 * 1024**3
+matching_summaries = [
+    summary
+    for summary in recipe["candidate_summaries"]
+    if summary.get("name") == selected_candidate
+]
+if len(matching_summaries) != 1:
+    raise SystemExit("Frontier recipe has no unique selected-candidate summary")
+candidate_payload = int(matching_summaries[0]["total_bytes"])
+required = source_bytes + baseline_bytes + candidate_payload + 8 * 1024**3
 free = shutil.disk_usage(rental_root).free
 if free + source_bytes + baseline_bytes < required:
     raise SystemExit(
         "Frontier projected disk bound exceeds rental capacity: "
-        f"required_gib={required / 1024**3:.2f} "
+        f"candidate={selected_candidate} required_gib={required / 1024**3:.2f} "
         f"capacity_gib={(free + source_bytes + baseline_bytes) / 1024**3:.2f}"
     )
 print(
     f"source_gib={source_bytes / 1024**3:.2f} "
-    f"projected_transition_gib={local_peak / 1024**3:.2f} "
+    f"candidate={selected_candidate} "
+    f"selected_candidate_gib={candidate_payload / 1024**3:.2f} "
     f"required_with_margin_gib={required / 1024**3:.2f}"
 )
 PY
@@ -325,6 +349,7 @@ log_frontier_step "Convert, publish, verify, and reclaim selected candidate"
     --branch-prefix "$BRANCH_PREFIX" \
     --candidate "$FRONTIER_CANDIDATE" \
     --device cuda \
+    "${gpu_arguments[@]}" \
     --delete-local-after-verify \
     --evidence-file "$SOURCE_HEADERS_REPORT" \
     --evidence-file "$PLANNER_HEADERS" \

@@ -228,14 +228,21 @@ The generated `config.json`, candidate manifest, and model card pin
 must first pass the rollback-wrapped seven-case SM86 numerical/cubin oracle in
 `models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-mixed-groups/`.
 
-`rental/run-verda-frontier-host.sh` is the bounded host orchestrator. Its guarded
-default is one on-demand `2A100.44V` in FIN-01 with 2× A100 80 GB, 240 GB host
-RAM, a 350 GiB boot volume, and Ubuntu 24.04 CUDA 13.0. The 2026-08-13 dry run
-measured $3.6759/hour including storage, or $29.4072 for the eight-hour cap,
-against a $31.64546 balance. The orchestrator rechecks live price, balance,
-capacity, image, and SSH key before every create call; records exact VM and
-volume IDs; arms a persistent deletion watchdog before provisioning; and proves
-zero VMs, zero volumes, and zero running cost after completion.
+`rental/run-verda-frontier-host.sh` is the bounded host orchestrator. Larger
+A100 shapes disappeared before provisioning, so its guarded default is now one
+on-demand `1A100.22V` in FIN-03 with one A100 80 GB, 120 GB host RAM, a 350 GiB
+boot volume, and Ubuntu 24.04 CUDA 13.0. The 2026-08-13 live estimate was
+$1.8859/hour including storage, or $30.1744 for the 16-hour cap, against a
+$31.64546 `main` balance. This exact host class previously completed the same
+converter at 112.9 GiB peak RAM with no swap. The remote runner uses one spawned
+GPU worker; the same coordinator can use more fixed one-GPU workers when a
+larger shape is intentionally pinned. Whole layers remain atomic during
+screening, output shards remain disjoint during conversion, and the parent
+retains canonical ordering, checksum-bound receipts, finalization, and
+publication. The orchestrator rechecks live price, balance, capacity, image,
+and SSH key before every create call; records exact VM and volume IDs; arms a
+persistent deletion watchdog before provisioning; and proves zero VMs, zero
+volumes, and zero running cost after completion.
 `VERDA_FRONTIER_DRY_RUN=1` performs those checks without creating resources.
 The host exports `VERDA_PROFILE` from `VERDA_FRONTIER_PROFILE`, which defaults
 to `main`; it never mutates the active profile with `auth use`. Using another

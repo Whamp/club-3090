@@ -19,6 +19,10 @@ from deepseek_v4_lowbit.convert_cli import (
     select_output_shards,
     write_conversion_metrics_report,
 )
+from deepseek_v4_lowbit.frontier_gpu_workers import (
+    transform_frontier_shards_on_fixed_gpus,
+    validate_fixed_gpu_devices,
+)
 from deepseek_v4_lowbit.frontier_provenance import (
     validate_frontier_conversion_inputs,
 )
@@ -272,6 +276,7 @@ def convert_frontier_candidates(
     completed_callback: Callable[[FrontierCandidateConversion], None] | None = None,
     completed_candidate_names: tuple[str, ...] = (),
     reuse_candidate: FrontierCandidateConversion | None = None,
+    gpu_devices: tuple[str, ...] = (),
 ) -> tuple[FrontierCandidateConversion, ...]:
     """Convert selected nested candidates while hardlinking identical shards."""
     if baseline_directory is None:
@@ -312,6 +317,7 @@ def convert_frontier_candidates(
         transform_recipe_sha256(baseline_recipe, options),
     )
     candidate_order = validate_frontier_candidate_names(candidate_names)
+    fixed_gpu_devices = validate_fixed_gpu_devices(gpu_devices) if gpu_devices else ()
     if completed_candidate_names != candidate_order[: len(completed_candidate_names)]:
         raise ValueError("frontier completed candidates must prefix the selection")
     if reuse_candidate is not None and (
@@ -332,7 +338,8 @@ def convert_frontier_candidates(
             output_directory = output_root / name
             writer = ResumableSafetensorsWriter(output_directory)
             recipe_sha256 = transform_recipe_sha256(recipe, options)
-            results: list[ShardTransformResult] = []
+            results_by_shard: dict[str, ShardTransformResult] = {}
+            pending_transform_shards: list[str] = []
             reused_shards = converted_shards = 0
             for shard_name in output_shards:
                 source_path = source_directory / shard_name
@@ -342,12 +349,10 @@ def convert_frontier_candidates(
                 )
                 existing = writer.completed_shard(shard_name, identity)
                 if existing is not None:
-                    results.append(
-                        ShardTransformResult(
-                            receipt=existing,
-                            metrics=metrics_from_shard_receipt(existing),
-                            resumed=True,
-                        )
+                    results_by_shard[shard_name] = ShardTransformResult(
+                        receipt=existing,
+                        metrics=metrics_from_shard_receipt(existing),
+                        resumed=True,
                     )
                     continue
 
@@ -361,26 +366,42 @@ def convert_frontier_candidates(
                 )
                 if reusable is not None:
                     receipt = writer.reuse_shard(shard_name, reusable, identity)
-                    results.append(
-                        ShardTransformResult(
-                            receipt=receipt,
-                            metrics=metrics_from_shard_receipt(receipt),
-                            resumed=False,
-                        )
+                    results_by_shard[shard_name] = ShardTransformResult(
+                        receipt=receipt,
+                        metrics=metrics_from_shard_receipt(receipt),
+                        resumed=False,
                     )
                     reused_shards += 1
                     continue
 
-                result = transform_source_shard(
-                    source_path,
-                    shard_name,
-                    writer=writer,
+                pending_transform_shards.append(shard_name)
+
+            if fixed_gpu_devices and pending_transform_shards:
+                transformed_results = transform_frontier_shards_on_fixed_gpus(
+                    source_directory,
+                    output_directory,
+                    pending_transform_shards,
                     recipe=recipe,
                     options=options,
-                    imatrix=imatrix,
+                    imatrix_path=imatrix_path,
+                    gpu_devices=fixed_gpu_devices,
                 )
-                results.append(result)
-                converted_shards += 1
+            else:
+                transformed_results = tuple(
+                    transform_source_shard(
+                        source_directory / shard_name,
+                        shard_name,
+                        writer=writer,
+                        recipe=recipe,
+                        options=options,
+                        imatrix=imatrix,
+                    )
+                    for shard_name in pending_transform_shards
+                )
+            for result in transformed_results:
+                results_by_shard[result.receipt.shard_name] = result
+            converted_shards += len(transformed_results)
+            results = [results_by_shard[shard_name] for shard_name in output_shards]
 
             writer.finalize_index(
                 output_shards,

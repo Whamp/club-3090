@@ -28,6 +28,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--branch-prefix", required=True)
     parser.add_argument("--device", default="cuda")
     parser.add_argument(
+        "--gpu-device",
+        action="append",
+        default=[],
+        help=(
+            "Physical GPU selector for one spawned conversion worker; repeat "
+            "for fixed multi-GPU conversion."
+        ),
+    )
+    parser.add_argument(
         "--candidate",
         required=True,
         choices=("cliff", "capacity", "balanced", "quality"),
@@ -81,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
         arguments.baseline_directory.resolve(),
         device=arguments.device,
         publisher=publisher,
+        gpu_devices=tuple(arguments.gpu_device),
     )
     if tuple(item.candidate for item in publisher.published) != (arguments.candidate,):
         raise RuntimeError("frontier batch did not publish the selected candidate")

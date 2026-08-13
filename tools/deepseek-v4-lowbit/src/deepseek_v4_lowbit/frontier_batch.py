@@ -276,6 +276,7 @@ def run_frontier_conversion_batch(
     *,
     device: str,
     publisher: FrontierBatchPublisher,
+    gpu_devices: tuple[str, ...] = (),
 ) -> tuple[FrontierCandidateConversion, ...]:
     """Convert and durably publish the campaign's one selected candidate."""
     recipe_bundle = json.loads(recipe_bundle_path.read_text(encoding="utf-8"))
@@ -302,6 +303,7 @@ def run_frontier_conversion_batch(
         candidate_names=publisher.candidate_names,
         completed_candidate_names=completed_names,
         reuse_candidate=reuse_candidate,
+        gpu_devices=gpu_devices,
     )
     publisher.finalize_local_storage()
     return converted

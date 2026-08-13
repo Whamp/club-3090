@@ -3,11 +3,16 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Mapping
+from contextlib import nullcontext
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 from deepseek_v4_lowbit.convert_cli import load_source_weight_map
+from deepseek_v4_lowbit.frontier_gpu_workers import (
+    screen_quantization_frontier_on_fixed_gpus,
+    validate_fixed_gpu_devices,
+)
 from deepseek_v4_lowbit.frontier_provenance import (
     validate_frontier_full_screen_matrix,
     validate_frontier_pilot_screen_matrix,
@@ -15,6 +20,8 @@ from deepseek_v4_lowbit.frontier_provenance import (
 from deepseek_v4_lowbit.frontier_recipe import select_frontier_boundary_layers
 from deepseek_v4_lowbit.frontier_screen import (
     FrontierScreenOptions,
+    FrontierScreenResult,
+    FrontierScreenSample,
     baseline_metrics_from_conversion_report,
     expand_full_frontier_layers,
     screen_quantization_frontier,
@@ -38,6 +45,7 @@ class FrontierScreenCampaign:
         *,
         samples_per_projection: int,
         device: str,
+        gpu_devices: tuple[str, ...] = (),
     ) -> None:
         self.source_directory = source_directory
         self.imatrix_path = imatrix_path
@@ -47,6 +55,9 @@ class FrontierScreenCampaign:
         self.output_directory = output_directory
         self.samples_per_projection = samples_per_projection
         self.device = device
+        self.gpu_devices = (
+            validate_fixed_gpu_devices(gpu_devices) if gpu_devices else ()
+        )
         self.source_index_path = source_directory / "model.safetensors.index.json"
         self.pilot_report_path = output_directory / "frontier-pilot-screen.json"
         self.boundary_report_path = output_directory / "frontier-boundary-report.json"
@@ -67,8 +78,14 @@ class FrontierScreenCampaign:
         full_results_by_layer = self._load_full_screen_progress(source_evidence)
         iterations: list[dict[str, Any]] = []
 
-        with ImatrixFile.open(self.imatrix_path) as imatrix:
-            imatrix.validate_deepseek_v4_geometry()
+        imatrix_context = (
+            nullcontext(None)
+            if self.gpu_devices
+            else ImatrixFile.open(self.imatrix_path)
+        )
+        with imatrix_context as imatrix:
+            if imatrix is not None:
+                imatrix.validate_deepseek_v4_geometry()
             for iteration in range(44):
                 merged_results = merge_frontier_screen_results(
                     pilot_results,
@@ -109,12 +126,10 @@ class FrontierScreenCampaign:
                         self.full_screen_report_path,
                     )
 
-                results = screen_quantization_frontier(
-                    self.source_directory,
+                results = self._screen_samples(
                     weight_map,
                     imatrix,
                     expand_full_frontier_layers(missing_layers),
-                    FrontierScreenOptions(device=self.device),
                 )
                 grouped_results: dict[int, list[dict[str, Any]]] = {
                     layer: [] for layer in missing_layers
@@ -172,7 +187,7 @@ class FrontierScreenCampaign:
             "source_index_sha256": file_sha256(self.source_index_path),
             "baseline_metrics_sha256": file_sha256(self.baseline_metrics_path),
             "imatrix_sha256": file_sha256(self.imatrix_path),
-            "device": self.device,
+            **self._screen_execution_identity(),
             "group_sizes": [128, 256, 512],
             "samples_per_projection": self.samples_per_projection,
         }
@@ -186,15 +201,15 @@ class FrontierScreenCampaign:
             baseline_metrics,
             samples_per_projection=self.samples_per_projection,
         )
-        with ImatrixFile.open(self.imatrix_path) as imatrix:
-            imatrix.validate_deepseek_v4_geometry()
-            results = screen_quantization_frontier(
-                self.source_directory,
-                weight_map,
-                imatrix,
-                samples,
-                FrontierScreenOptions(device=self.device),
-            )
+        imatrix_context = (
+            nullcontext(None)
+            if self.gpu_devices
+            else ImatrixFile.open(self.imatrix_path)
+        )
+        with imatrix_context as imatrix:
+            if imatrix is not None:
+                imatrix.validate_deepseek_v4_geometry()
+            results = self._screen_samples(weight_map, imatrix, samples)
         used_shards = sorted({result.source_shard for result in results})
         report = {
             "report_schema_version": 1,
@@ -270,9 +285,41 @@ class FrontierScreenCampaign:
             ),
             "source_headers_sha256": file_sha256(self.planner_headers_path),
             "source_shards_sha256": source_evidence["source_shards"],
-            "device": self.device,
+            **self._screen_execution_identity(),
             "group_sizes": [128, 256, 512],
         }
+
+    def _screen_samples(
+        self,
+        weight_map: Mapping[str, str],
+        imatrix: Any | None,
+        samples: tuple[FrontierScreenSample, ...],
+    ) -> tuple[FrontierScreenResult, ...]:
+        """Run one screen through the serial or fixed-GPU execution boundary."""
+        options = FrontierScreenOptions(device=self.device)
+        if self.gpu_devices:
+            return screen_quantization_frontier_on_fixed_gpus(
+                self.source_directory,
+                weight_map,
+                self.imatrix_path,
+                samples,
+                options,
+                self.gpu_devices,
+            )
+        assert imatrix is not None
+        return screen_quantization_frontier(
+            self.source_directory,
+            weight_map,
+            imatrix,
+            samples,
+            options,
+        )
+
+    def _screen_execution_identity(self) -> dict[str, Any]:
+        identity: dict[str, Any] = {"device": self.device}
+        if self.gpu_devices:
+            identity["gpu_devices"] = list(self.gpu_devices)
+        return identity
 
     def _write_final_reports(
         self,
@@ -306,7 +353,7 @@ class FrontierScreenCampaign:
             "source_index_sha256": file_sha256(self.source_index_path),
             "imatrix_sha256": file_sha256(self.imatrix_path),
             "boundary_report_sha256": file_sha256(self.boundary_report_path),
-            "device": self.device,
+            **self._screen_execution_identity(),
             "group_sizes": [128, 256, 512],
             "layers": list(screened_layers),
             "decision_boundary_layers": list(boundary_layers),

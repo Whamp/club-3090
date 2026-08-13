@@ -18,6 +18,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("output_directory", type=Path)
     parser.add_argument("--samples-per-projection", type=int, default=8)
     parser.add_argument("--device", default="cuda")
+    parser.add_argument(
+        "--gpu-device",
+        action="append",
+        default=[],
+        help=(
+            "Physical GPU selector for one spawned screen worker; repeat for "
+            "fixed multi-GPU screening."
+        ),
+    )
     arguments = parser.parse_args(argv)
     campaign = FrontierScreenCampaign(
         arguments.source_directory.resolve(),
@@ -28,6 +37,7 @@ def main(argv: list[str] | None = None) -> int:
         arguments.output_directory.resolve(),
         samples_per_projection=arguments.samples_per_projection,
         device=arguments.device,
+        gpu_devices=tuple(arguments.gpu_device),
     )
     pilot, boundary, full_screen = campaign.run()
     print(f"frontier pilot report={pilot}")

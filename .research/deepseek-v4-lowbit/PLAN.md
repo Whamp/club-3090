@@ -47,13 +47,20 @@ If quality fits the runtime and passes the early gate, generate a smaller point
 only when a real quality-versus-context tradeoff remains. If it cannot fit,
 fall back to balanced rather than weakening quality blindly.
 
-The guarded rental default, verified without provisioning on 2026-08-13, is one
-on-demand `2A100.44V` in FIN-01: 2× A100 80 GB, 240 GB host RAM, a 350 GiB boot
-volume, and Ubuntu 24.04 CUDA 13.0. The live estimate was $3.6759/hour and
-$29.4072 for the eight-hour watchdog limit against a $31.64546 balance. The
-runner stores Hugging Face and Xet caches under the rental root, disables the
-Xet chunk cache, and fails if cache growth suggests duplicated model shards.
-Provisioning still requires the runner's fresh live contract check.
+Larger A100 shapes disappeared before provisioning. The guarded rental default,
+verified without provisioning on 2026-08-13, is one on-demand `1A100.22V` in
+FIN-03: one A100 80 GB, 120 GB host RAM, a 350 GiB boot volume, and Ubuntu 24.04
+CUDA 13.0. The live estimate is $1.8859/hour including storage, or $30.1744 for
+the 16-hour watchdog limit against a $31.64546 `main` balance. This exact host
+class previously completed the same converter at 112.9 GiB peak RAM with no
+swap. The runner uses one process-isolated GPU worker today; its coordinator can
+use more one-GPU workers when a larger pinned shape is intentionally selected.
+Each child retains the canonical `device=cuda` transform identity; the parent
+retains checksum-bound receipts, finalization, publication, and failure
+propagation. The runner stores Hugging Face and Xet caches under the rental root,
+disables the Xet chunk cache, and fails if cache growth suggests duplicated
+model shards. Provisioning still requires the runner's fresh live contract
+check and never falls back to `backup` automatically.
 
 SM86 runtime gate, 2026-08-13: the checksum-pinned acceptance image passed all
 seven projection/group cases on server60 in 328.36 seconds. The gate produced

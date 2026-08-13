@@ -127,10 +127,10 @@ class RentalScriptContractTests(unittest.TestCase):
             script,
         )
         self.assertNotIn("__CLUB_3090_REVISION__", script)
-        self.assertIn('CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"', script)
-        self.assertIn("requires at least 160 GiB host RAM", script)
+        self.assertNotIn('CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"', script)
+        self.assertIn("requires at least 110 GiB host RAM", script)
         self.assertIn("requires at least 280 GiB free", script)
-        self.assertIn("requires exactly two A100 80GB GPUs", script)
+        self.assertIn("requires exactly one A100 80GB GPU", script)
         self.assertIn("requires compute capability 8.0", script)
         self.assertIn('export HF_HOME="$RENTAL_ROOT/huggingface-cache"', script)
         self.assertIn('export HF_HUB_CACHE="$HF_HOME/hub"', script)
@@ -156,11 +156,12 @@ class RentalScriptContractTests(unittest.TestCase):
         self.assertIn("export VERDA_PROFILE", script)
         self.assertNotIn("auth use", script)
         self.assertIn(
-            "VERDA_FRONTIER_INSTANCE_TYPE:-2A100.44V",
+            "VERDA_FRONTIER_INSTANCE_TYPE:-1A100.22V",
             script,
         )
-        self.assertIn("VERDA_FRONTIER_LOCATION:-FIN-01", script)
-        self.assertIn("VERDA_FRONTIER_MAX_COST_USD:-29.50", script)
+        self.assertIn("VERDA_FRONTIER_LOCATION:-FIN-03", script)
+        self.assertIn("VERDA_FRONTIER_MAX_HOURS:-16", script)
+        self.assertIn("VERDA_FRONTIER_MAX_COST_USD:-30.25", script)
         self.assertNotIn("VERDA_FRONTIER_INSTANCE_TYPE:-2RTXPRO6000.60V", script)
         self.assertIn('verda --agent "$@" -o json', script)
         self.assertIn("require_empty_account", script)
@@ -337,6 +338,25 @@ class RentalScriptContractTests(unittest.TestCase):
         self.assertIn('"tblib==3.1.0"', script)
         self.assertIn('export PATH="$ORACLE_ENVIRONMENT/bin:$PATH"', script)
         self.assertIn("ninja --version", script)
+
+    def test_frontier_runner_uses_fixed_gpu_workers_and_selected_disk_bound(
+        self,
+    ) -> None:
+        script = _FRONTIER_SCRIPT.read_text(encoding="utf-8")
+        self.assertEqual(script.count('gpu_arguments+=(--gpu-device "$device")'), 1)
+        self.assertEqual(script.count('"${gpu_arguments[@]}"'), 3)
+        self.assertIn("deepseek-v4-inspect-frontier-gpus", script)
+        self.assertLess(
+            script.index("deepseek-v4-inspect-frontier-gpus"),
+            script.index("Download pinned official checkpoint"),
+        )
+        self.assertIn("FRONTIER_GPU_DEVICES=(0)", script)
+        self.assertIn('recipe["candidate_summaries"]', script)
+        self.assertIn('summary.get("name") == selected_candidate', script)
+        self.assertNotIn(
+            'recipe["storage_summary"]["projected_local_peak_model_payload_bytes"]',
+            script,
+        )
 
 
 if __name__ == "__main__":
