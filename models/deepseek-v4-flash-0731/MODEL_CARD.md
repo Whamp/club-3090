@@ -22,8 +22,8 @@ dtypes. It was built to test whether a roughly 77 GiB safetensors checkpoint
 could run through vLLM and Humming on four 24 GB RTX 3090 GPUs.
 
 The checkpoint loads and generates with a patched SM86 runtime. It does not
-work with stock vLLM. On four RTX 3090s, the promoted 131,072-token profile
-measures 60.82 single-stream decode tokens/s. Short-request concurrency tests
+work with stock vLLM. On four RTX 3090s, the selected 215,000-token profile
+measures 60.79 single-stream decode tokens/s. Short-request concurrency tests
 passed with two and four simultaneous requests.
 
 ## What changed
@@ -89,9 +89,9 @@ It contains 54 files totaling 82,464,249,582 bytes, including 45 model shards.
 This checkpoint requires a research integration based on
 [`haosdent/vllm@12810046c799cbe874967e19b1c0fa134ab7b209`](https://github.com/haosdent/vllm/tree/12810046c799cbe874967e19b1c0fa134ab7b209)
 plus the checksum-pinned patches in
-[club-3090](https://github.com/Whamp/club-3090/tree/d6776fbac8a4d062102e57d7cfe0e3eb4d0be1b6/models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86).
+[club-3090](https://github.com/Whamp/club-3090/tree/26ae767aa98c14761ac4a69d4f492f418fd29578/models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86).
 The final tested vLLM tree was
-`12b87bcd52bb2973685fa8f38b5fc8bbbfe7519c`.
+`aeb62948e33074514a742d19c2f9a1a3c2ee3e1f`.
 
 The patches provide:
 
@@ -99,7 +99,9 @@ The patches provide:
 - separate routed-expert and native DeepSeek FP8 handling;
 - DeepSeek V4 execution on SM86; and
 - RTX 3090 sparse-attention fallbacks for kernels that exceed SM86 shared
-  memory.
+  memory; and
+- runtime-bounded DeepSeek V4 RoPE cache materialization that preserves the
+  model's original YaRN frequency span.
 
 Stock vLLM does not implement this complete path. Do not expect
 `vllm serve hampsonw/DeepSeek-V4-Flash-0731-WNA16` to work in an unpatched
@@ -110,7 +112,7 @@ environment.
 The promoted server60 profile uses four RTX 3090 GPUs with tensor parallelism 4,
 breakable CUDA graphs, `max_num_seqs=4`, a 256-token batch budget, no CPU weight
 offload, FP8 DeepSeek MLA cache, and the required SM86 sparse-attention
-fallbacks. It serves 131,072 tokens.
+fallbacks. It serves 215,000 tokens.
 
 A thermally warm matched code benchmark used 3 warmups and 5 measured
 512-token generations:
@@ -118,29 +120,31 @@ A thermally warm matched code benchmark used 3 warmups and 5 measured
 | Runtime | Mean decode | CV | Mean TTFT |
 | --- | ---: | ---: | ---: |
 | llama.cpp Unsloth UD-IQ1_M baseline | 32.67 tok/s | 0.1% | 109 ms |
-| vLLM WNA16, final packaged image | 60.82 tok/s | 0.1% | 239 ms |
+| vLLM WNA16, selected 215K image | 60.79 tok/s | 0.0% | 218 ms |
 
 The vLLM result is about 86% faster on this single-stream decode workload. A
 matched eager ablation measured 4.96 tok/s, while graph-enabled runs before and
 after it measured 60.27 and 60.07 tok/s. This isolates breakable CUDA graph
 replay as the cause of the gain.
 
-Additional validation on the accepted profile:
+Additional validation on the selected profile:
 
-- three cache-busted 8,984-token prefill runs averaged 964.09 prompt tok/s;
-- exact needle retrieval passed through 120,476 tokens (91% of configured context);
-- concurrency 2 sustained 65.19 aggregate tok/s and 41.44 tok/s per stream;
-- concurrency 4 sustained 90.23 aggregate tok/s and 30.06 tok/s per stream;
+- three cache-busted 8,984-token prefill runs averaged 968.97 prompt tok/s;
+- exact needle retrieval passed at 204,900 prompt tokens;
+- concurrency 2 sustained 65.47 aggregate tok/s and 41.55 tok/s per stream;
+- concurrency 4 sustained 89.94 aggregate tok/s and 29.86 tok/s per stream;
 - both concurrency tests reported zero post-warm VRAM growth;
 - deterministic short generation, forced tool calling, and separated reasoning
-  output passed; and
-- the checksum-pinned final image repeated the decode result without source
-  bind mounts or serving-process swap.
+  output passed;
+- `verify-full` passed; and
+- `verify-stress` passed every functional class and all ceiling rungs through
+  197,580 tokens, with zero serving-process swap.
 
-A 200K graph profile fit only with CPU weight offload in the tested runtime and
-measured 12.68–19.54 decode tok/s. The 131K profile is therefore the promoted
-performance configuration. The unexpectedly high non-KV GPU residency remains
-under investigation.
+The runtime-bounded RoPE patch removed about 407 MiB of registered storage per
+rank at 215K. A 230K profile with `max_num_seqs=4` failed admission and estimated
+a 215,552-token maximum. Reducing the request bound to two raised the estimate
+to 223,488 but did not justify losing concurrency 4, so the selected profile
+stops at 215,000 tokens.
 
 ## Evaluation and limitations
 
@@ -148,16 +152,19 @@ Available quality evidence consists of:
 
 - the 24-matrix reconstruction-error comparison;
 - deterministic short-generation and parser canaries;
-- one exact 119,895-token needle retrieval; and
+- exact needle retrieval at 204,900 prompt tokens; and
 - a syntactically correct quicksort response that still added Markdown fencing
   despite an “only code” instruction.
 
 No broad comparison against the official checkpoint or Antirez and Unsloth
 GGUF quants has been completed. The context tests prove selected retrieval
 cases, not general long-context quality. The repository stress suite passed all
-functional probes but failed its 1 GiB release-headroom gate: only 118 MiB per
-card remained after the 120,476-token rung. Treat 131K as a measured ceiling,
-not a safe sustained-agent operating point near full fill.
+functional probes but returned nonzero on its generic 1 GiB free-VRAM policy:
+the minimum observed reserve was 127 MiB per card. That policy was written for
+llama.cpp and is not the vLLM acceptance rule here. The 215K profile instead
+passed repeated startup, decode, prefill, near-ceiling retrieval, and short
+concurrency tests without CUDA allocation failure, serving-process swap, or
+post-warm VRAM growth. The reserve remains narrow and is reported, not hidden.
 
 Other limits:
 
@@ -167,17 +174,20 @@ Other limits:
 - Runtime support depends on research patches and JIT-compiled Humming kernels.
 - Only the four-RTX-3090 SM86 path and a generic A100 numerical oracle were
   tested.
+- Concurrency 4 is validated for short requests, not four simultaneous
+  215,000-token requests.
 
 ## Reproduction
 
 The converter, pilot, resumable writer, upload verifier, runtime patches, and
-research record live in the
-[`feat/deepseek-v4-lowbit-vllm`](https://github.com/Whamp/club-3090/tree/feat/deepseek-v4-lowbit-vllm)
-branch of club-3090. Start with:
+selected Compose contract are pinned in
+[`Whamp/club-3090@26ae767a`](https://github.com/Whamp/club-3090/commit/26ae767aa98c14761ac4a69d4f492f418fd29578).
+Start with:
 
-- [`tools/deepseek-v4-lowbit/README.md`](https://github.com/Whamp/club-3090/blob/feat/deepseek-v4-lowbit-vllm/tools/deepseek-v4-lowbit/README.md)
-- [the experiment record](https://github.com/Whamp/club-3090/blob/feat/deepseek-v4-lowbit-vllm/.research/deepseek-v4-lowbit/PLAN.md)
-- [the vLLM patch series](https://github.com/Whamp/club-3090/tree/feat/deepseek-v4-lowbit-vllm/models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86)
+- [`tools/deepseek-v4-lowbit/README.md`](https://github.com/Whamp/club-3090/blob/26ae767aa98c14761ac4a69d4f492f418fd29578/tools/deepseek-v4-lowbit/README.md)
+- [the final experiment record](https://github.com/Whamp/club-3090/blob/d10ccf25da5551cbddbac42e228d3260856e8db4/.research/deepseek-v4-lowbit/PLAN.md)
+- [the vLLM patch series](https://github.com/Whamp/club-3090/tree/26ae767aa98c14761ac4a69d4f492f418fd29578/models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86)
+- [the direct four-GPU Compose](https://github.com/Whamp/club-3090/blob/26ae767aa98c14761ac4a69d4f492f418fd29578/models/deepseek-v4-flash-0731/vllm/compose/multi4/wna16/base.yml)
 
 ## Credits
 
