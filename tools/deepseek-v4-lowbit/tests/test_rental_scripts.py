@@ -288,6 +288,14 @@ class RentalScriptContractTests(unittest.TestCase):
         self.assertIn("trap - EXIT", script)
         self.assertIn('exit "$command_status"', script)
         self.assertIn("systemctl --user is-active --quiet", script)
+        self.assertIn('UserKnownHostsFile="$SSH_KNOWN_HOSTS_FILE"', script)
+        self.assertIn('install -m 0600 /dev/null "$SSH_KNOWN_HOSTS_FILE"', script)
+        self.assertIn("fetch_failure_evidence", script)
+        cleanup_body = script[script.index("cleanup_on_exit() {") :]
+        self.assertLess(
+            cleanup_body.index('fetch_failure_evidence "$vm_id"'),
+            cleanup_body.index('"$DELETE_SCRIPT" "$STATE_FILE" --preserve-volume'),
+        )
         self.assertIn("trap cleanup_on_exit EXIT", script)
         self.assertIn("trap 'exit 130' INT", script)
         self.assertIn("trap 'exit 143' TERM", script)

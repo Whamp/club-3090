@@ -60,6 +60,7 @@ REPOSITORY_ROOT="$(cd -- "$SCRIPT_DIRECTORY/../../.." && pwd)"
 readonly REPOSITORY_ROOT
 readonly STATE_DIRECTORY="${VERDA_FRONTIER_STATE_DIRECTORY:-$HOME/.local/state/club-3090}"
 readonly STATE_FILE="$STATE_DIRECTORY/deepseek-v4-quant-frontier-verda.json"
+readonly SSH_KNOWN_HOSTS_FILE="$STATE_DIRECTORY/deepseek-v4-quant-frontier-known-hosts"
 readonly DELETE_SCRIPT="$SCRIPT_DIRECTORY/delete-verda-frontier-vm.sh"
 readonly WATCHDOG_UNIT="deepseek-v4-quant-frontier-delete"
 readonly LOCAL_EVIDENCE_DIRECTORY="${VERDA_FRONTIER_EVIDENCE_DIRECTORY:-$PWD/.research/deepseek-v4-lowbit/frontier-verda-evidence}"
@@ -67,6 +68,7 @@ readonly LOCAL_RECOVERY_MANIFEST="${VERDA_FRONTIER_RECOVERY_MANIFEST:-$SCRIPT_DI
 readonly DRY_RUN="${VERDA_FRONTIER_DRY_RUN:-0}"
 
 mkdir -p "$STATE_DIRECTORY" "$LOCAL_EVIDENCE_DIRECTORY"
+install -m 0600 /dev/null "$SSH_KNOWN_HOSTS_FILE"
 
 verda_json() {
     verda --agent "$@" -o json
@@ -372,7 +374,9 @@ run_remote_ssh() {
     shift
     # Callers pass literals or commands assembled with printf %q for remote parsing.
     # shellcheck disable=SC2029
-    ssh "${SSH_OPTIONS[@]}" "root@$address" "$@"
+    ssh "${SSH_OPTIONS[@]}" \
+        -o UserKnownHostsFile="$SSH_KNOWN_HOSTS_FILE" \
+        "root@$address" "$@"
 }
 
 wait_for_ssh() {
@@ -517,15 +521,30 @@ EOF
     return 1
 }
 
-fetch_evidence() {
+fetch_reports_archive() {
     local vm_id="$1"
-    local address remote_command
+    local destination="$2"
+    local address archive remote_command temporary_archive
     address="$(vm_public_ip "$vm_id")"
+    mkdir -p "$destination"
+    archive="$destination/frontier-reports.tar.gz"
+    temporary_archive="$archive.writing"
+    rm -f "$temporary_archive"
     printf -v remote_command '%q ' tar -C "$REMOTE_ROOT" -czf - reports
-    run_remote_ssh "$address" "$remote_command" \
-        > "$LOCAL_EVIDENCE_DIRECTORY/frontier-reports.tar.gz"
-    tar -C "$LOCAL_EVIDENCE_DIRECTORY" -xzf \
-        "$LOCAL_EVIDENCE_DIRECTORY/frontier-reports.tar.gz"
+    if ! run_remote_ssh "$address" "$remote_command" > "$temporary_archive"; then
+        rm -f "$temporary_archive"
+        return 1
+    fi
+    mv "$temporary_archive" "$archive"
+    tar -C "$destination" -xzf "$archive"
+}
+
+fetch_evidence() {
+    fetch_reports_archive "$1" "$LOCAL_EVIDENCE_DIRECTORY"
+}
+
+fetch_failure_evidence() {
+    fetch_reports_archive "$1" "$LOCAL_EVIDENCE_DIRECTORY/failure"
 }
 
 verify_fetched_evidence() {
@@ -598,14 +617,19 @@ cleanup_on_exit() {
             if ! cancel_watchdog; then
                 command_status=1
             fi
-        elif "$DELETE_SCRIPT" "$STATE_FILE" --preserve-volume; then
-            if ! cancel_watchdog; then
+        else
+            if [[ -n "$vm_id" ]] && ! fetch_failure_evidence "$vm_id"; then
+                echo "Could not capture frontier failure reports before cleanup" >&2
+            fi
+            if "$DELETE_SCRIPT" "$STATE_FILE" --preserve-volume; then
+                if ! cancel_watchdog; then
+                    command_status=1
+                fi
+            else
+                echo "Immediate cleanup failed; starting retrying watchdog service" >&2
+                systemctl --user start "$WATCHDOG_UNIT.service" || true
                 command_status=1
             fi
-        else
-            echo "Immediate cleanup failed; starting retrying watchdog service" >&2
-            systemctl --user start "$WATCHDOG_UNIT.service" || true
-            command_status=1
         fi
     fi
     exit "$command_status"
