@@ -38,6 +38,15 @@ _MIXED_GROUP_ORACLE_SCRIPT = (
 _MIXED_GROUP_ROLLBACK_SCRIPT = (
     _MIXED_GROUP_PATCH_DIRECTORY / "run-server60-mixed-group-oracle-with-rollback.sh"
 )
+_QUALITY_CANDIDATE_DOCKERFILE = (
+    _MIXED_GROUP_PATCH_DIRECTORY / "Dockerfile.quality-candidate"
+)
+_QUALITY_CANDIDATE_BUILD_SCRIPT = (
+    _MIXED_GROUP_PATCH_DIRECTORY / "build-quality-candidate-image.sh"
+)
+_QUALITY_CANDIDATE_MATERIALIZER = (
+    _MIXED_GROUP_PATCH_DIRECTORY / "materialize-quality-candidate-runtime-view.py"
+)
 _FINAL_COMPOSE = (
     _REPOSITORY_ROOT
     / "models/deepseek-v4-flash-0731/vllm/compose/multi4/wna16/base.yml"
@@ -72,12 +81,13 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _load_materializer_module():
-    spec = importlib.util.spec_from_file_location(
-        "deepseek_v4_runtime_view_materializer", _MATERIALIZER
-    )
+def _load_materializer_module(
+    path: Path = _MATERIALIZER,
+    module_name: str = "deepseek_v4_runtime_view_materializer",
+):
+    spec = importlib.util.spec_from_file_location(module_name, path)
     if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot import {_MATERIALIZER}")
+        raise RuntimeError(f"cannot import {path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -172,6 +182,95 @@ class RuntimeImageContractTests(unittest.TestCase):
             builder,
         )
         self.assertNotIn("docker compose", builder)
+
+    def test_quality_candidate_runtime_materializer_is_fail_closed(self) -> None:
+        module = _load_materializer_module(
+            _QUALITY_CANDIDATE_MATERIALIZER,
+            "deepseek_v4_quality_runtime_view_materializer",
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            artifact = root / "artifact"
+            output = root / "runtime-model"
+            artifact.mkdir()
+            shard = artifact / "model-00001-of-00048.safetensors"
+            shard.write_bytes(b"candidate shard")
+            index = {"weight_map": {"model.layers.0.weight": shard.name}}
+            index_path = artifact / "model.safetensors.index.json"
+            index_path.write_text(json.dumps(index), encoding="utf-8")
+            config = {
+                "club_3090_lowbit": {
+                    "source_quantization_method": "compressed-tensors",
+                    "runtime_compatibility": {
+                        "integration_revision": module.EXPECTED_INTEGRATION_REVISION,
+                        "required_tree": module.EXPECTED_REQUIRED_TREE,
+                    },
+                },
+                "quantization_config": {
+                    "base_quant_method": "deepseek_v4_fp8",
+                    "config_groups": {
+                        group_name: {} for group_name in module.EXPECTED_CONFIG_GROUPS
+                    },
+                    "quant_method": "compressed-tensors",
+                },
+            }
+            config_path = artifact / "config.json"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+
+            with (
+                patch.object(
+                    module,
+                    "EXPECTED_ARTIFACT_CONFIG_SHA256",
+                    _sha256(config_path),
+                ),
+                patch.object(
+                    module,
+                    "EXPECTED_ARTIFACT_INDEX_SHA256",
+                    _sha256(index_path),
+                ),
+            ):
+                module.materialize_quality_candidate_runtime_view(artifact, output)
+
+            self.assertTrue((output / "config.json").is_symlink())
+            self.assertEqual((output / "config.json").resolve(), config_path)
+            self.assertEqual((output / shard.name).resolve(), shard)
+
+            config["quantization_config"]["config_groups"].pop("group_w4_g128")
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            with (
+                patch.object(
+                    module,
+                    "EXPECTED_ARTIFACT_CONFIG_SHA256",
+                    _sha256(config_path),
+                ),
+                patch.object(
+                    module,
+                    "EXPECTED_ARTIFACT_INDEX_SHA256",
+                    _sha256(index_path),
+                ),
+                self.assertRaisesRegex(RuntimeError, "config groups differ"),
+            ):
+                module.materialize_quality_candidate_runtime_view(artifact, output)
+
+    def test_quality_candidate_image_pins_swiglu_runtime_and_artifact(self) -> None:
+        dockerfile = _QUALITY_CANDIDATE_DOCKERFILE.read_text(encoding="utf-8")
+        builder = _QUALITY_CANDIDATE_BUILD_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("FROM ${VERIFIED_SWIGLU_RUNTIME_IMAGE}", dockerfile)
+        self.assertIn("materialize-quality-candidate-runtime-view.py", dockerfile)
+        self.assertIn(
+            'EXPECTED_SWIGLU_IMAGE_ID="sha256:'
+            'a31c73626c16ed758dd33ac5c411b8f520b10c5843ddac35875d2b380e6eb185"',
+            builder,
+        )
+        self.assertIn(
+            'EXPECTED_SWIGLU_COMMIT="a7758f7436a713f042e245b3e0aaab64b3a2f2c6"',
+            builder,
+        )
+        self.assertIn(
+            'CANDIDATE_REVISION="12035985bf555d0ddc603c6305586a8fa915589c"',
+            builder,
+        )
+        self.assertIn("quality-candidate-deepswe-gate", builder)
 
     def test_mixed_group_oracle_image_is_acceptance_only(self) -> None:
         dockerfile = _MIXED_GROUP_DOCKERFILE.read_text(encoding="utf-8")

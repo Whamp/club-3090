@@ -1,0 +1,7 @@
+# syntax=docker/dockerfile:1.7
+ARG VERIFIED_SWIGLU_RUNTIME_IMAGE
+FROM ${VERIFIED_SWIGLU_RUNTIME_IMAGE}
+
+COPY materialize-quality-candidate-runtime-view.py \
+    /usr/local/bin/materialize-deepseek-v4-wna16-runtime-view
+RUN chmod 0755 /usr/local/bin/materialize-deepseek-v4-wna16-runtime-view

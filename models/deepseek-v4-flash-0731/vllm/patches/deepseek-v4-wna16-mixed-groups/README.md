@@ -35,6 +35,15 @@ club-3090/deepseek-v4-wna16-sm86:f73b30cc-mixed-groups-cu130
 for GPU acceptance. Its image is labeled `mixed-group-oracle-only` and must not
 serve requests.
 
+`build-quality-candidate-image.sh` overlays a fail-closed model-view materializer
+for Hugging Face revision `12035985bf555d0ddc603c6305586a8fa915589c`. It pins
+the candidate config and index hashes and accepts only the four published mixed
+W2/W4 groups. Its base is the local runtime for Whamp/vLLM commit
+`a7758f7436a713f042e245b3e0aaab64b3a2f2c6`, which adds DeepSeek V4 SwiGLU
+alpha, beta, and clamp forwarding after mixed-group support. The image is only
+for the approved single-worker DeepSWE gate; it does not replace the production
+Compose image.
+
 ## Acceptance order
 
 1. Reconstruct the final tree from the accepted parent and verify the tree hash.
