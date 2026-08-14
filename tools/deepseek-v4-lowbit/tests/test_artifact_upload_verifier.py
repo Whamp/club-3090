@@ -51,6 +51,38 @@ class ArtifactUploadVerifierTests(unittest.TestCase):
             self.assertEqual(verification.git_blob_file_count, 1)
             self.assertEqual(verification.hub_managed_files, (".gitattributes",))
 
+    def test_ignores_local_hub_managed_gitattributes_content(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            artifact = Path(temporary_directory)
+            config = artifact / "config.json"
+            attributes = artifact / ".gitattributes"
+            config.write_text("{}\n")
+            attributes.write_text("local attributes\n")
+
+            verification = verify_huggingface_artifact_upload(
+                artifact,
+                [
+                    RemoteArtifactFile(
+                        config.name,
+                        config.stat().st_size,
+                        None,
+                        git_blob_sha1(config),
+                    ),
+                    RemoteArtifactFile(
+                        attributes.name,
+                        999,
+                        None,
+                        "hub-managed-content",
+                    ),
+                ],
+                repository="hampsonw/test-artifact",
+                revision="abc123",
+            )
+
+            self.assertEqual(verification.file_count, 1)
+            self.assertEqual(verification.total_bytes, config.stat().st_size)
+            self.assertEqual(verification.hub_managed_files, (".gitattributes",))
+
     def test_rejects_inventory_size_and_hash_mismatches(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             artifact = Path(temporary_directory)

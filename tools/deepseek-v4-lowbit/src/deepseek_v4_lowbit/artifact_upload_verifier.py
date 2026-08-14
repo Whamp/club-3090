@@ -181,6 +181,8 @@ def _artifact_local_files(directory: Path) -> dict[str, Path]:
         relative = path.relative_to(directory)
         if any(part in _LOCAL_STATE_DIRECTORIES for part in relative.parts):
             continue
+        if relative.as_posix() in _HUB_MANAGED_FILES:
+            continue
         if path.is_symlink():
             raise ValueError(f"artifact upload contains a symlink: {relative}")
         if path.is_file():
