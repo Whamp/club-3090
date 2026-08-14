@@ -204,7 +204,7 @@ class RentalScriptContractTests(unittest.TestCase):
     def test_frontier_runner_is_pinned_and_low_disk(self) -> None:
         script = _FRONTIER_SCRIPT.read_text(encoding="utf-8")
         self.assertIn(
-            'CLUB_3090_REVISION="4213eeae4b1fc45b68014e729d2dbd74ff950b6c"',
+            'CLUB_3090_REVISION="2a6d6a4b07907e39d0fe76c59290e5dbb4589839"',
             script,
         )
         self.assertNotIn("__CLUB_3090_REVISION__", script)
