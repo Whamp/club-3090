@@ -239,6 +239,11 @@ replacements for this profile.
 - **Q8 after concat and padding repair only:** fast, but long prompts crossing
   micro-batch boundaries hit a cache-type assertion until the gather fix landed.
 - **IQ1_M weights:** incompatible with the validated MMQ capture path.
+- **DwarfStar CUDA tensor parallelism:** the audited implementation cannot load
+  this GGUF on four 24 GiB cards because three selective weight slabs exceed
+  24 GiB after its required 2 GiB runtime reserve. See
+  [`DWARFSTAR-CUDA-TP-DEAD-END.md`](DWARFSTAR-CUDA-TP-DEAD-END.md) for the pinned
+  source audit, exact tensor accounting, and CPU planner results.
 
 Keep these failures in mind when changing the engine base, cache operations,
 quant, or warm-up. Short smoke prompts are insufficient: the bugs appeared only
