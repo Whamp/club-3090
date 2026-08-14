@@ -4,10 +4,39 @@ set -euo pipefail
 export PYTHONUTF8="${PYTHONUTF8:-1}"
 export VERDA_PROFILE="${VERDA_FRONTIER_PROFILE:-main}"
 
-readonly INSTANCE_TYPE="${VERDA_FRONTIER_INSTANCE_TYPE:-1A100.22V}"
+readonly RUN_MODE="${VERDA_FRONTIER_RUN_MODE:-fresh}"
+case "$RUN_MODE" in
+    fresh)
+        default_instance_kind="gpu"
+        default_instance_type="1A100.22V"
+        default_max_hours="16"
+        default_max_cost_usd="30.25"
+        ;;
+    validate-resume)
+        default_instance_kind="cpu"
+        default_instance_type="CPU.4V.16G"
+        default_max_hours="2"
+        default_max_cost_usd="0.25"
+        ;;
+    resume-conversion)
+        default_instance_kind="gpu"
+        default_instance_type="1A100.22V"
+        default_max_hours="12"
+        default_max_cost_usd="22.64"
+        ;;
+    *)
+        echo "Unknown frontier run mode: $RUN_MODE" >&2
+        exit 2
+        ;;
+esac
+readonly INSTANCE_KIND="${VERDA_FRONTIER_INSTANCE_KIND:-$default_instance_kind}"
+readonly INSTANCE_TYPE="${VERDA_FRONTIER_INSTANCE_TYPE:-$default_instance_type}"
 readonly LOCATION="${VERDA_FRONTIER_LOCATION:-FIN-03}"
 readonly OS_IMAGE="${VERDA_FRONTIER_OS_IMAGE:-ubuntu-24.04-cuda-13.0-open-docker}"
 readonly OS_VOLUME_GIB="${VERDA_FRONTIER_OS_VOLUME_GIB:-350}"
+readonly RESUME_VOLUME_ID="${VERDA_FRONTIER_RESUME_VOLUME_ID:-}"
+readonly RESUME_VOLUME_NAME="${VERDA_FRONTIER_RESUME_VOLUME_NAME:-deepseek-v4-quant-frontier-os}"
+readonly RECOVERY_MANIFEST_SHA256="0788715e8373daed48bbedaee11fedee217c798a2f189fee00473c9a9913a480"
 readonly SSH_KEY_ID="${VERDA_FRONTIER_SSH_KEY_ID:-2a039811-2dc0-4785-9fb5-2694c9d98f1b}"
 readonly SSH_IDENTITY="${VERDA_FRONTIER_SSH_IDENTITY:-$HOME/.ssh/id_ed25519}"
 readonly -a SSH_OPTIONS=(
@@ -19,19 +48,22 @@ readonly -a SSH_OPTIONS=(
     -o StrictHostKeyChecking=accept-new
 )
 readonly HOSTNAME="${VERDA_FRONTIER_HOSTNAME:-deepseek-v4-quant-frontier}"
-readonly MAX_HOURS="${VERDA_FRONTIER_MAX_HOURS:-16}"
-readonly MAX_COST_USD="${VERDA_FRONTIER_MAX_COST_USD:-30.25}"
+readonly MAX_HOURS="${VERDA_FRONTIER_MAX_HOURS:-$default_max_hours}"
+readonly MAX_COST_USD="${VERDA_FRONTIER_MAX_COST_USD:-$default_max_cost_usd}"
 readonly REMOTE_ROOT="${VERDA_FRONTIER_REMOTE_ROOT:-/root/deepseek-v4-quant-frontier}"
 readonly REPOSITORY="${VERDA_FRONTIER_REPOSITORY:-hampsonw/DeepSeek-V4-Flash-0731-WNA16}"
 readonly BRANCH_PREFIX="${VERDA_FRONTIER_BRANCH_PREFIX:-frontier-20260813}"
 readonly CANDIDATE="${VERDA_FRONTIER_CANDIDATE:-quality}"
 SCRIPT_DIRECTORY="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIRECTORY
+REPOSITORY_ROOT="$(cd -- "$SCRIPT_DIRECTORY/../../.." && pwd)"
+readonly REPOSITORY_ROOT
 readonly STATE_DIRECTORY="${VERDA_FRONTIER_STATE_DIRECTORY:-$HOME/.local/state/club-3090}"
 readonly STATE_FILE="$STATE_DIRECTORY/deepseek-v4-quant-frontier-verda.json"
 readonly DELETE_SCRIPT="$SCRIPT_DIRECTORY/delete-verda-frontier-vm.sh"
 readonly WATCHDOG_UNIT="deepseek-v4-quant-frontier-delete"
 readonly LOCAL_EVIDENCE_DIRECTORY="${VERDA_FRONTIER_EVIDENCE_DIRECTORY:-$PWD/.research/deepseek-v4-lowbit/frontier-verda-evidence}"
+readonly LOCAL_RECOVERY_MANIFEST="${VERDA_FRONTIER_RECOVERY_MANIFEST:-$SCRIPT_DIRECTORY/frontier-recovery-manifest-20260813.json}"
 readonly DRY_RUN="${VERDA_FRONTIER_DRY_RUN:-0}"
 
 mkdir -p "$STATE_DIRECTORY" "$LOCAL_EVIDENCE_DIRECTORY"
@@ -40,43 +72,133 @@ verda_json() {
     verda --agent "$@" -o json
 }
 
-require_empty_account() {
+require_account_contract() {
     local vms volumes
     vms="$(verda_json vm list)"
     volumes="$(verda_json volume list)"
-    python3 - "$vms" "$volumes" <<'PY'
+    python3 - "$vms" "$volumes" "$RUN_MODE" "$RESUME_VOLUME_ID" <<'PY'
 import json
 import sys
-if json.loads(sys.argv[1]):
+vms, volumes = map(json.loads, sys.argv[1:3])
+run_mode, resume_volume_id = sys.argv[3:5]
+if vms:
     raise SystemExit("Frontier provisioning requires zero existing Verda VMs")
-if json.loads(sys.argv[2]):
-    raise SystemExit("Frontier provisioning requires zero existing Verda volumes")
+if run_mode == "fresh":
+    if volumes:
+        raise SystemExit("Fresh frontier provisioning requires zero existing volumes")
+    raise SystemExit(0)
+if not resume_volume_id:
+    raise SystemExit("Frontier resume requires VERDA_FRONTIER_RESUME_VOLUME_ID")
+if not isinstance(volumes, list) or len(volumes) != 1:
+    raise SystemExit("Frontier resume requires exactly one existing Verda volume")
+if volumes[0].get("id") != resume_volume_id:
+    raise SystemExit("Frontier resume volume id differs from the only existing volume")
+PY
+}
+
+require_reusable_state_file() {
+    [[ ! -e "$STATE_FILE" ]] && return 0
+    [[ "$RUN_MODE" != "fresh" ]] || {
+        echo "Frontier Verda state file already exists: $STATE_FILE" >&2
+        return 2
+    }
+    python3 - "$STATE_FILE" "$RESUME_VOLUME_ID" <<'PY'
+import json
+import sys
+from pathlib import Path
+state_path = Path(sys.argv[1])
+resume_volume_id = sys.argv[2]
+state = json.loads(state_path.read_text(encoding="utf-8"))
+if (
+    state.get("schema_version") != 1
+    or state.get("phase") != "preserved"
+    or state.get("vm_id") is not None
+    or state.get("volume_ids") != [resume_volume_id]
+):
+    raise SystemExit("Frontier resume state does not identify the preserved volume")
 PY
 }
 
 verify_live_contract() {
-    local availability images keys balance estimate
+    local availability images keys balance estimate volume
     availability="$(verda_json vm availability --type "$INSTANCE_TYPE")"
-    images="$(verda_json images --type "$INSTANCE_TYPE")"
     keys="$(verda_json ssh-key list)"
     balance="$(verda_json cost balance)"
-    estimate="$(verda_json cost estimate --type "$INSTANCE_TYPE" --os-volume "$OS_VOLUME_GIB")"
+    if [[ "$RUN_MODE" == "fresh" ]]; then
+        images="$(verda_json images --type "$INSTANCE_TYPE")"
+        estimate="$(verda_json cost estimate \
+            --type "$INSTANCE_TYPE" --os-volume "$OS_VOLUME_GIB")"
+        volume='{}'
+    else
+        images='[]'
+        estimate="$(verda_json cost estimate --type "$INSTANCE_TYPE")"
+        volume="$(verda_json volume describe "$RESUME_VOLUME_ID")"
+    fi
     python3 - \
-        "$availability" "$images" "$keys" "$balance" "$estimate" \
-        "$LOCATION" "$OS_IMAGE" "$SSH_KEY_ID" "$MAX_HOURS" "$MAX_COST_USD" <<'PY'
+        "$availability" "$images" "$keys" "$balance" "$estimate" "$volume" \
+        "$RUN_MODE" "$INSTANCE_TYPE" "$LOCATION" "$OS_IMAGE" "$SSH_KEY_ID" \
+        "$MAX_HOURS" "$MAX_COST_USD" "$RESUME_VOLUME_ID" \
+        "$RESUME_VOLUME_NAME" "$OS_VOLUME_GIB" <<'PY'
 import json
 import sys
-availability, images, keys, balance, estimate = map(json.loads, sys.argv[1:6])
-location, image, key_id = sys.argv[6:9]
-max_hours, max_cost = map(float, sys.argv[9:11])
-matching = [item for item in (availability or []) if item["location"] == location]
+availability, images, keys, balance, estimate, volume = map(json.loads, sys.argv[1:7])
+(
+    run_mode,
+    instance_type,
+    location,
+    image,
+    key_id,
+    max_hours,
+    max_cost,
+    resume_volume_id,
+    resume_volume_name,
+    os_volume_gib,
+) = sys.argv[7:17]
+max_hours = float(max_hours)
+max_cost = float(max_cost)
+os_volume_gib = int(os_volume_gib)
+matching = [
+    item
+    for item in (availability or [])
+    if item.get("location") == location
+    and item.get("instance_type") == instance_type
+]
 if len(matching) != 1:
     raise SystemExit("Frontier instance is not uniquely available at the pinned location")
-if not any(item["image_type"] == image for item in images):
-    raise SystemExit("Frontier OS image is unavailable for the selected instance")
-if not any(item["id"] == key_id for item in keys):
+if not any(item.get("id") == key_id for item in keys):
     raise SystemExit("Frontier SSH key is unavailable")
-hourly = float(estimate["total"]["hourly"])
+if run_mode == "fresh":
+    if not any(item.get("image_type") == image for item in images):
+        raise SystemExit("Frontier OS image is unavailable for the selected instance")
+    storage_hourly = 0.0
+else:
+    expected_volume = {
+        "id": resume_volume_id,
+        "name": resume_volume_name,
+        "size": os_volume_gib,
+        "type": "NVMe",
+        "status": "detached",
+        "location": location,
+        "contract": "PAY_AS_YOU_GO",
+        "is_os_volume": True,
+        "instance_id": None,
+        "instances": [],
+    }
+    for field, expected in expected_volume.items():
+        if volume.get(field) != expected:
+            raise SystemExit(
+                f"Frontier resume volume identity mismatch: "
+                f"{field}={volume.get(field)!r}, expected={expected!r}"
+            )
+    storage_hourly = float(volume.get("base_hourly_cost", -1))
+    if storage_hourly < 0:
+        raise SystemExit("Frontier resume volume has no valid hourly cost")
+    print(
+        f"frontier_resume_volume_verified=true id={resume_volume_id} "
+        f"size_gib={os_volume_gib} location={location}"
+    )
+compute_hourly = float(estimate["total"]["hourly"])
+hourly = compute_hourly + storage_hourly
 projected = hourly * max_hours
 if projected > max_cost:
     raise SystemExit(
@@ -86,6 +208,8 @@ if projected > float(balance["amount"]):
     raise SystemExit("Frontier projected cost exceeds account balance")
 print(
     f"frontier_available=true hourly_usd={hourly:.4f} "
+    f"compute_hourly_usd={compute_hourly:.4f} "
+    f"storage_hourly_usd={storage_hourly:.4f} "
     f"max_hours={max_hours:g} projected_usd={projected:.2f} "
     f"balance_usd={float(balance['amount']):.2f}"
 )
@@ -100,7 +224,7 @@ write_state() {
     python3 - \
         "$STATE_FILE" "$phase" "$vm_id" "$volume_ids_json" \
         "$create_response" "$HOSTNAME" "$INSTANCE_TYPE" "$LOCATION" \
-        "$OS_VOLUME_GIB" <<'PY'
+        "$OS_VOLUME_GIB" "$RUN_MODE" <<'PY'
 import json
 import os
 import sys
@@ -117,6 +241,7 @@ payload = {
     "instance_type": sys.argv[7],
     "location": sys.argv[8],
     "os_volume_size_gib": int(sys.argv[9]),
+    "run_mode": sys.argv[10],
     "pending_cleanup_not_before_epoch": int(time.time()) + 30 * 60,
 }
 temporary = path.with_name(f".{path.name}.writing")
@@ -227,7 +352,7 @@ PY
         --property=Restart=on-failure \
         --property=RestartSec=60s \
         --setenv="VERDA_PROFILE=$VERDA_PROFILE" \
-        "$DELETE_SCRIPT" "$STATE_FILE" --finalize-state
+        "$DELETE_SCRIPT" "$STATE_FILE" --preserve-volume
     systemctl --user is-active --quiet "$WATCHDOG_UNIT.timer"
 }
 
@@ -270,21 +395,39 @@ copy_runner() {
     run_remote_ssh "$address" \
         'cat > /root/run-verda-quant-frontier.sh && chmod 0700 /root/run-verda-quant-frontier.sh' \
         < "$SCRIPT_DIRECTORY/run-verda-quant-frontier.sh"
+    if [[ "$RUN_MODE" != "fresh" ]]; then
+        printf '%s  %s\n' "$RECOVERY_MANIFEST_SHA256" "$LOCAL_RECOVERY_MANIFEST" | \
+            sha256sum --check --strict
+        run_remote_ssh "$address" \
+            'cat > /root/frontier-recovery-manifest.json && chmod 0400 /root/frontier-recovery-manifest.json' \
+            < "$LOCAL_RECOVERY_MANIFEST"
+    fi
 }
 
 start_remote_campaign() {
     local vm_id="$1"
-    local address remote_command token_file
+    local address remote_command stage_command token_file
     address="$(vm_public_ip "$vm_id")"
+    printf -v stage_command '%q ' \
+        /root/run-verda-quant-frontier.sh \
+        "$REMOTE_ROOT" "$REPOSITORY" "$BRANCH_PREFIX" "$CANDIDATE" \
+        "$RUN_MODE" "$RESUME_VOLUME_ID" /root/frontier-recovery-manifest.json
+    # The remote bash process expands status; the host must preserve these literals.
+    # shellcheck disable=SC2016
+    stage_command+='; status=$?; printf "%s\n" "$status" > /root/frontier.exit; rm -f /root/frontier.pid; exit "$status"'
+    printf -v remote_command \
+        'rm -f %q; nohup bash -c %q > %q 2>&1 & echo $! > %q' \
+        /root/frontier.exit "$stage_command" \
+        /root/frontier-nohup.log /root/frontier.pid
+    if [[ "$RUN_MODE" == "validate-resume" ]]; then
+        run_remote_ssh "$address" "$remote_command"
+        return
+    fi
     token_file="$(mktemp)"
     chmod 0600 "$token_file"
     trap 'rm -f "$token_file"' RETURN
     env -u HF_TOKEN hf auth token > "$token_file"
-    printf -v remote_command \
-        'read -r HF_TOKEN; export HF_TOKEN; nohup %q %q %q %q %q > %q 2>&1 & echo $! > %q' \
-        /root/run-verda-quant-frontier.sh \
-        "$REMOTE_ROOT" "$REPOSITORY" "$BRANCH_PREFIX" "$CANDIDATE" \
-        /root/frontier-nohup.log /root/frontier.pid
+    remote_command="read -r HF_TOKEN; export HF_TOKEN; $remote_command"
     {
         cat "$token_file"
         printf '\n'
@@ -295,7 +438,8 @@ wait_remote_campaign() {
     local vm_id="$1"
     local address deadline_epoch remote_command remote_state
     address="$(vm_public_ip "$vm_id")"
-    printf -v remote_command '%q ' env "REMOTE_ROOT=$REMOTE_ROOT" bash -s
+    printf -v remote_command '%q ' env \
+        "REMOTE_ROOT=$REMOTE_ROOT" "RUN_MODE=$RUN_MODE" bash -s
     deadline_epoch="$(python3 - "$MAX_HOURS" <<'PY'
 import sys
 import time
@@ -312,7 +456,16 @@ PY
 set -euo pipefail
 completion="$REMOTE_ROOT/reports/frontier-complete.json"
 publication="$REMOTE_ROOT/reports/frontier-publication.json"
-if [[ -f "$completion" ]]; then
+resume_validation="$REMOTE_ROOT/reports/frontier-resume-validation.json"
+if [[ -f /root/frontier.pid ]] && \
+    kill -0 "$(cat /root/frontier.pid)" 2>/dev/null; then
+    echo running
+elif [[ ! -f /root/frontier.exit ]] || \
+    [[ "$(cat /root/frontier.exit)" != 0 ]]; then
+    echo failed
+elif [[ "$RUN_MODE" == "validate-resume" && -f "$resume_validation" ]]; then
+    echo complete
+elif [[ -f "$completion" ]]; then
     if python3 - "$completion" "$publication" <<'PY'
 import hashlib
 import json
@@ -333,17 +486,10 @@ valid = (
 raise SystemExit(0 if valid else 1)
 PY
     then
-        if [[ -f /root/frontier.pid ]] && \
-            kill -0 "$(cat /root/frontier.pid)" 2>/dev/null; then
-            echo running
-        else
-            echo complete
-        fi
+        echo complete
     else
         echo failed
     fi
-elif [[ -f /root/frontier.pid ]] && kill -0 "$(cat /root/frontier.pid)" 2>/dev/null; then
-    echo running
 else
     echo failed
 fi
@@ -359,6 +505,8 @@ EOF
                 run_remote_ssh "$address" \
                     "$remote_command" <<'EOF'
 tail -200 /root/frontier-nohup.log 2>/dev/null || true
+tail -200 "$REMOTE_ROOT/reports/run-verda-frontier-resume-validation.log" 2>/dev/null || true
+tail -200 "$REMOTE_ROOT/reports/run-verda-frontier-resume-conversion.log" 2>/dev/null || true
 tail -200 "$REMOTE_ROOT/reports/run-verda-quant-frontier.log" 2>/dev/null || true
 EOF
                 return 1
@@ -381,6 +529,15 @@ fetch_evidence() {
 }
 
 verify_fetched_evidence() {
+    if [[ "$RUN_MODE" == "validate-resume" ]]; then
+        PYTHONPATH="$REPOSITORY_ROOT/tools/deepseek-v4-lowbit/src" \
+            python3 -m deepseek_v4_lowbit.frontier_resume_receipt_cli \
+            "$LOCAL_EVIDENCE_DIRECTORY/reports/frontier-resume-validation.json" \
+            --volume-id "$RESUME_VOLUME_ID" \
+            --candidate "$CANDIDATE" \
+            --recovery-manifest-sha256 "$RECOVERY_MANIFEST_SHA256"
+        return
+    fi
     python3 - \
         "$LOCAL_EVIDENCE_DIRECTORY/reports/frontier-complete.json" \
         "$LOCAL_EVIDENCE_DIRECTORY/reports/frontier-publication.json" \
@@ -412,23 +569,23 @@ PY
 }
 
 case "$CANDIDATE" in
-    cliff | capacity | balanced | quality) ;;
+    quality) ;;
+    cliff | capacity | balanced)
+        echo "Frontier recovery is quality-first; lower candidates require a later campaign" >&2
+        exit 2
+        ;;
     *)
         echo "Unknown frontier candidate: $CANDIDATE" >&2
         exit 2
         ;;
 esac
-require_empty_account
+require_account_contract
+require_reusable_state_file
 verify_live_contract
 if [[ "$DRY_RUN" == 1 ]]; then
     echo "Frontier Verda dry-run complete; no resource created"
     exit 0
 fi
-[[ ! -e "$STATE_FILE" ]] || {
-    echo "Frontier Verda state file already exists: $STATE_FILE" >&2
-    exit 2
-}
-
 cleanup_needed=1
 create_started=0
 vm_id=""
@@ -441,7 +598,7 @@ cleanup_on_exit() {
             if ! cancel_watchdog; then
                 command_status=1
             fi
-        elif "$DELETE_SCRIPT" "$STATE_FILE" --finalize-state; then
+        elif "$DELETE_SCRIPT" "$STATE_FILE" --preserve-volume; then
             if ! cancel_watchdog; then
                 command_status=1
             fi
@@ -458,20 +615,35 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
 
-write_state pending "" '[]' '{}'
+if [[ "$RUN_MODE" == "fresh" ]]; then
+    rm -f "$STATE_FILE"
+    pending_volume_ids='[]'
+else
+    pending_volume_ids="[\"$RESUME_VOLUME_ID\"]"
+fi
+write_state pending "" "$pending_volume_ids" '{}'
 arm_watchdog
 create_started=1
-create_response="$(verda_json vm create \
-    --kind gpu \
-    --instance-type "$INSTANCE_TYPE" \
-    --location "$LOCATION" \
-    --contract pay_as_go \
-    --os "$OS_IMAGE" \
-    --os-volume-size "$OS_VOLUME_GIB" \
-    --hostname "$HOSTNAME" \
-    --ssh-key "$SSH_KEY_ID" \
-    --wait \
-    --wait-timeout 10m)"
+create_arguments=(
+    vm create
+    --kind "$INSTANCE_KIND"
+    --instance-type "$INSTANCE_TYPE"
+    --location "$LOCATION"
+    --contract pay_as_go
+    --hostname "$HOSTNAME"
+    --ssh-key "$SSH_KEY_ID"
+    --wait
+    --wait-timeout 10m
+)
+if [[ "$RUN_MODE" == "fresh" ]]; then
+    create_arguments+=(
+        --os "$OS_IMAGE"
+        --os-volume-size "$OS_VOLUME_GIB"
+    )
+else
+    create_arguments+=(--os "$RESUME_VOLUME_ID")
+fi
+create_response="$(verda_json "${create_arguments[@]}")"
 vm_id="$(extract_vm_id "$create_response")"
 volume_ids_json="$(extract_volume_ids "$create_response")"
 write_state active "$vm_id" "$volume_ids_json" "$create_response"
@@ -482,14 +654,32 @@ start_remote_campaign "$vm_id"
 wait_remote_campaign "$vm_id"
 fetch_evidence "$vm_id"
 verify_fetched_evidence
-"$DELETE_SCRIPT" "$STATE_FILE" --finalize-state
+if [[ "$RUN_MODE" == "validate-resume" ]]; then
+    "$DELETE_SCRIPT" "$STATE_FILE" --preserve-volume
+else
+    "$DELETE_SCRIPT" "$STATE_FILE" --delete-volume
+fi
 cancel_watchdog
 cleanup_needed=0
 
 verda_json vm list | python3 -c 'import json,sys; assert json.load(sys.stdin) == []'
-verda_json volume list | python3 -c 'import json,sys; assert json.load(sys.stdin) == []'
+if [[ "$RUN_MODE" == "validate-resume" ]]; then
+    final_volumes="$(verda_json volume list)"
+    python3 - "$final_volumes" "$RESUME_VOLUME_ID" <<'PY'
+import json
+import sys
+volumes = json.loads(sys.argv[1])
+expected_volume_id = sys.argv[2]
+assert len(volumes) == 1
+assert volumes[0]["id"] == expected_volume_id
+assert volumes[0]["status"] == "detached"
+assert volumes[0]["instance_id"] is None
+PY
+else
+    verda_json volume list | python3 -c 'import json,sys; assert json.load(sys.stdin) == []'
+fi
 verda_json cost running | python3 -c '
 import json,sys
 assert float(json.load(sys.stdin)["total"]["hourly"]) == 0.0
 '
-echo "Frontier Verda campaign complete; resources deleted and evidence downloaded"
+echo "Frontier Verda $RUN_MODE campaign complete; evidence downloaded"

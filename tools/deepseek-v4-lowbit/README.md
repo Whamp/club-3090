@@ -253,6 +253,46 @@ The remote runner pins `HF_HOME`, `HF_HUB_CACHE`, and `HF_XET_CACHE` under the
 rental root, disables the Xet chunk cache, and aborts if residual Hugging Face
 cache data exceeds 2 GiB after source download.
 
+### Recovered checkpoint resume
+
+The 2026-08-13 screen completed before conversion failed on a JSON mapping-order
+check. Its nine-file report set is preserved at immutable Hugging Face commit
+`2686304a68557827d847e1954050cde6b5e7fd08`. The checked-in
+`rental/frontier-recovery-manifest-20260813.json` binds those files to restored
+Verda volume `9a7105b5-3c04-4bd7-b9fb-84c7be98c961`. Do not rerun the screen.
+
+Resume uses two explicit host modes:
+
+1. `validate-resume` boots that exact disk on `CPU.4V.16G`, rebuilds the recipe
+   bundle from the recovered reports, requires byte identity with the recovered
+   bundle, verifies source, baseline, imatrix, reusable shards, and any partial
+   conversion receipts, then writes `frontier-resume-validation.json`.
+2. `resume-conversion` boots the same disk on `1A100.22V`, requires the CPU
+   receipt, skips source download, header capture, screening, recipe selection,
+   and baseline-shard download, and converts only `quality`.
+
+Run the non-billable live-contract checks before either stage:
+
+```bash
+VERDA_FRONTIER_RUN_MODE=validate-resume \
+VERDA_FRONTIER_RESUME_VOLUME_ID=9a7105b5-3c04-4bd7-b9fb-84c7be98c961 \
+VERDA_FRONTIER_DRY_RUN=1 \
+bash tools/deepseek-v4-lowbit/rental/run-verda-frontier-host.sh
+
+VERDA_FRONTIER_RUN_MODE=resume-conversion \
+VERDA_FRONTIER_RESUME_VOLUME_ID=9a7105b5-3c04-4bd7-b9fb-84c7be98c961 \
+VERDA_FRONTIER_DRY_RUN=1 \
+bash tools/deepseek-v4-lowbit/rental/run-verda-frontier-host.sh
+```
+
+On ordinary failure, interruption, or watchdog expiry, the host deletes compute
+without `--with-volumes`, verifies that the exact OS volume is detached, and
+records a resumable `preserved` state. Only a completed immutable Hub
+publication with locally verified completion evidence may use
+`--delete-volume`. The CPU validation stage also preserves the volume on
+success; the A100 conversion stage deletes it only after publication
+verification.
+
 Each rental campaign names exactly one candidate through
 `VERDA_FRONTIER_CANDIDATE`; the default and first candidate is `quality`. The
 remote runner captures source provenance, screens all routed experts, builds

@@ -319,6 +319,41 @@ Plan at least 450–500 GB of fast local storage if source, work files, and more
 4. **Done:** run the bounded on-demand A100 rental with a deletion watchdog and prove the generic Humming W2/group-128/BF16 indexed-MoE path through a numerical oracle and 13 inspected `sm_80` cubins.
 5. **Done:** run the 24-matrix plain-versus-imatrix pilot and select imatrix-weighted RTN from 24/24 weighted-error improvements with modest projected time cost.
 6. **Done:** generate one all-W2, MTP-free artifact; upload it directly from Verda; verify all Hub hashes and inventory; and delete all rental compute and storage.
+
+## 2026-08-13 projection-sensitive checkpoint recovery
+
+The projection-sensitive screen completed on Verda, but quality-candidate
+conversion did not start. `frontier_recipe_cli.py` serialized mappings with
+`sort_keys=True`, while `validate_frontier_recipe_bundle_shape()` incorrectly
+required mapping iteration order `cliff, capacity, balanced, quality`. The
+alphabetically ordered JSON therefore failed with `frontier recipe bundle
+candidates are incomplete or unordered` after source and baseline staging.
+
+The host cleanup then deleted the VM and OS volume on an ordinary validator
+failure. Verda retained the soft-deleted volume in trash; it was restored as
+`9a7105b5-3c04-4bd7-b9fb-84c7be98c961`. All nine report files were copied and
+verified byte-for-byte, then published at immutable Hugging Face commit
+`2686304a68557827d847e1954050cde6b5e7fd08`. No candidate model branch was
+published and no conversion shard was generated before the failure.
+
+The continuation contract is now:
+
+1. Mapping validation checks the exact candidate set; the ordered summary list
+   remains the canonical sequence. A sorted-JSON round-trip regression covers
+   the original failure.
+2. Ordinary failures delete compute but preserve and verify the exact detached
+   OS volume. Explicit `--delete-volume` is reserved for successful,
+   independently verified publication.
+3. `validate-resume` uses the cheapest suitable CPU VM to bind all recovered
+   report hashes, source shards and assets, baseline metadata and reusable
+   shards, imatrix, regenerated recipe bytes, and partial conversion receipts
+   into one atomic volume-bound receipt.
+4. `resume-conversion` requires that receipt and structurally skips source
+   download, header capture, screening, recipe selection, and baseline-shard
+   download. It generates `quality` only.
+5. The restored volume remains durable until the quality candidate is published
+   and remotely hash-verified. The first model-level acceptance remains the
+   approved single-worker DeepSWE SuperJSON gate on local hardware.
 7. **Done:** stage the immutable Hub revision on server60 and verify all 54 cache objects without loading the model, touching the existing GPU process, or disrupting llama.cpp.
 8. **Done:** reconstruct the pinned SM86 runtime and pass the exact
    W2/group-128/BF16 numerical oracle on one RTX 3090 in 78.24 seconds.

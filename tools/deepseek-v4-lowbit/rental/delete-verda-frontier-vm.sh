@@ -2,12 +2,15 @@
 set -euo pipefail
 
 export PYTHONUTF8="${PYTHONUTF8:-1}"
-readonly STATE_FILE="${1:?usage: delete-verda-frontier-vm.sh STATE_FILE [--finalize-state]}"
-readonly FINALIZE_STATE="${2:-}"
-[[ "$FINALIZE_STATE" == "" || "$FINALIZE_STATE" == "--finalize-state" ]] || {
-    echo "Unexpected cleanup argument: $FINALIZE_STATE" >&2
-    exit 2
-}
+readonly STATE_FILE="${1:?usage: delete-verda-frontier-vm.sh STATE_FILE (--preserve-volume|--delete-volume)}"
+readonly CLEANUP_MODE="${2:-}"
+case "$CLEANUP_MODE" in
+    --preserve-volume | --delete-volume) ;;
+    *)
+        echo "Frontier cleanup requires --preserve-volume or --delete-volume" >&2
+        exit 2
+        ;;
+esac
 [[ -f "$STATE_FILE" ]] || exit 0
 state="$(cat "$STATE_FILE")"
 
@@ -152,33 +155,89 @@ PY
 
 for _ in $(seq 1 60); do
     if [[ -n "$vm_id" ]]; then
-        verda --agent vm delete "$vm_id" \
-            --with-volumes \
-            --yes \
-            --wait \
-            --wait-timeout 10m \
-            -o json >/dev/null 2>&1 || true
+        vm_delete_arguments=(
+            --agent vm delete "$vm_id"
+            --yes
+            --wait
+            --wait-timeout 10m
+            -o json
+        )
+        if [[ "$CLEANUP_MODE" == "--delete-volume" ]]; then
+            vm_delete_arguments+=(--with-volumes)
+        fi
+        verda "${vm_delete_arguments[@]}" >/dev/null 2>&1 || true
     fi
-    for volume_id in "${volume_ids[@]}"; do
-        verda --agent volume delete "$volume_id" --yes -o json \
-            >/dev/null 2>&1 || true
-    done
+    if [[ "$CLEANUP_MODE" == "--delete-volume" ]]; then
+        for volume_id in "${volume_ids[@]}"; do
+            verda --agent volume delete "$volume_id" --yes -o json \
+                >/dev/null 2>&1 || true
+        done
+    fi
     vms="$(verda --agent vm list -o json)"
     volumes="$(verda --agent volume list -o json)"
-    if python3 - "$vms" "$volumes" <<'PY'
+    if python3 - \
+        "$STATE_FILE" "$state" "$vms" "$volumes" "$CLEANUP_MODE" \
+        "$vm_id" "${volume_ids[*]}" <<'PY'
 import json
+import os
 import sys
-if json.loads(sys.argv[1]) or json.loads(sys.argv[2]):
+import time
+from pathlib import Path
+
+state_path = Path(sys.argv[1])
+state = json.loads(sys.argv[2])
+vms = json.loads(sys.argv[3])
+volumes = json.loads(sys.argv[4])
+cleanup_mode = sys.argv[5]
+vm_id = sys.argv[6]
+volume_ids = tuple(value for value in sys.argv[7].split() if value)
+if not isinstance(vms, list) or not isinstance(volumes, list):
     raise SystemExit(1)
+if vm_id and any(vm.get("id") == vm_id for vm in vms):
+    raise SystemExit(1)
+volumes_by_id = {
+    volume.get("id"): volume
+    for volume in volumes
+    if isinstance(volume.get("id"), str)
+}
+if cleanup_mode == "--delete-volume":
+    if any(volume_id in volumes_by_id for volume_id in volume_ids):
+        raise SystemExit(1)
+    state_path.unlink(missing_ok=True)
+    raise SystemExit(0)
+if not volume_ids:
+    state_path.unlink(missing_ok=True)
+    raise SystemExit(0)
+for volume_id in volume_ids:
+    volume = volumes_by_id.get(volume_id)
+    if volume is None:
+        raise SystemExit(1)
+    if volume.get("instance_id") not in (None, "") or volume.get("instances"):
+        raise SystemExit(1)
+state["phase"] = "preserved"
+state["vm_id"] = None
+state["volume_ids"] = list(volume_ids)
+state["preserved_compute_instance_id"] = vm_id or None
+state["preserved_at_epoch"] = int(time.time())
+temporary = state_path.with_name(f".{state_path.name}.writing")
+temporary.write_text(
+    json.dumps(state, indent=2, sort_keys=True) + "\n",
+    encoding="utf-8",
+)
+with temporary.open("rb") as handle:
+    os.fsync(handle.fileno())
+os.replace(temporary, state_path)
+directory_fd = os.open(state_path.parent, os.O_RDONLY)
+try:
+    os.fsync(directory_fd)
+finally:
+    os.close(directory_fd)
 PY
     then
-        if [[ "$FINALIZE_STATE" == "--finalize-state" ]]; then
-            rm -f "$STATE_FILE"
-        fi
         exit 0
     fi
     sleep 10
 done
 
-echo "Frontier cleanup could not prove zero remaining VMs and volumes" >&2
+echo "Frontier cleanup could not prove the requested VM and volume state" >&2
 exit 1

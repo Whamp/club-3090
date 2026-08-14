@@ -11,6 +11,7 @@ readonly DEEPSEEK_REVISION="7872f01b1d1fe23eabc4c98b48bffcef5a386062"
 readonly BASELINE_REVISION="75d9286c37f3037f3ab390cfbc10747466eac714"
 readonly IMATRIX_REVISION="e7f04037032990db0346398d249baf9fb9df1ccc"
 readonly IMATRIX_SHA256="02a7c78c29875e4653d6ce21d8821c02161e83ed90c506bdd8d275f76d4ac97e"
+readonly RECOVERY_MANIFEST_SHA256="0788715e8373daed48bbedaee11fedee217c798a2f189fee00473c9a9913a480"
 readonly SOURCE_REPOSITORY="deepseek-ai/DeepSeek-V4-Flash-0731"
 readonly BASELINE_REPOSITORY="hampsonw/DeepSeek-V4-Flash-0731-WNA16"
 readonly IMATRIX_REPOSITORY="antirez/deepseek-v4-gguf"
@@ -21,6 +22,9 @@ readonly COMPRESSED_TENSORS_VERSION="0.17.0"
 readonly HUGGINGFACE_REPOSITORY="${2:-$BASELINE_REPOSITORY}"
 readonly BRANCH_PREFIX="${3:-frontier-20260813}"
 readonly FRONTIER_CANDIDATE="${4:-quality}"
+readonly RUN_MODE="${5:-fresh}"
+readonly RESUME_VOLUME_ID="${6:-}"
+readonly RECOVERY_MANIFEST_PATH="${7:-$HOME/frontier-recovery-manifest.json}"
 readonly RENTAL_ROOT="${1:-$HOME/deepseek-v4-quant-frontier}"
 export HF_HOME="$RENTAL_ROOT/huggingface-cache"
 export HF_HUB_CACHE="$HF_HOME/hub"
@@ -35,13 +39,24 @@ readonly SCREEN_DIRECTORY="$REPORT_DIRECTORY/frontier-screen"
 readonly SOURCE_HEADERS_REPORT="$REPORT_DIRECTORY/source-headers-report.json"
 readonly PLANNER_HEADERS="$REPORT_DIRECTORY/source-headers.json"
 readonly RECIPE_BUNDLE="$REPORT_DIRECTORY/frontier-recipe-bundle.json"
+readonly REBUILT_RECIPE_BUNDLE="$REPORT_DIRECTORY/frontier-recipe-bundle.rebuilt.json"
+readonly RESUME_VALIDATION_RECEIPT="$REPORT_DIRECTORY/frontier-resume-validation.json"
 readonly PUBLICATION_REPORT="$REPORT_DIRECTORY/frontier-publication.json"
 readonly COMPLETION_RECEIPT="$REPORT_DIRECTORY/frontier-complete.json"
 readonly OUTPUT_ROOT="$RENTAL_ROOT/output"
 readonly CLUB_3090_DIRECTORY="$RENTAL_ROOT/club-3090"
 readonly AUTO_ROUND_DIRECTORY="$RENTAL_ROOT/auto-round"
 readonly PYTHON_ENVIRONMENT="$RENTAL_ROOT/python-environment"
-readonly RENTAL_LOG="$REPORT_DIRECTORY/run-verda-quant-frontier.log"
+readonly VALIDATION_ENVIRONMENT="$RENTAL_ROOT/resume-validation-environment"
+case "$RUN_MODE" in
+    fresh) readonly RENTAL_LOG="$REPORT_DIRECTORY/run-verda-quant-frontier.log" ;;
+    validate-resume)
+        readonly RENTAL_LOG="$REPORT_DIRECTORY/run-verda-frontier-resume-validation.log"
+        ;;
+    resume-conversion)
+        readonly RENTAL_LOG="$REPORT_DIRECTORY/run-verda-frontier-resume-conversion.log"
+        ;;
+esac
 readonly -a FRONTIER_GPU_DEVICES=(0)
 gpu_arguments=()
 for device in "${FRONTIER_GPU_DEVICES[@]}"; do
@@ -89,10 +104,21 @@ checkout_pinned_repository() {
     echo "Frontier rental runner requires a full published Git revision" >&2
     exit 2
 }
-[[ -n "${HF_TOKEN:-}" ]] || {
-    echo "Frontier rental runner requires HF_TOKEN" >&2
+case "$RUN_MODE" in
+    fresh | validate-resume | resume-conversion) ;;
+    *)
+        echo "Unknown frontier rental run mode: $RUN_MODE" >&2
+        exit 2
+        ;;
+esac
+if [[ "$RUN_MODE" != "fresh" && -z "$RESUME_VOLUME_ID" ]]; then
+    echo "Frontier resume requires an exact volume id" >&2
     exit 2
-}
+fi
+if [[ "$RUN_MODE" != "validate-resume" && -z "${HF_TOKEN:-}" ]]; then
+    echo "Frontier rental conversion requires HF_TOKEN" >&2
+    exit 2
+fi
 case "$FRONTIER_CANDIDATE" in
     cliff | capacity | balanced | quality) ;;
     *)
@@ -101,21 +127,30 @@ case "$FRONTIER_CANDIDATE" in
         ;;
 esac
 
-log_frontier_step "Verify bounded rental hardware, memory, disk, and Hub access"
-python3 - "$RENTAL_ROOT" <<'PY'
+log_frontier_step "Verify bounded rental hardware, memory, and disk"
+minimum_free_gib=2
+if [[ "$RUN_MODE" == "fresh" ]]; then
+    minimum_free_gib=280
+elif [[ "$RUN_MODE" == "resume-conversion" ]]; then
+    minimum_free_gib=88
+fi
+python3 - "$RENTAL_ROOT" "$minimum_free_gib" <<'PY'
 import shutil
 import sys
 free_gib = shutil.disk_usage(sys.argv[1]).free / (1024**3)
-if free_gib < 280:
+minimum_free_gib = int(sys.argv[2])
+if free_gib < minimum_free_gib:
     raise SystemExit(
-        f"Frontier rental requires at least 280 GiB free, found {free_gib:.1f}"
+        f"Frontier {minimum_free_gib} GiB free-space gate failed: "
+        f"found {free_gib:.1f} GiB"
     )
-print(f"free_disk_gib={free_gib:.1f}")
+print(f"free_disk_gib={free_gib:.1f} minimum_free_gib={minimum_free_gib}")
 PY
-gpu_inventory="$(nvidia-smi \
-    --query-gpu=name,compute_cap,memory.total \
-    --format=csv,noheader,nounits)"
-python3 - "$gpu_inventory" <<'PY'
+if [[ "$RUN_MODE" != "validate-resume" ]]; then
+    gpu_inventory="$(nvidia-smi \
+        --query-gpu=name,compute_cap,memory.total \
+        --format=csv,noheader,nounits)"
+    python3 - "$gpu_inventory" <<'PY'
 import sys
 rows = [row.strip() for row in sys.argv[1].splitlines() if row.strip()]
 if len(rows) != 1:
@@ -132,13 +167,14 @@ for row in rows:
         )
 print("gpu_contract=1x-a100-80gb-sm80")
 PY
-memory_kib="$(awk '/MemTotal:/ {print $2}' /proc/meminfo)"
-((memory_kib >= 110 * 1024 * 1024)) || {
-    echo "Frontier rental requires at least 110 GiB host RAM" >&2
-    exit 2
-}
+    memory_kib="$(awk '/MemTotal:/ {print $2}' /proc/meminfo)"
+    ((memory_kib >= 110 * 1024 * 1024)) || {
+        echo "Frontier rental requires at least 110 GiB host RAM" >&2
+        exit 2
+    }
+fi
 
-log_frontier_step "Install pinned uv and conversion environment"
+log_frontier_step "Install pinned frontier source"
 if ! command -v uv >/dev/null || [[ "$(uv --version)" != "uv $UV_VERSION" ]]; then
     curl --fail --location --silent --show-error \
         "https://astral.sh/uv/$UV_VERSION/install.sh" | sh
@@ -149,6 +185,59 @@ checkout_pinned_repository \
     "$CLUB_3090_REF" \
     "$CLUB_3090_REVISION" \
     "$CLUB_3090_DIRECTORY"
+
+if [[ "$RUN_MODE" == "validate-resume" ]]; then
+    log_frontier_step "Rebuild recipes and validate the recovered checkpoint"
+    uv venv --allow-existing --python 3.12 "$VALIDATION_ENVIRONMENT"
+    uv pip install --python "$VALIDATION_ENVIRONMENT/bin/python" \
+        --no-deps \
+        --editable "$CLUB_3090_DIRECTORY/tools/deepseek-v4-lowbit"
+    "$VALIDATION_ENVIRONMENT/bin/deepseek-v4-build-frontier-recipes" \
+        "$BASELINE_DIRECTORY/conversion-metrics.json" \
+        "$SCREEN_DIRECTORY/frontier-pilot-screen.json" \
+        "$SCREEN_DIRECTORY/frontier-boundary-report.json" \
+        "$SCREEN_DIRECTORY/frontier-full-screen.json" \
+        "$SOURCE_HEADERS_REPORT" \
+        "$PLANNER_HEADERS" \
+        "$REBUILT_RECIPE_BUNDLE" \
+        --model-parameter-count 284334567511
+    "$VALIDATION_ENVIRONMENT/bin/deepseek-v4-validate-frontier-resume" \
+        "$SOURCE_DIRECTORY" \
+        "$BASELINE_DIRECTORY" \
+        "$IMATRIX_PATH" \
+        "$RECIPE_BUNDLE" \
+        "$REBUILT_RECIPE_BUNDLE" \
+        "$RECOVERY_MANIFEST_PATH" \
+        "$REPORT_DIRECTORY" \
+        "$OUTPUT_ROOT" \
+        "$RESUME_VALIDATION_RECEIPT" \
+        --recovery-manifest-sha256 "$RECOVERY_MANIFEST_SHA256" \
+        --volume-id "$RESUME_VOLUME_ID" \
+        --candidate "$FRONTIER_CANDIDATE" \
+        --pilot-screen-report "$SCREEN_DIRECTORY/frontier-pilot-screen.json" \
+        --boundary-report "$SCREEN_DIRECTORY/frontier-boundary-report.json" \
+        --full-screen-report "$SCREEN_DIRECTORY/frontier-full-screen.json" \
+        --source-headers-report "$SOURCE_HEADERS_REPORT" \
+        --source-headers "$PLANNER_HEADERS"
+    sha256sum \
+        "$RECOVERY_MANIFEST_PATH" \
+        "$RECIPE_BUNDLE" \
+        "$REBUILT_RECIPE_BUNDLE" \
+        "$RESUME_VALIDATION_RECEIPT"
+    log_frontier_step "Frontier resume checkpoint validation complete"
+    exit 0
+fi
+
+if [[ "$RUN_MODE" == "resume-conversion" ]]; then
+    log_frontier_step "Require the CPU-validated resume checkpoint"
+    "$VALIDATION_ENVIRONMENT/bin/deepseek-v4-require-frontier-resume" \
+        "$RESUME_VALIDATION_RECEIPT" \
+        --volume-id "$RESUME_VOLUME_ID" \
+        --candidate "$FRONTIER_CANDIDATE" \
+        --recovery-manifest-sha256 "$RECOVERY_MANIFEST_SHA256"
+fi
+
+log_frontier_step "Install pinned CUDA conversion environment"
 checkout_pinned_repository \
     "https://github.com/intel/auto-round.git" \
     "refs/heads/main" \
@@ -167,7 +256,7 @@ uv pip install --python "$PYTHON_ENVIRONMENT/bin/python" \
     --editable "$CLUB_3090_DIRECTORY/tools/deepseek-v4-lowbit"
 uv pip check --python "$PYTHON_ENVIRONMENT/bin/python"
 
-log_frontier_step "Verify four dedicated spawned CUDA workers"
+log_frontier_step "Verify the dedicated spawned CUDA worker"
 "$PYTHON_ENVIRONMENT/bin/deepseek-v4-inspect-frontier-gpus" \
     "${gpu_arguments[@]}"
 
@@ -215,66 +304,72 @@ print(
 )
 PY
 
-log_frontier_step "Download pinned official checkpoint and routed-expert imatrix"
-"$PYTHON_ENVIRONMENT/bin/hf" download \
-    "$SOURCE_REPOSITORY" \
-    --revision "$DEEPSEEK_REVISION" \
-    --local-dir "$SOURCE_DIRECTORY" \
-    --max-workers 8
-mkdir -p "$IMATRIX_DIRECTORY"
-"$PYTHON_ENVIRONMENT/bin/hf" download \
-    "$IMATRIX_REPOSITORY" \
-    "$IMATRIX_FILENAME" \
-    --revision "$IMATRIX_REVISION" \
-    --local-dir "$IMATRIX_DIRECTORY" \
-    --max-workers 1
-printf '%s  %s\n' "$IMATRIX_SHA256" "$IMATRIX_PATH" | \
-    sha256sum --check --strict
-hf_cache_bytes="$(du --summarize --bytes "$HF_HOME" | cut -f1)"
-((hf_cache_bytes <= 2 * 1024 * 1024 * 1024)) || {
-    echo "Hugging Face cache unexpectedly consumed $hf_cache_bytes bytes" >&2
-    echo "Frontier downloads must not duplicate model shards in cache" >&2
-    exit 2
-}
+if [[ "$RUN_MODE" == "fresh" ]]; then
+    log_frontier_step "Download pinned official checkpoint and routed-expert imatrix"
+    "$PYTHON_ENVIRONMENT/bin/hf" download \
+        "$SOURCE_REPOSITORY" \
+        --revision "$DEEPSEEK_REVISION" \
+        --local-dir "$SOURCE_DIRECTORY" \
+        --max-workers 8
+    mkdir -p "$IMATRIX_DIRECTORY"
+    "$PYTHON_ENVIRONMENT/bin/hf" download \
+        "$IMATRIX_REPOSITORY" \
+        "$IMATRIX_FILENAME" \
+        --revision "$IMATRIX_REVISION" \
+        --local-dir "$IMATRIX_DIRECTORY" \
+        --max-workers 1
+    printf '%s  %s\n' "$IMATRIX_SHA256" "$IMATRIX_PATH" | \
+        sha256sum --check --strict
+    hf_cache_bytes="$(du --summarize --bytes "$HF_HOME" | cut -f1)"
+    ((hf_cache_bytes <= 2 * 1024 * 1024 * 1024)) || {
+        echo "Hugging Face cache unexpectedly consumed $hf_cache_bytes bytes" >&2
+        echo "Frontier downloads must not duplicate model shards in cache" >&2
+        exit 2
+    }
 
-log_frontier_step "Capture exact source headers, shards, and copied asset hashes"
-"$PYTHON_ENVIRONMENT/bin/deepseek-v4-capture-source-headers" \
-    "$SOURCE_DIRECTORY" \
-    "$SOURCE_HEADERS_REPORT" \
-    "$PLANNER_HEADERS"
+    log_frontier_step "Capture exact source headers, shards, and copied asset hashes"
+    "$PYTHON_ENVIRONMENT/bin/deepseek-v4-capture-source-headers" \
+        "$SOURCE_DIRECTORY" \
+        "$SOURCE_HEADERS_REPORT" \
+        "$PLANNER_HEADERS"
 
-log_frontier_step "Download immutable baseline metadata"
-"$PYTHON_ENVIRONMENT/bin/hf" download \
-    "$BASELINE_REPOSITORY" \
-    config.json \
-    model.safetensors.index.json \
-    conversion-metrics.json \
-    --revision "$BASELINE_REVISION" \
-    --local-dir "$BASELINE_DIRECTORY" \
-    --max-workers 1
+    log_frontier_step "Download immutable baseline metadata"
+    "$PYTHON_ENVIRONMENT/bin/hf" download \
+        "$BASELINE_REPOSITORY" \
+        config.json \
+        model.safetensors.index.json \
+        conversion-metrics.json \
+        --revision "$BASELINE_REVISION" \
+        --local-dir "$BASELINE_DIRECTORY" \
+        --max-workers 1
 
-log_frontier_step "Run and stabilize mixed-group frontier screen"
-"$PYTHON_ENVIRONMENT/bin/deepseek-v4-run-frontier-screen" \
-    "$SOURCE_DIRECTORY" \
-    "$IMATRIX_PATH" \
-    "$BASELINE_DIRECTORY/conversion-metrics.json" \
-    "$SOURCE_HEADERS_REPORT" \
-    "$PLANNER_HEADERS" \
-    "$SCREEN_DIRECTORY" \
-    --samples-per-projection 8 \
-    --device cuda \
-    "${gpu_arguments[@]}"
+    log_frontier_step "Run and stabilize mixed-group frontier screen"
+    "$PYTHON_ENVIRONMENT/bin/deepseek-v4-run-frontier-screen" \
+        "$SOURCE_DIRECTORY" \
+        "$IMATRIX_PATH" \
+        "$BASELINE_DIRECTORY/conversion-metrics.json" \
+        "$SOURCE_HEADERS_REPORT" \
+        "$PLANNER_HEADERS" \
+        "$SCREEN_DIRECTORY" \
+        --samples-per-projection 8 \
+        --device cuda \
+        "${gpu_arguments[@]}"
 
-log_frontier_step "Build exact cliff/capacity/balanced/quality recipes"
-"$PYTHON_ENVIRONMENT/bin/deepseek-v4-build-frontier-recipes" \
-    "$BASELINE_DIRECTORY/conversion-metrics.json" \
-    "$SCREEN_DIRECTORY/frontier-pilot-screen.json" \
-    "$SCREEN_DIRECTORY/frontier-boundary-report.json" \
-    "$SCREEN_DIRECTORY/frontier-full-screen.json" \
-    "$SOURCE_HEADERS_REPORT" \
-    "$PLANNER_HEADERS" \
-    "$RECIPE_BUNDLE" \
-    --model-parameter-count 284334567511
+    log_frontier_step "Build exact cliff/capacity/balanced/quality recipes"
+    "$PYTHON_ENVIRONMENT/bin/deepseek-v4-build-frontier-recipes" \
+        "$BASELINE_DIRECTORY/conversion-metrics.json" \
+        "$SCREEN_DIRECTORY/frontier-pilot-screen.json" \
+        "$SCREEN_DIRECTORY/frontier-boundary-report.json" \
+        "$SCREEN_DIRECTORY/frontier-full-screen.json" \
+        "$SOURCE_HEADERS_REPORT" \
+        "$PLANNER_HEADERS" \
+        "$RECIPE_BUNDLE" \
+        --model-parameter-count 284334567511
+else
+    log_frontier_step "Reuse CPU-validated source, screen, and recipe evidence"
+    printf '%s  %s\n' "$IMATRIX_SHA256" "$IMATRIX_PATH" | \
+        sha256sum --check --strict
+fi
 
 log_frontier_step "Verify measured source plus projected transition disk bound"
 "$PYTHON_ENVIRONMENT/bin/python" - \
@@ -315,26 +410,28 @@ print(
 )
 PY
 
-log_frontier_step "Download only baseline shards selected for exact reuse"
-mapfile -t reusable_shards < <(
-    "$PYTHON_ENVIRONMENT/bin/python" - "$RECIPE_BUNDLE" <<'PY'
+if [[ "$RUN_MODE" == "fresh" ]]; then
+    log_frontier_step "Download only baseline shards selected for exact reuse"
+    mapfile -t reusable_shards < <(
+        "$PYTHON_ENVIRONMENT/bin/python" - "$RECIPE_BUNDLE" <<'PY'
 import json
 import sys
 payload = json.load(open(sys.argv[1], encoding="utf-8"))
 for shard in payload["storage_summary"]["baseline_reused_shard_names"]:
     print(shard)
 PY
-)
-((${#reusable_shards[@]} > 0)) || {
-    echo "Frontier recipe selected no reusable baseline shards" >&2
-    exit 2
-}
-"$PYTHON_ENVIRONMENT/bin/hf" download \
-    "$BASELINE_REPOSITORY" \
-    "${reusable_shards[@]}" \
-    --revision "$BASELINE_REVISION" \
-    --local-dir "$BASELINE_DIRECTORY" \
-    --max-workers 4
+    )
+    ((${#reusable_shards[@]} > 0)) || {
+        echo "Frontier recipe selected no reusable baseline shards" >&2
+        exit 2
+    }
+    "$PYTHON_ENVIRONMENT/bin/hf" download \
+        "$BASELINE_REPOSITORY" \
+        "${reusable_shards[@]}" \
+        --revision "$BASELINE_REVISION" \
+        --local-dir "$BASELINE_DIRECTORY" \
+        --max-workers 4
+fi
 
 log_frontier_step "Convert, publish, verify, and reclaim selected candidate"
 "$PYTHON_ENVIRONMENT/bin/deepseek-v4-run-frontier-batch" \

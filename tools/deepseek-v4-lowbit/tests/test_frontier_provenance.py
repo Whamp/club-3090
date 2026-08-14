@@ -39,11 +39,18 @@ class FrontierProvenanceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "boundary checksum mismatch"):
                 load_verified_frontier_recipe_evidence(**paths)
 
+    def test_accepts_recipe_bundle_after_sorted_json_round_trip(self) -> None:
+        bundle = _recipe_bundle_fixture()
+        serialized = json.dumps(bundle, sort_keys=True)
+        round_tripped = json.loads(serialized)
+
+        validate_frontier_recipe_bundle_shape(round_tripped)
+
     def test_rejects_incomplete_recipe_bundle(self) -> None:
         bundle = _recipe_bundle_fixture()
         bundle["candidates"].pop("quality")
 
-        with self.assertRaisesRegex(ValueError, "incomplete or unordered"):
+        with self.assertRaisesRegex(ValueError, "candidate set is incomplete"):
             validate_frontier_recipe_bundle_shape(bundle)
 
 

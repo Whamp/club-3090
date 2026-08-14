@@ -21,6 +21,8 @@ deepseek-v4-select-frontier-boundaries = "deepseek_v4_lowbit.frontier_boundary_c
 deepseek-v4-screen-frontier-full = "deepseek_v4_lowbit.frontier_full_screen_cli:main"
 deepseek-v4-convert-frontier = "deepseek_v4_lowbit.frontier_convert_cli:main"
 deepseek-v4-run-frontier-batch = "deepseek_v4_lowbit.frontier_batch_cli:main"
+deepseek-v4-validate-frontier-resume = "deepseek_v4_lowbit.frontier_resume_cli:main"
+deepseek-v4-require-frontier-resume = "deepseek_v4_lowbit.frontier_resume_receipt_cli:main"
 deepseek-v4-publish-frontier = "deepseek_v4_lowbit.frontier_publish_cli:main"
 
 [build-system]

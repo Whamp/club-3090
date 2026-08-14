@@ -8,6 +8,8 @@ import textwrap
 import unittest
 from pathlib import Path
 
+from deepseek_v4_lowbit.shard_writer import file_sha256
+
 _RENTAL_DIRECTORY = Path(__file__).parents[1] / "rental"
 _PILOT_SCRIPT = _RENTAL_DIRECTORY / "run-verda-quantizer-pilot.sh"
 _FULL_CONVERSION_SCRIPT = _RENTAL_DIRECTORY / "run-verda-full-conversion.sh"
@@ -15,6 +17,73 @@ _ORACLE_SCRIPT = _RENTAL_DIRECTORY / "run-verda-vllm-w2-oracle.sh"
 _FRONTIER_SCRIPT = _RENTAL_DIRECTORY / "run-verda-quant-frontier.sh"
 _FRONTIER_HOST_SCRIPT = _RENTAL_DIRECTORY / "run-verda-frontier-host.sh"
 _FRONTIER_DELETE_SCRIPT = _RENTAL_DIRECTORY / "delete-verda-frontier-vm.sh"
+_FRONTIER_RECOVERY_MANIFEST = (
+    _RENTAL_DIRECTORY / "frontier-recovery-manifest-20260813.json"
+)
+_RECOVERY_MANIFEST_SHA256 = (
+    "0788715e8373daed48bbedaee11fedee217c798a2f189fee00473c9a9913a480"
+)
+
+_FAKE_FRONTIER_HOST_VERDA_CLI = textwrap.dedent(
+    """\
+    #!/usr/bin/env python3
+    import json
+    import os
+    import sys
+    from pathlib import Path
+
+    root = Path(os.environ["FAKE_VERDA_ROOT"])
+    arguments = sys.argv[1:]
+    if not arguments or arguments[0] != "--agent" or "json" not in arguments:
+        raise SystemExit(f"unsafe fake Verda invocation: {arguments}")
+    with (root / "calls.log").open("a", encoding="utf-8") as handle:
+        handle.write(" ".join(arguments) + "\\n")
+    resource, action = arguments[1:3]
+    volume = {
+        "id": "volume-1",
+        "name": "deepseek-v4-quant-frontier-os",
+        "size": 350,
+        "type": "NVMe",
+        "status": "detached",
+        "location": "FIN-03",
+        "contract": "PAY_AS_YOU_GO",
+        "is_os_volume": True,
+        "instance_id": None,
+        "instances": [],
+        "base_hourly_cost": 0.0959,
+    }
+    if (resource, action) == ("vm", "list"):
+        response = []
+    elif (resource, action) == ("volume", "list"):
+        response = [volume]
+    elif (resource, action) == ("volume", "describe"):
+        requested_id = arguments[3]
+        if requested_id != volume["id"]:
+            raise SystemExit("unknown volume")
+        response = volume
+    elif (resource, action) == ("vm", "availability"):
+        response = [
+            {
+                "location": "FIN-03",
+                "instance_type": "CPU.4V.16G",
+                "price_per_hour": 0.0279,
+            }
+        ]
+    elif (resource, action) == ("ssh-key", "list"):
+        response = [{"id": "ssh-key-1"}]
+    elif (resource, action) == ("cost", "balance"):
+        response = {"amount": 24.0, "currency": "usd"}
+    elif (resource, action) == ("cost", "estimate"):
+        response = {
+            "instance_type": "CPU.4V.16G",
+            "instance": {"hourly": 0.0279},
+            "total": {"hourly": 0.0279},
+        }
+    else:
+        raise SystemExit(f"unsupported fake Verda invocation: {arguments}")
+    print(json.dumps(response))
+    """
+)
 
 _FAKE_VERDA_CLI = textwrap.dedent(
     """\
@@ -120,6 +189,18 @@ class RentalScriptContractTests(unittest.TestCase):
         script = _ORACLE_SCRIPT.read_text(encoding="utf-8")
         self.assertIn('export PATH="/usr/local/cuda/bin:$PATH"', script)
 
+    def test_recovery_manifest_is_checksum_pinned(self) -> None:
+        self.assertEqual(
+            file_sha256(_FRONTIER_RECOVERY_MANIFEST),
+            _RECOVERY_MANIFEST_SHA256,
+        )
+        manifest = json.loads(_FRONTIER_RECOVERY_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(
+            manifest["recovered_volume_id"],
+            "9a7105b5-3c04-4bd7-b9fb-84c7be98c961",
+        )
+        self.assertEqual(len(manifest["files"]), 9)
+
     def test_frontier_runner_is_pinned_and_low_disk(self) -> None:
         script = _FRONTIER_SCRIPT.read_text(encoding="utf-8")
         self.assertIn(
@@ -129,7 +210,8 @@ class RentalScriptContractTests(unittest.TestCase):
         self.assertNotIn("__CLUB_3090_REVISION__", script)
         self.assertNotIn('CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"', script)
         self.assertIn("requires at least 110 GiB host RAM", script)
-        self.assertIn("requires at least 280 GiB free", script)
+        self.assertIn("minimum_free_gib=280", script)
+        self.assertIn("minimum_free_gib=88", script)
         self.assertIn("requires exactly one A100 80GB GPU", script)
         self.assertIn("requires compute capability 8.0", script)
         self.assertIn('export HF_HOME="$RENTAL_ROOT/huggingface-cache"', script)
@@ -149,26 +231,37 @@ class RentalScriptContractTests(unittest.TestCase):
         self.assertIn('"publication_report_sha256"', script)
         self.assertIn("os.replace(temporary, receipt_path)", script)
         self.assertIn("os.fsync(directory_fd)", script)
+        self.assertIn('RUN_MODE="${5:-fresh}"', script)
+        self.assertIn('if [[ "$RUN_MODE" == "validate-resume" ]]', script)
+        self.assertIn('if [[ "$RUN_MODE" == "resume-conversion" ]]', script)
+        self.assertIn("deepseek-v4-require-frontier-resume", script)
+        self.assertIn(
+            'if [[ "$RUN_MODE" == "fresh" ]]; then\n'
+            '    log_frontier_step "Download pinned official checkpoint',
+            script,
+        )
+        self.assertEqual(script.count("deepseek-v4-run-frontier-screen"), 1)
+        self.assertEqual(script.count("deepseek-v4-build-frontier-recipes"), 2)
 
     def test_frontier_host_orchestrator_guards_cost_and_exact_cleanup(self) -> None:
         script = _FRONTIER_HOST_SCRIPT.read_text(encoding="utf-8")
         self.assertIn("VERDA_FRONTIER_PROFILE:-main", script)
         self.assertIn("export VERDA_PROFILE", script)
         self.assertNotIn("auth use", script)
-        self.assertIn(
-            "VERDA_FRONTIER_INSTANCE_TYPE:-1A100.22V",
-            script,
-        )
+        self.assertIn('RUN_MODE="${VERDA_FRONTIER_RUN_MODE:-fresh}"', script)
+        self.assertIn('default_instance_type="1A100.22V"', script)
+        self.assertIn('default_instance_type="CPU.4V.16G"', script)
         self.assertIn("VERDA_FRONTIER_LOCATION:-FIN-03", script)
-        self.assertIn("VERDA_FRONTIER_MAX_HOURS:-16", script)
-        self.assertIn("VERDA_FRONTIER_MAX_COST_USD:-30.25", script)
+        self.assertIn('default_max_hours="16"', script)
+        self.assertIn('default_max_cost_usd="30.25"', script)
         self.assertNotIn("VERDA_FRONTIER_INSTANCE_TYPE:-2RTXPRO6000.60V", script)
         self.assertIn('verda --agent "$@" -o json', script)
-        self.assertIn("require_empty_account", script)
+        self.assertIn("require_account_contract", script)
+        self.assertIn("require_reusable_state_file", script)
         self.assertIn("projected > max_cost", script)
         self.assertIn("projected > float(balance", script)
         pending_state = "write_state pending"
-        create_command = 'create_response="$(verda_json vm create'
+        create_command = 'create_response="$(verda_json "${create_arguments[@]}")"'
         arm_invocation = "arm_watchdog\ncreate_started=1"
         self.assertLess(script.index(pending_state), script.index(arm_invocation))
         self.assertLess(script.index(arm_invocation), script.index(create_command))
@@ -180,7 +273,11 @@ class RentalScriptContractTests(unittest.TestCase):
         self.assertIn('--setenv="VERDA_PROFILE=$VERDA_PROFILE"', script)
         self.assertIn('systemctl --user start "$WATCHDOG_UNIT.service"', script)
         self.assertIn(
-            '"$DELETE_SCRIPT" "$STATE_FILE" --finalize-state',
+            '"$DELETE_SCRIPT" "$STATE_FILE" --delete-volume',
+            script,
+        )
+        self.assertIn(
+            '"$DELETE_SCRIPT" "$STATE_FILE" --preserve-volume',
             script,
         )
         self.assertIn("extract_volume_ids", script)
@@ -200,6 +297,9 @@ class RentalScriptContractTests(unittest.TestCase):
         self.assertIn("VERDA_FRONTIER_CANDIDATE:-quality", script)
         self.assertIn("frontier-complete.json", script)
         self.assertIn("publication_report_sha256", script)
+        self.assertIn("/root/frontier.exit", script)
+        self.assertIn("rm -f /root/frontier.pid", script)
+        self.assertIn('[[ "$(cat /root/frontier.exit)" != 0 ]]', script)
         self.assertIn("assert json.load(sys.stdin) == []", script)
         self.assertIn('["total"]["hourly"]', script)
 
@@ -213,6 +313,9 @@ class RentalScriptContractTests(unittest.TestCase):
         self.assertIn('volume.get("name") == expected_name', script)
         self.assertIn("pending create is still inside its discovery window", script)
         self.assertIn('vm delete "$vm_id"', script)
+        self.assertIn('CLEANUP_MODE="${2:-}"', script)
+        self.assertIn("--preserve-volume | --delete-volume", script)
+        self.assertIn('if [[ "$CLEANUP_MODE" == "--delete-volume" ]]', script)
         self.assertIn("--with-volumes", script)
         self.assertIn('volume delete "$volume_id"', script)
         self.assertIn("--yes", script)
@@ -254,7 +357,7 @@ class RentalScriptContractTests(unittest.TestCase):
                     "bash",
                     str(_FRONTIER_DELETE_SCRIPT),
                     str(state_path),
-                    "--finalize-state",
+                    "--preserve-volume",
                 ],
                 check=False,
                 capture_output=True,
@@ -266,6 +369,117 @@ class RentalScriptContractTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("inside its discovery window", result.stderr)
         self.assertTrue(state_preserved)
+
+    def test_frontier_resume_dry_run_requires_exact_detached_volume(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            fake_verda = fake_bin / "verda"
+            fake_verda.write_text(
+                _FAKE_FRONTIER_HOST_VERDA_CLI,
+                encoding="utf-8",
+            )
+            fake_verda.chmod(0o755)
+            environment = os.environ.copy()
+            environment.update(
+                {
+                    "PATH": f"{fake_bin}:{environment['PATH']}",
+                    "HOME": str(root / "home"),
+                    "FAKE_VERDA_ROOT": str(root),
+                    "VERDA_FRONTIER_DRY_RUN": "1",
+                    "VERDA_FRONTIER_RUN_MODE": "validate-resume",
+                    "VERDA_FRONTIER_RESUME_VOLUME_ID": "volume-1",
+                    "VERDA_FRONTIER_INSTANCE_TYPE": "CPU.4V.16G",
+                    "VERDA_FRONTIER_LOCATION": "FIN-03",
+                    "VERDA_FRONTIER_SSH_KEY_ID": "ssh-key-1",
+                    "VERDA_FRONTIER_MAX_HOURS": "2",
+                    "VERDA_FRONTIER_MAX_COST_USD": "0.25",
+                    "VERDA_FRONTIER_EVIDENCE_DIRECTORY": str(root / "evidence"),
+                }
+            )
+
+            result = subprocess.run(
+                ["bash", str(_FRONTIER_HOST_SCRIPT)],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+            calls = (root / "calls.log").read_text(encoding="utf-8")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("frontier_resume_volume_verified=true", result.stdout)
+            self.assertNotIn("vm create", calls)
+
+            environment["VERDA_FRONTIER_RESUME_VOLUME_ID"] = "wrong-volume"
+            rejected = subprocess.run(
+                ["bash", str(_FRONTIER_HOST_SCRIPT)],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+            self.assertNotEqual(rejected.returncode, 0)
+
+    def test_frontier_failure_cleanup_stops_compute_and_preserves_volume(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            fake_verda = fake_bin / "verda"
+            fake_verda.write_text(_FAKE_VERDA_CLI, encoding="utf-8")
+            fake_verda.chmod(0o755)
+            (root / "vm-present").touch()
+            (root / "volume-present").touch()
+            state_path = root / "frontier-state.json"
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "phase": "active",
+                        "vm_id": "vm-1",
+                        "volume_ids": ["volume-1"],
+                        "create_response": {},
+                        "hostname": "deepseek-v4-quant-frontier",
+                        "instance_type": "2A100.44V",
+                        "location": "FIN-01",
+                        "os_volume_size_gib": 350,
+                        "pending_cleanup_not_before_epoch": 0,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+            environment["FAKE_VERDA_ROOT"] = str(root)
+
+            result = subprocess.run(
+                [
+                    "bash",
+                    str(_FRONTIER_DELETE_SCRIPT),
+                    str(state_path),
+                    "--preserve-volume",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            preserved_state = json.loads(state_path.read_text(encoding="utf-8"))
+            deletion_log = (root / "deletions.log").read_text(encoding="utf-8")
+
+            self.assertFalse((root / "vm-present").exists())
+            self.assertTrue((root / "volume-present").exists())
+            self.assertEqual(preserved_state["phase"], "preserved")
+            self.assertIsNone(preserved_state["vm_id"])
+            self.assertEqual(preserved_state["volume_ids"], ["volume-1"])
+            self.assertIn("vm vm-1", deletion_log)
+            self.assertNotIn("--with-volumes", deletion_log)
+            self.assertNotIn("volume volume-1", deletion_log)
 
     def test_frontier_watchdog_recovers_every_provisioning_crash_window(
         self,
@@ -312,7 +526,7 @@ class RentalScriptContractTests(unittest.TestCase):
                         "bash",
                         str(_FRONTIER_DELETE_SCRIPT),
                         str(state_path),
-                        "--finalize-state",
+                        "--delete-volume",
                     ],
                     check=False,
                     capture_output=True,

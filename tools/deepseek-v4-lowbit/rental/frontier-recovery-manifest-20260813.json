@@ -1,0 +1,56 @@
+{
+  "campaign": "deepseek-v4-quant-frontier",
+  "failure": "frontier recipe bundle validator incorrectly depended on JSON mapping order",
+  "files": [
+    {
+      "path": "frontier-recipe-bundle.json",
+      "sha256": "72818535821a16682251bb8b32a781d2e1d729fa9ebf67395a648b3ed11429ad",
+      "size": 65797
+    },
+    {
+      "path": "frontier-screen/frontier-boundary-report.json",
+      "sha256": "5ef00a6a2c9819197c47098dc08d9eb47fa96f18d0f8f4f9ca3434c124d42ceb",
+      "size": 6978
+    },
+    {
+      "path": "frontier-screen/frontier-full-screen-progress.json",
+      "sha256": "4d1396bd98002f78351bfd092161a159700f990ce1ccde4cdfb44a844d24a8a9",
+      "size": 32814763
+    },
+    {
+      "path": "frontier-screen/frontier-full-screen.json",
+      "sha256": "49a3ad47b5888de106902d43fa73ef44df978704d02ecfe1c3400d9a5c31d845",
+      "size": 31176986
+    },
+    {
+      "path": "frontier-screen/frontier-pilot-screen.json",
+      "sha256": "907cc197c615b8a9d9e5dcb0ff12862696149598c409b3f53c859613c78613ad",
+      "size": 2289917
+    },
+    {
+      "path": "frontier-screen/frontier-screen-iterations.json",
+      "sha256": "7d2db38491637f54c6adec819a7227c6fc8bd73dd011d5de4a0165a74ed46e37",
+      "size": 12689
+    },
+    {
+      "path": "run-verda-quant-frontier.log",
+      "sha256": "0d1a8099a749c214a6c2f1a4a1b8b59708be2bbc2a46a5bcac6a8cf10b022962",
+      "size": 4890372
+    },
+    {
+      "path": "source-headers-report.json",
+      "sha256": "5830acd05678c5f6f14415fb54cf423cd6e211e3de41355e437648b053132765",
+      "size": 8005792
+    },
+    {
+      "path": "source-headers.json",
+      "sha256": "3fccdefc94c6f1d5b44bf78becf04412bcbc99759305b4e84ffc97a7bbf92e22",
+      "size": 8000152
+    }
+  ],
+  "outcome": "screening-complete-conversion-not-started",
+  "recovered_volume_id": "9a7105b5-3c04-4bd7-b9fb-84c7be98c961",
+  "rental_vm_id": "c4af8ac7-a238-4717-b700-90d5d24c96d7",
+  "schema_version": 1,
+  "source_commit": "a012c23aa3d7029b638d1417eac6e5d55d3bd3fd"
+}

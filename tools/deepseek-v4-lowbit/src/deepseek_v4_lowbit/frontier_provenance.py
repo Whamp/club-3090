@@ -226,10 +226,10 @@ def validate_frontier_recipe_bundle_shape(recipe_bundle: Mapping[str, Any]) -> N
         "frontier recipe bundle",
     )
     candidates = recipe_bundle.get("candidates")
-    if not isinstance(candidates, Mapping) or tuple(candidates) != _FRONTIER_CANDIDATES:
-        raise ValueError(
-            "frontier recipe bundle candidates are incomplete or unordered"
-        )
+    if not isinstance(candidates, Mapping) or set(candidates) != set(
+        _FRONTIER_CANDIDATES
+    ):
+        raise ValueError("frontier recipe bundle candidate set is incomplete")
     summaries = recipe_bundle.get("candidate_summaries")
     if (
         not isinstance(summaries, list)
