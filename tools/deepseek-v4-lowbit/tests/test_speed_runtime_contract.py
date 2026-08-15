@@ -70,6 +70,10 @@ def test_speed_patch_and_image_contract() -> None:
         '1e750446aa04b1f325fd1ca29be5d6b3e62f69df69e7ccd4b45df2c267b694d3"'
     ) in builder
 
+    nsys_entrypoint = (PATCH_DIRECTORY / "nsys-vllm-entrypoint.sh").read_text()
+    assert '--profiler-config \'{"profiler":"cuda"}\'' in nsys_entrypoint
+    assert "--profiler-config.profiler" not in nsys_entrypoint
+
     dockerfile = (PATCH_DIRECTORY / "Dockerfile.flash-mla-decode").read_text()
     assert "vllm/envs.py" in dockerfile
     assert "vllm/models/deepseek_v4/ampere/ampere_sparse.py" in dockerfile

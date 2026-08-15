@@ -14,4 +14,4 @@ exec nsys profile \
     --capture-range=cudaProfilerApi \
     --capture-range-end=stop \
     /opt/venv/bin/vllm serve "$@" \
-    --profiler-config.profiler cuda
+    --profiler-config '{"profiler":"cuda"}'
