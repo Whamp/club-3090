@@ -1,0 +1,10 @@
+{
+  "all_reduce_critical_path_fraction": 0.17154703387917752,
+  "model_id": "deepseek-v4-flash-0731-wna16-quality-12035985",
+  "profile_sha256": "01964101aa9e23fc3d1e5d403182931bb15cdb9e56ebc8535e34943f2abc2298",
+  "request_sha256": "12809d2e6074d8bbdbe19bd9d9f9e5470eddcae2dfd153a837e2c926a81dc012",
+  "reviewer_note": "Conservative GPU3 lower bound: 791.739 ms NCCL union over 4615.287 ms profiled decode span (17.155%); interval subtraction found 0 ms overlap with non-NCCL kernels. GPUs 0-2 were 19.895%, 20.949%, and 20.396%.",
+  "schema_version": 1,
+  "timeline_reviewed": true,
+  "vllm_tree": "6354125afd1306c9286f734d1c47c23c767d77a9"
+}

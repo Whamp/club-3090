@@ -1,0 +1,37 @@
+Running STRESS / boundary test against http://100.92.238.117:8034
+  model=deepseek-v4-flash-0731-wna16-quality-12035985  container=vllm-deepseek-v4-speed-flashmla-hier  engine=vllm
+  This script does the heavy stuff (longctx needle ladder + ~25K-token tool prefill).
+  For the fast functional smoke (~2 min), use verify-full.sh instead.
+
+[1/8] Long-context needle small rungs (10K / 30K) ...
+    [32m✓[0m   9212 tokens: recalled 'amber narwhal 20' (got: The hidden phrase is 'amber narwhal 20'. )  prefill=914.3 t/s (10s)
+    [32m✓[0m  27512 tokens: recalled 'golden falcon 73' (got: golden falcon 73 )  prefill=1050.0 t/s (26s)
+  [32m✓[0m all long-ctx depths recalled secret correctly
+[2/8] Tool response prefill OOM (~25K-token mock tool response) ...
+  [32m✓[0m tool prefill OK — text response (1100 chars, finish=stop)
+[3/8] IDE-agent one-shot prompt (sys + tool schemas + user request) ...
+  [32m✓[0m IDE-agent one-shot OK — 63 completion tokens (87 chars), finish=stop
+[4/8] Multi-turn agent prompt (sys + tools + 4-turn history) ...
+  [32m✓[0m multi-turn agent OK
+[5/8] LCB-coding shape (LeetCode-style problem + structured plan) ...
+  [32m✓[0m LCB-coding shape OK
+[6/8] Reasoning-heavy (math problem + max_tokens=8192) ...
+  [32m✓[0m reasoning-heavy OK — 7726 completion tokens
+[7/8] Long-context needle large rungs (60K / 90K — Cliff 2 territory) ...
+    [32m✓[0m  54965 tokens: recalled 'crimson axolotl 28' (got: crimson axolotl 28 )  prefill=1136.5 t/s (48s)
+    [32m✓[0m  85463 tokens: recalled 'sapphire otter 50' (got: The hidden phrase is "sapphire otter 50". )  prefill=1215.5 t/s (70s)
+  [32m✓[0m all long-ctx depths recalled secret correctly
+[8/8] Context ceiling ladder (staggered NIAH from ~95000 → ~0.92 × n_ctx) ...
+    n_ctx=230144  ladder: 95000 → 125000 → 155000 → 185000 → 211732 (5 rungs)
+    calibrated: scale=100 → 6107 tokens (tok/scale_unit=61.07)
+    VRAM free (ladder start): 82 MB
+    [32m✓[0m rung 1/5: target=95K  actual=94K tok (41%)  recalled 'sapphire narwhal 44'  prefill=892.2 t/s (106s)  VRAM_free=82MB
+    [32m✓[0m rung 2/5: target=125K  actual=124K tok (54%)  recalled 'amber iguana 57'  prefill=822.2 t/s (152s)  VRAM_free=82MB
+    [32m✓[0m rung 3/5: target=155K  actual=154K tok (67%)  recalled 'amber capybara 99'  prefill=802.1 t/s (193s)  VRAM_free=82MB
+    [32m✓[0m rung 4/5: target=185K  actual=184K tok (80%)  recalled 'violet falcon 64'  prefill=782.2 t/s (236s)  VRAM_free=82MB
+    [32m✓[0m rung 5/5: target=211K  actual=211K tok (91%)  recalled 'turquoise axolotl 59'  prefill=764.9 t/s (277s)  VRAM_free=58MB
+
+  [32m✓[0m ceiling ladder: all 5 rungs passed — fillable to 211551 tok (91% of n_ctx=230144)
+    VRAM: 82 → 58 MB (Δ -24 MB across ladder, margin threshold=0 MB)
+
+[32mAll stress / boundary checks passed.[0m KV-cache and prefill paths are sound for the deployed config.

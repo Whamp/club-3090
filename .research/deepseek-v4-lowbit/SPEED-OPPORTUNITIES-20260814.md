@@ -104,4 +104,23 @@ Evidence status: causal configuration hypotheses; no server60 measurement.
 - matched canary, benchmark, swap, and long-context measurement scripts
 - trace summary and reviewed-evidence gate
 
-No server60 experiment was run while this preparation was produced.
+## Server60 outcome — 2026-08-15
+
+The authorized campaign completed with zero-swap matched measurements:
+
+- `BLOCK_M=2`: rejected as noise (+0.19% decode, +0.22% prefill).
+- FlashMLA decode: accepted after 17 SM86 numerical cases; 71.04 decode
+  tokens/s in the final parent run.
+- Hierarchical all-reduce: accepted after the reviewed trace assigned a
+  conservative 17.15% of decode wall time to non-overlapped NCCL and the local
+  oracle found hierarchy 14.5–21.5% faster across tested sizes.
+- Combined winner: 74.98 decode tokens/s, +22.58% over the fresh plain
+  baseline. Cache-busted ~9K prefill measured 887.52 tokens/s, −3.23%; this is
+  a disclosed tradeoff, not a prefill win.
+- `indexer96`: skipped because the trace did not establish its mediator.
+- `batched320`: skipped because 58 MiB final-rung headroom failed its 256 MiB
+  prerequisite.
+
+The combined profile passed tools, multi-turn agent prompts, coding, long
+reasoning, and exact recall through 211,551 tokens. Evidence is in
+[`evidence/sm86-speed-20260815/`](evidence/sm86-speed-20260815/).

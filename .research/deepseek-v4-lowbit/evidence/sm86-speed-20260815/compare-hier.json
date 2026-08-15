@@ -1,0 +1,29 @@
+{
+  "baseline": {
+    "decode_tps": 61.17,
+    "kv_cache_tokens": 275238,
+    "maximum_worker_swap_kib": 0,
+    "minimum_free_mib": 93,
+    "prefill_tps": 917.19
+  },
+  "candidate": {
+    "decode_tps": 65.0,
+    "kv_cache_tokens": 277675,
+    "maximum_worker_swap_kib": 0,
+    "minimum_free_mib": 84,
+    "prefill_tps": 929.15
+  },
+  "decode_delta_fraction": 0.06261239169527544,
+  "decode_ratio": 1.0626123916952754,
+  "gates": {
+    "decode_floor": true,
+    "prefill_floor": true,
+    "zero_worker_swap": true
+  },
+  "kv_cache_token_delta": 2437,
+  "operator_note": "Hard gates do not establish a speed win. Review run variance, dispatch evidence, realized KV capacity, and the predicted mediator.",
+  "passes_hard_gates": true,
+  "prefill_delta_fraction": 0.01303982817082594,
+  "prefill_ratio": 1.013039828170826,
+  "schema_version": 1
+}

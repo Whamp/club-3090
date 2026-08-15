@@ -379,13 +379,15 @@ class RuntimeImageContractTests(unittest.TestCase):
         self.assertIn("VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: 64", compose)
         self.assertIn("VLLM_SPARSE_DENSE_QUERY_BLOCK: 0", compose)
         self.assertIn(
-            "quality-12035985-marlin-7b39c930@sha256:"
-            "f56910530683326051cfdf4e7c8e4d6afc5bace8804cb78b2af9ea799bbba4e6",
+            "quality-12035985-speed-b7766cfe@sha256:"
+            "eb2884fc60ee332d7adb9d5e424e35acf8817dad0f93c8bb7ea7095cb8f58a0e",
             compose,
         )
         self.assertIn("MAX_MODEL_LEN:-230144", compose)
         self.assertIn("MAX_NUM_SEQS:-2", compose)
         self.assertIn("VLLM_DSV4_WO_A_MARLIN_DIAGONAL: 1", compose)
+        self.assertIn("VLLM_DSV4_FLASH_MLA_DECODE: 1", compose)
+        self.assertIn('VLLM_HIER_ALL_REDUCE: "0,1;2,3"', compose)
         self.assertIn("deepseek-v4-flash-0731-wna16-quality-12035985", compose)
         self.assertIn("MAX_NUM_BATCHED_TOKENS:-256", compose)
         self.assertIn("--enable-auto-tool-choice", compose)

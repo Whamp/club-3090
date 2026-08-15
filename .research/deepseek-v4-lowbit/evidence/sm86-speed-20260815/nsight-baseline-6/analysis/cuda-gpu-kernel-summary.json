@@ -1,0 +1,17 @@
+{
+  "nccl_kernel_time": 3618081137.0,
+  "nccl_kernel_time_fraction": 0.1964686358549357,
+  "nccl_kernels": [
+    {
+      "name": "ncclDevKernel_AllReduce_Sum_bf16_RING_LL(ncclDevKernelArgsStorage<(unsigned long)4096>)",
+      "total_time": 3452936196.0
+    },
+    {
+      "name": "ncclDevKernel_AllGather_RING_LL(ncclDevKernelArgsStorage<(unsigned long)4096>)",
+      "total_time": 165144941.0
+    }
+  ],
+  "schema_version": 1,
+  "scope": "summed_cuda_kernel_time_not_critical_path",
+  "total_kernel_time": 18415566033.0
+}

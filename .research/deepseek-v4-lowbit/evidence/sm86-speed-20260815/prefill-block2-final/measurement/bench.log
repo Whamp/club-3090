@@ -1,0 +1,111 @@
+
+========== CONFIG FINGERPRINT ==========
+  endpoint       : http://100.92.238.117:8034  (mode=chat)
+  model          : deepseek-v4-flash-0731-wna16-quality-12035985
+  serving pid    : 1409615
+  log source     : docker
+  KV cache type  : fp8_ds_mla (source: argv)
+  serving argv   : model=/runtime-model
+  moe-cache cfg  : moe_cache_cap=<unset> RESERVE_MB=<unset> ADMIT_AFTER=<unset> THROTTLE=<unset> MAX_BATCH=<unset> STATS=<unset>
+  CPU offload    : not detected (moe-cache captures skipped)
+
+========== SYSTEM RAM ==========
+  mem_total_gib=60.4 mem_available_gib=28.3 server_rss_gib=1.2 swap_total_gib=8.0 swap_used_gib=0.0 server_swap_mib=0
+  swap check     : PASS (no serving-process pages in swap)
+
+========== CODE (prompt=78 chars, max_tokens=512) ==========
+=== warmups (3) ===
+  warm-1     wall= 11.02s  ttft=  2782ms  toks= 512  wall_TPS= 46.48  decode_TPS= 62.19
+  warm-2     wall=  8.49s  ttft=   258ms  toks= 512  wall_TPS= 60.32  decode_TPS= 62.21
+  warm-3     wall=  8.49s  ttft=   254ms  toks= 512  wall_TPS= 60.29  decode_TPS= 62.15
+
+=== measured (5) ===
+  run-1      wall=  8.47s  ttft=   234ms  toks= 512  wall_TPS= 60.42  decode_TPS= 62.14
+  run-2      wall=  8.49s  ttft=   253ms  toks= 512  wall_TPS= 60.31  decode_TPS= 62.16
+  run-3      wall=  8.45s  ttft=   223ms  toks= 512  wall_TPS= 60.58  decode_TPS= 62.22
+  run-4      wall=  8.47s  ttft=   233ms  toks= 512  wall_TPS= 60.47  decode_TPS= 62.19
+  run-5      wall=  8.48s  ttft=   246ms  toks= 512  wall_TPS= 60.37  decode_TPS= 62.18
+
+=== summary [code] (n=5) ===
+  wall_TPS       mean=  60.43   std=  0.10   CV= 0.2%   min=60.31   max=60.58
+  decode_TPS     mean=  62.18   std=  0.03   CV= 0.0%   min=62.14   max=62.22
+  TTFT          mean=   238ms  std=   12ms  min=223ms  max=253ms
+  n-usable      5/5  (runs with >= 128 tokens, 25% of max_tokens=512)
+  PP tok/s       n/a (engine-log scrape suppressed: prompt is 18 tok (< 1000) - the engine averages prompt throughput over a ~10 s window, and a prompt this short cannot fill one)
+                 the trustworthy prefill number is the client-side `prefill tok/s` summary (prompt_tokens/TTFT, cache-busted)
+
+========== PREFILL-8K (target=8984 prompt tokens, max_tokens=16, cache-busted: fresh haystack per run) ==========
+=== warmups (1) ===
+  warm-1     wall= 10.24s  ttft= 10200ms  prompt_toks=  9408  PP_tok/s= 922.32
+  [calibrated: 9408 tok at request=8984 → measured runs request 8579]
+
+=== measured (3) ===
+  run-1      wall= 10.33s  ttft= 10288ms  prompt_toks=  8988  PP_tok/s= 873.60
+  run-2      wall= 10.51s  ttft= 10471ms  prompt_toks=  9309  PP_tok/s= 889.03
+  run-3      wall=  9.70s  ttft=  9659ms  prompt_toks=  8988  PP_tok/s= 930.52
+
+=== summary [prefill-8k] (n=3) ===
+  prefill tok/s  mean= 897.72   std= 29.43   CV= 3.3%   min=873.60   max=930.52
+  TTFT          mean= 10140ms  std=  426ms  min=9659ms  max=10471ms
+  PP tok/s (engine log, windowed — indicative only) mean= 923.50   std= 21.96   CV= 2.4%   min=898.80   max=940.80
+
+========== CAPTURE: PCIe ==========
+  decode all rx_mean=2221 rx_peak=3224 tx_mean=499 tx_peak=1900 sm_mean=97.2 memctl_mean=28.6 samples=148
+  decode GPU0 rx_mean=1824 rx_peak=2445 tx_mean=443 tx_peak=1483 sm_mean=98.5 memctl_mean=29.7 samples=37
+  decode GPU1 rx_mean=2359 rx_peak=2658 tx_mean=509 tx_peak=1467 sm_mean=96.8 memctl_mean=28.4 samples=37
+  decode GPU2 rx_mean=2204 rx_peak=3224 tx_mean=492 tx_peak=1335 sm_mean=96.9 memctl_mean=28.4 samples=37
+  decode GPU3 rx_mean=2498 rx_peak=3087 tx_mean=553 tx_peak=1900 sm_mean=96.7 memctl_mean=27.8 samples=37
+  prefill all rx_mean=1989 rx_peak=3918 tx_mean=1403 tx_peak=2325 sm_mean=94.6 memctl_mean=12.3 samples=104
+  prefill GPU0 rx_mean=2091 rx_peak=2519 tx_mean=1366 tx_peak=1864 sm_mean=98.4 memctl_mean=12.0 samples=26
+  prefill GPU1 rx_mean=1157 rx_peak=1577 tx_mean=1279 tx_peak=2170 sm_mean=86.1 memctl_mean=12.3 samples=26
+  prefill GPU2 rx_mean=1600 rx_peak=2841 tx_mean=1331 tx_peak=1956 sm_mean=95.2 memctl_mean=12.3 samples=26
+  prefill GPU3 rx_mean=3108 rx_peak=3918 tx_mean=1635 tx_peak=2325 sm_mean=98.6 memctl_mean=12.6 samples=26
+  note: decode and prefill PCIe traffic differ by ~100x on an offloaded MoE —
+        a whole-run mean describes neither. 1 Hz under-reads bursts, so the
+        PEAK is reported next to the mean, not instead of it.
+  link (sampled under load, best observed):
+    GPU0 gen=3/3 width=4/16  ⚠ WARN: never reached gen3 x16 under load — link is training below its own maximum (check slot/riser/BIOS bifurcation)
+    GPU1 gen=3/3 width=16/16
+    GPU2 gen=3/3 width=8/16  ⚠ WARN: never reached gen3 x16 under load — link is training below its own maximum (check slot/riser/BIOS bifurcation)
+    GPU3 gen=3/3 width=16/16
+    denominator: ~3348 MB/s practical for a negotiated gen3 x4 link
+                 (per-lane raw x width x 0.85; NOT a theoretical peak)
+    decode rx peak = 3224 MB/s = 96.3% of that denominator
+
+========== CAPTURE: VRAM ==========
+  idle=96044 MiB  peak=96052 MiB  post=96052 MiB
+  leak delta (post - idle) = 8 MiB
+  GPU0 24006 MiB (post-run)
+  GPU1 24034 MiB (post-run)
+  GPU2 24006 MiB (post-run)
+  GPU3 24006 MiB (post-run)
+  host CPU busy across the run: 17.8%
+
+========== CAPTURE: DRAFT ACCEPTANCE ==========
+  no drafter output in the log (spec-dec off, or the engine does not log acceptance)
+
+========== CAPTURE: ENGINE-SIDE TIMINGS ==========
+  no print_timing lines in the log (engine may not emit them at this verbosity)
+
+========== CAPTURE: EXPERT CACHE (moe-cache) ==========
+  skipped: no CPU offload detected — nothing for an expert cache to cache.
+
+========== CAPTURE: INTEGRITY ==========
+  status: OK
+  (no capture-level defect detected — this is NOT a statement about the numbers'
+   quality, only that the measurement machinery did its job)
+  swap check   : PASS (no serving-process pages in swap)
+
+=== GPU state ===
+0, 0 %, 24006 MiB, 24576 MiB, 128.59 W, 60
+1, 0 %, 24034 MiB, 24576 MiB, 131.27 W, 61
+2, 0 %, 24006 MiB, 24576 MiB, 128.88 W, 61
+3, 0 %, 24006 MiB, 24576 MiB, 129.49 W, 51
+
+=== Interconnect (three layers) ===
+  layer 1  driver P2P grant : GRANTED over PCIe — topo -p2p reports OK on every pair; kernel module: open
+  layer 2  NCCL use         : no NCCL_P2P*/NVLINK_MODE in the serving environment (engine default)
+  layer 3  engine custom-AR : custom-AR OFF, P2P LIVE — the engine is not using its custom all-reduce; peer transfers still go via NCCL. Cause is either vLLM's own NVLink-only gate at world>2 (#786) or an operator-supplied --disable-custom-all-reduce (#922). Check the engine log to tell which; both are healthy states
+  verdict  : ✓ interconnect: PCIe P2P engaged via NCCL peer transfers. vLLM auto-disabled its custom all-reduce kernel — expected at >2 PCIe-only GPUs (its gate checks NVLink, not peer access; #786), NOT a misconfiguration. P2P is still active on the NCCL path.
+
+=== Last 3 SpecDecoding metrics ===

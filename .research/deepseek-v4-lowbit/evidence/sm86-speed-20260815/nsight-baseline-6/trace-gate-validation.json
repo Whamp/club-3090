@@ -1,0 +1,5 @@
+{
+  "all_reduce_critical_path_fraction": 0.17154703387917752,
+  "trace_gate_path": "/home/will/inference/runtime/deepseek-v4-wna16-sm86/speed-experiments-20260815/nsight-baseline-6/trace-gate.json",
+  "trace_gate_sha256": "c0e0ec9920a2f03f64c46feb5fce1306060c76bba952b13857c8d426151b7269"
+}

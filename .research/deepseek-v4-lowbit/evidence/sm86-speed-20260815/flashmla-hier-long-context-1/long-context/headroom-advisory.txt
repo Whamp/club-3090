@@ -1,0 +1,2 @@
+minimum_free_mib=58
+release_advisory=FAIL (<1024 MiB; capacity ceiling only)

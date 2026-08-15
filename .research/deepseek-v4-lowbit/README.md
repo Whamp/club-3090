@@ -12,13 +12,15 @@ Start with [`REPORT.md`](REPORT.md). It is the cold-reader account of the artifa
 | [`VLLM-PERFORMANCE-PLAN.md`](VLLM-PERFORMANCE-PLAN.md) | Performance campaign plan and execution ledger |
 | [`CAPACITY-MARLIN-20260814.md`](CAPACITY-MARLIN-20260814.md) | Causal 131K-to-230K capacity campaign |
 | [`SPEED-OPPORTUNITIES-20260814.md`](SPEED-OPPORTUNITIES-20260814.md) | Source-grounded, capacity-preserving speed opportunities and experiment order |
-| [`evidence/capacity-marlin-20260814/`](evidence/capacity-marlin-20260814/) | Compact final-image evidence and SHA-256 manifest |
+| [`evidence/capacity-marlin-20260814/`](evidence/capacity-marlin-20260814/) | Compact capacity-image evidence and SHA-256 manifest |
+| [`evidence/sm86-speed-20260815/`](evidence/sm86-speed-20260815/) | Matched speed results, numerical gates, trace review, long-context checks, and SHA-256 manifest |
 
 ## Immutable external evidence
 
 - Full quantization screen and recovered recipe bundle: `hampsonw/DeepSeek-V4-Flash-0731-WNA16`, branch `evidence-quant-frontier-screen-20260813`, commit `2686304a68557827d847e1954050cde6b5e7fd08`.
 - Projection-sensitive artifact: revision `12035985bf555d0ddc603c6305586a8fa915589c`.
-- Validated runtime source: `Whamp/vllm@7b39c93043ffa88729d2cd3dd1f8f482df6ea98c`, tree `670643653f99448f90192b79dd0842bcfa073ab8`; merged through Whamp/vLLM PR #2 as `28db4816298293b74fca358cf735ac51c5144acb`.
+- Capacity runtime source: `Whamp/vllm@7b39c93043ffa88729d2cd3dd1f8f482df6ea98c`, tree `670643653f99448f90192b79dd0842bcfa073ab8`; merged through Whamp/vLLM PR #2 as `28db4816298293b74fca358cf735ac51c5144acb`.
+- Speed runtime source: `Whamp/vllm@b7766cfe4d15d9b68acea43097ceff221e8a739f`, tree `6354125afd1306c9286f734d1c47c23c767d77a9`.
 - Deployment source: `Whamp/club-3090@e625a892b3af6c32ec22394e2341eed4bb8bdc17` plus later research-index commits.
 
 ## Local forensic archives
