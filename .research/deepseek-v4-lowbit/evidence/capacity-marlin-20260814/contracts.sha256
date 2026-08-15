@@ -1,0 +1,3 @@
+12f6584c07bf00808e4c05326279cd0e7df72235c6ffe3bff0c1b8dfa4e52c10  /home/will/inference/runtime/deepseek-v4-wna16-sm86/capacity-quality-20260814/final-quality-capacity-230144/final.env
+ef09b51375a3aa76b50d0b05368a5405f213d2893ae533b31f81b5ccab5cc6ca  /home/will/inference/runtime/deepseek-v4-wna16-sm86/club-3090-quality-capacity-778847a4/models/deepseek-v4-flash-0731/vllm/compose/multi4/wna16/base.yml
+f0fbc7e716f39e8844efbe2447001f3d9bb091eb6d85806e6208808673aa0305  /home/will/inference/runtime/deepseek-v4-wna16-sm86/capacity-quality-20260814/final-quality-capacity-230144/resolved-compose.yml

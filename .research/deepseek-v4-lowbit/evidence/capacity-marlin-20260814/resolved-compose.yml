@@ -1,0 +1,107 @@
+name: dsv4-wna16-prod
+services:
+  deepseek-v4-wna16-sm86:
+    profiles:
+      - authorized-gpu-test
+    command:
+      - --model
+      - /runtime-model
+      - --served-model-name
+      - deepseek-v4-flash-0731-wna16-quality-12035985
+      - --tensor-parallel-size
+      - "4"
+      - --max-model-len
+      - "230144"
+      - --gpu-memory-utilization
+      - "0.98"
+      - --max-num-seqs
+      - "2"
+      - --max-num-batched-tokens
+      - "256"
+      - --kv-cache-dtype
+      - fp8_ds_mla
+      - --disable-custom-all-reduce
+      - --enable-chunked-prefill
+      - --enable-auto-tool-choice
+      - --tool-call-parser
+      - deepseek_v4
+      - --reasoning-parser
+      - deepseek_v4
+      - --trust-remote-code
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    container_name: vllm-deepseek-v4-wna16-sm86
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities:
+                - gpu
+              driver: nvidia
+              count: -1
+    environment:
+      CUDA_VISIBLE_DEVICES: 0,1,2,3
+      HF_HUB_OFFLINE: "1"
+      HUMMING_CACHE_DIR: /root/.cache/humming
+      HUMMING_COMPILER: nvrtc
+      NCCL_CUMEM_ENABLE: "0"
+      NVIDIA_VISIBLE_DEVICES: all
+      OMP_NUM_THREADS: "1"
+      TORCH_EXTENSIONS_DIR: /root/.cache/torch_extensions
+      TRANSFORMERS_OFFLINE: "1"
+      TRITON_CACHE_DIR: /root/.triton/cache
+      VLLM_DSV4_WO_A_MARLIN_DIAGONAL: "1"
+      VLLM_NO_USAGE_STATS: "1"
+      VLLM_SPARSE_DENSE_QUERY_BLOCK: "0"
+      VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "64"
+      VLLM_WORKER_MULTIPROC_METHOD: spawn
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://127.0.0.1:8000/health >/dev/null
+      timeout: 10s
+      interval: 30s
+      retries: 5
+      start_period: 15m0s
+    image: club-3090/deepseek-v4-wna16-sm86:quality-12035985-marlin-7b39c930@sha256:f56910530683326051cfdf4e7c8e4d6afc5bace8804cb78b2af9ea799bbba4e6
+    ipc: host
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        host_ip: 100.92.238.117
+        target: 8000
+        published: "8034"
+        protocol: tcp
+    restart: unless-stopped
+    shm_size: "17179869184"
+    tmpfs:
+      - /runtime-model:size=16m,mode=0755
+    volumes:
+      - type: bind
+        source: /home/will/models/deepseek-v4-frontier-quality-cache/hub/models--hampsonw--DeepSeek-V4-Flash-0731-WNA16/snapshots/12035985bf555d0ddc603c6305586a8fa915589c
+        target: /artifact
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/will/models/deepseek-v4-frontier-quality-cache/hub/models--hampsonw--DeepSeek-V4-Flash-0731-WNA16/blobs
+        target: /blobs
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /home/will/inference/cache/humming
+        target: /root/.cache/humming
+        bind: {}
+      - type: bind
+        source: /home/will/inference/cache/triton
+        target: /root/.triton/cache
+        bind: {}
+      - type: bind
+        source: /home/will/inference/cache/torch_extensions
+        target: /root/.cache/torch_extensions
+        bind: {}
+networks:
+  default:
+    name: dsv4-wna16-prod_default

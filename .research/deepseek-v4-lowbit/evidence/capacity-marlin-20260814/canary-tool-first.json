@@ -1,0 +1,49 @@
+{
+  "id": "chatcmpl-844cca7af64c6862",
+  "object": "chat.completion",
+  "created": 1786755295,
+  "model": "deepseek-v4-flash-0731-wna16-quality-12035985",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "I'll use the add tool to calculate 17 + 25 exactly once.\n\n",
+        "refusal": null,
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": [
+          {
+            "id": "chatcmpl-tool-9c2ca303185086fd",
+            "type": "function",
+            "function": {
+              "name": "add",
+              "arguments": "{\"a\": 17, \"b\": 25}"
+            }
+          }
+        ],
+        "reasoning": null
+      },
+      "logprobs": null,
+      "finish_reason": "tool_calls",
+      "stop_reason": "</\uff5cDSML\uff5ctool_calls>",
+      "token_ids": null,
+      "routed_experts": null
+    }
+  ],
+  "service_tier": null,
+  "system_fingerprint": "vllm-0.1.dev4+g2a3dd2ea7-tp4-56727987",
+  "usage": {
+    "prompt_tokens": 293,
+    "total_tokens": 366,
+    "completion_tokens": 73,
+    "prompt_tokens_details": null
+  },
+  "prompt_logprobs": null,
+  "prompt_token_ids": null,
+  "prompt_text": null,
+  "kv_transfer_params": null,
+  "ec_transfer_params": null,
+  "metrics": null
+}

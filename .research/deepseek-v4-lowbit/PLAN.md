@@ -2,23 +2,26 @@
 
 ## Outcome
 
-Completed on 2026-08-12. The project generated one MTP-free, imatrix-weighted
-all-W2 artifact with 76.770184 GiB of tensor payload and published immutable Hub
-revision `75d9286c37f3037f3ab390cfbc10747466eac714`. The checksum-pinned SM86
-runtime serves it on four RTX 3090s at 215,000 tokens with
-`max_num_seqs=4`, 233,817 KV-cache tokens, 60.79 decode tokens/s, and 968.97
-cache-busted prefill tokens/s. Club-3090 commit
-`26ae767aa98c14761ac4a69d4f492f418fd29578` owns the delivery. Server60 runs
-that exact Compose. At the final-state capture, system swap and every serving
-process were at zero; a later live check still found every serving process at
-zero. The remaining operational risk is only 141–142 MiB of free VRAM per card.
+The first completed artifact, published on 2026-08-12 at immutable Hub revision
+`75d9286c37f3037f3ab390cfbc10747466eac714`, uses imatrix-weighted W2/group-128
+for every routed projection and omits MTP. It established the conversion,
+compressed-tensors, Humming, SM86, CUDA-graph, and long-context runtime path.
 
-Quality correction, 2026-08-13: the artifact is rejected for coding-agent
-promotion. It degenerated on DeepSWE's
-`superjson-error-stack-serialization` task and repeated the failure with one
-worker and no concurrent requests. The historical quick suite and reconstruction
-metrics did not detect this. The runtime and performance results remain valid;
-the artifact-quality conclusion does not.
+The final projection-sensitive quality artifact is immutable at revision
+`12035985bf555d0ddc603c6305586a8fa915589c`. It protects every routed down
+projection at group size 128, upgrades seven down-projection layers to W4, and
+uses group sizes 128, 256, and 512 selectively for fused gate/up. The selected
+server60 profile serves 230,144 tokens with `max_num_seqs=2`, 275,238 aggregate
+KV-cache tokens, 61.91 decode tokens/s, and 875.93 cache-busted prefill tokens/s.
+Every serving process was at zero swap during final validation. See
+[`REPORT.md`](REPORT.md) for the cold-reader result and evidence map.
+
+Causality correction, 2026-08-14: both WNA16 artifacts initially degenerated on
+post-tool DeepSWE turns, but the shared cause was vLLM's missing outer DSML
+tool-call stop marker. `Whamp/vllm@9a2ffbb4534400064e645cb4fef8ab2f2a987f11`
+fixed the runtime parser. The failures did not establish quantization damage.
+Future artifacts still require a multi-turn coding-agent gate because the small
+quick suite and reconstruction metrics did not expose this runtime defect.
 
 ## Replacement quant direction
 

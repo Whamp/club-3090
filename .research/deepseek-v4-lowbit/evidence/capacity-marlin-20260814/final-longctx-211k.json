@@ -1,0 +1,15 @@
+{
+  "target_raw_tokens": 211000,
+  "raw_prompt_tokens": 211027,
+  "usage": {
+    "prompt_tokens": 211031,
+    "total_tokens": 211045,
+    "completion_tokens": 14,
+    "prompt_tokens_details": null
+  },
+  "secret": "marlin capacity heron 731",
+  "response": "IMPORTANT NEEDLE: marlin capacity heron 731",
+  "pass": true,
+  "finish_reason": "stop",
+  "wall_seconds": 265.0287230014801
+}

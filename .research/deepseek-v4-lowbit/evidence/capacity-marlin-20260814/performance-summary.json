@@ -1,0 +1,14 @@
+{
+  "decode_tps_mean": 61.91,
+  "decode_cv_percent": 0.1,
+  "prefill_tps_mean": 875.93,
+  "prefill_cv_percent": 0.7,
+  "decode_baseline": 61.56,
+  "prefill_baseline": 920.91,
+  "decode_floor": 46.17,
+  "prefill_floor": 552.546,
+  "decode_change_percent": 0.5685510071474997,
+  "prefill_change_percent": -4.884299225765821,
+  "decode_pass": true,
+  "prefill_pass": true
+}

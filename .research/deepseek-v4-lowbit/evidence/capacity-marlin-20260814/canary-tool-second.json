@@ -1,0 +1,39 @@
+{
+  "id": "chatcmpl-a99a2e480b6385b3",
+  "object": "chat.completion",
+  "created": 1786755297,
+  "model": "deepseek-v4-flash-0731-wna16-quality-12035985",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "The calculation is complete. The result of 17 + 25 is 42.",
+        "refusal": null,
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "reasoning": null
+      },
+      "logprobs": null,
+      "finish_reason": "stop",
+      "stop_reason": null,
+      "token_ids": null,
+      "routed_experts": null
+    }
+  ],
+  "service_tier": null,
+  "system_fingerprint": "vllm-0.1.dev4+g2a3dd2ea7-tp4-56727987",
+  "usage": {
+    "prompt_tokens": 379,
+    "total_tokens": 397,
+    "completion_tokens": 18,
+    "prompt_tokens_details": null
+  },
+  "prompt_logprobs": null,
+  "prompt_token_ids": null,
+  "prompt_text": null,
+  "kv_transfer_params": null,
+  "ec_transfer_params": null,
+  "metrics": null
+}
