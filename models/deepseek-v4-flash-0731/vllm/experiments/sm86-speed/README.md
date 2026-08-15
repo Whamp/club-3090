@@ -136,7 +136,9 @@ physical headroom separately, and fails on serving-process swap. A result below
 ## Rollback contract
 
 The runner never recreates production. It stops the exact verified production
-container, runs a uniquely named experiment with restart disabled, removes only
-that experiment, restarts the unchanged production container, and requires its
-health check to pass. If rollback fails, the runner exits nonzero and prints the
-production container state and recent logs.
+container, removes only unreferenced `vllm_offload_*.mmap` files, runs a uniquely
+named experiment with restart disabled, removes that experiment, and repeats
+the unreferenced-file cleanup. It then restarts the unchanged production
+container and requires its health check to pass. Open offload files are never
+removed. If rollback fails, the runner exits nonzero and prints the production
+container state and recent logs.

@@ -176,6 +176,9 @@ printf '%s' '{"data":[{"id":"deepseek-v4-flash-0731-wna16-quality-12035985"}]}'
     sleep = fake_bin / "sleep"
     sleep.write_text("#!/usr/bin/env bash\nexit 0\n")
     sleep.chmod(0o755)
+    sudo = fake_bin / "sudo"
+    sudo.write_text('#!/usr/bin/env bash\n[[ ${1:-} == -n ]] && shift\nexec "$@"\n')
+    sudo.chmod(0o755)
 
     runner = EXPERIMENT_DIRECTORY / "run-speed-arm-with-rollback.sh"
     model = tmp_path / "model"
@@ -251,6 +254,9 @@ def test_rollback_runner_never_recreates_production() -> None:
     runner = (EXPERIMENT_DIRECTORY / "run-speed-arm-with-rollback.sh").read_text()
     assert 'docker start "$PRODUCTION_CONTAINER"' in runner
     assert 'docker stop --time 180 "$PRODUCTION_CONTAINER"' in runner
+    assert "cleanup_stale_kv_offload_files" in runner
+    assert 'fuser "$file"' in runner
+    assert 'sudo -n rm -f -- "$file"' in runner
     assert "docker compose up" not in runner
     assert 'docker rm -f "$PRODUCTION_CONTAINER"' not in runner
     assert (

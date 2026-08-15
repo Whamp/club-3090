@@ -175,6 +175,14 @@ done
     echo "DeepSeek V4 speed experiment paths are not mounted directories" >&2
     exit 2
 }
+command -v fuser >/dev/null || {
+    echo "DeepSeek V4 speed cleanup requires fuser" >&2
+    exit 2
+}
+sudo -n true || {
+    echo "DeepSeek V4 speed cleanup requires passwordless sudo" >&2
+    exit 2
+}
 if [[ "$ARM" == trace-baseline ]]; then
     [[ "$NSYS_OUTPUT_DIRECTORY" != UNSET ]] || {
         echo "trace-baseline requires NSYS_OUTPUT_DIRECTORY" >&2
@@ -214,6 +222,20 @@ actual_speed_image_id="$(docker image inspect "$SPEED_IMAGE" --format '{{.Id}}')
     exit 2
 }
 
+cleanup_stale_kv_offload_files() {
+    local file
+    shopt -s nullglob
+    for file in /dev/shm/vllm_offload_*.mmap; do
+        if fuser "$file" >/dev/null 2>&1; then
+            continue
+        fi
+        printf 'remove_unreferenced_kv_offload_file=%s\n' "$file" \
+            >> "$RESULT_DIRECTORY/cleanup.log"
+        sudo -n rm -f -- "$file"
+    done
+    shopt -u nullglob
+}
+
 rollback_started=0
 restore_production() {
     local status=$?
@@ -229,6 +251,7 @@ restore_production() {
             docker compose --profile authorized-gpu-test \
             --project-name "$EXPERIMENT_PROJECT" "${COMPOSE_FILES[@]}" down \
             --remove-orphans >/dev/null 2>&1 || true
+        cleanup_stale_kv_offload_files || status=1
         docker start "$PRODUCTION_CONTAINER" >/dev/null
         for _ in $(seq 1 180); do
             if [[ "$(docker inspect "$PRODUCTION_CONTAINER" --format '{{.State.Health.Status}}' 2>/dev/null || true)" == healthy ]]; then
@@ -262,6 +285,7 @@ esac
 # remove or recreate, the exact production container.
 rollback_started=1
 docker stop --time 180 "$PRODUCTION_CONTAINER" >/dev/null
+cleanup_stale_kv_offload_files
 
 case "$ARM" in
     flashmla-decode)
