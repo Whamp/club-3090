@@ -20,6 +20,14 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def test_production_default_reserves_host_kv_eviction_tier() -> None:
+    compose = (
+        REPOSITORY_ROOT
+        / "models/deepseek-v4-flash-0731/vllm/compose/multi4/wna16/base.yml"
+    ).read_text()
+    assert '      - --kv-offloading-size\n      - "16"' in compose
+
+
 def test_speed_patch_and_image_contract() -> None:
     assert (
         _sha256(PATCH_DIRECTORY / "0011-perf-add-opt-in-Ampere-FlashMLA-decode.patch")

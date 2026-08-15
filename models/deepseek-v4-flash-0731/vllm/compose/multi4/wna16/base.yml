@@ -24,7 +24,9 @@
 # a measured capacity ceiling rather than a generous-headroom profile.
 #
 # Other limits: local custom image; no CPU weight offload; custom all-reduce
-# disabled. Two-request validation covered 2x90K, not two simultaneous 230K
+# disabled. KV offloading has a 16 GiB host tier for eviction beyond the
+# on-GPU pool; it is not part of the measured 230K performance path.
+# Two-request validation covered 2x90K, not two simultaneous 230K
 # requests. Plain `docker compose up` starts nothing. The authorized profile is
 # explicit because this service occupies all four GPUs. MODEL_SNAPSHOT must be
 # immutable artifact revision 12035985bf555d0ddc603c6305586a8fa915589c;
@@ -94,6 +96,8 @@ services:
       - "${MAX_NUM_BATCHED_TOKENS:-256}"
       - --kv-cache-dtype
       - fp8_ds_mla
+      - --kv-offloading-size
+      - "16"
       - --disable-custom-all-reduce
       - --enable-chunked-prefill
       - --enable-auto-tool-choice
