@@ -201,13 +201,13 @@ restore_production() {
     trap - EXIT INT TERM
     if [[ "$rollback_started" == 1 ]]; then
         docker logs "$EXPERIMENT_CONTAINER" > "$RESULT_DIRECTORY/container.log" 2>&1 || true
-        VLLM_IMAGE="$SPEED_IMAGE" \
-        CONTAINER_NAME="$EXPERIMENT_CONTAINER" \
-        CLUB3090_RESTART=no \
-        BIND_HOST="$BIND_HOST" PORT="$PORT" \
-        MODEL_SNAPSHOT="$MODEL_SNAPSHOT" MODEL_BLOBS="$MODEL_BLOBS" \
-        RUNTIME_CACHE_ROOT="$RUNTIME_CACHE_ROOT" \
-        docker compose --profile authorized-gpu-test \
+        env VLLM_IMAGE="$SPEED_IMAGE" \
+            CONTAINER_NAME="$EXPERIMENT_CONTAINER" \
+            CLUB3090_RESTART=no \
+            BIND_HOST="$BIND_HOST" PORT="$PORT" \
+            MODEL_SNAPSHOT="$MODEL_SNAPSHOT" MODEL_BLOBS="$MODEL_BLOBS" \
+            RUNTIME_CACHE_ROOT="$RUNTIME_CACHE_ROOT" \
+            docker compose --profile authorized-gpu-test \
             --project-name "$EXPERIMENT_PROJECT" "${COMPOSE_FILES[@]}" down \
             --remove-orphans >/dev/null 2>&1 || true
         docker start "$PRODUCTION_CONTAINER" >/dev/null
@@ -255,13 +255,13 @@ case "$ARM" in
         ;;
 esac
 
-VLLM_IMAGE="$SPEED_IMAGE" \
-CONTAINER_NAME="$EXPERIMENT_CONTAINER" \
-CLUB3090_RESTART=no \
-BIND_HOST="$BIND_HOST" PORT="$PORT" \
-MODEL_SNAPSHOT="$MODEL_SNAPSHOT" MODEL_BLOBS="$MODEL_BLOBS" \
-RUNTIME_CACHE_ROOT="$RUNTIME_CACHE_ROOT" \
-docker compose --profile authorized-gpu-test \
+env VLLM_IMAGE="$SPEED_IMAGE" \
+    CONTAINER_NAME="$EXPERIMENT_CONTAINER" \
+    CLUB3090_RESTART=no \
+    BIND_HOST="$BIND_HOST" PORT="$PORT" \
+    MODEL_SNAPSHOT="$MODEL_SNAPSHOT" MODEL_BLOBS="$MODEL_BLOBS" \
+    RUNTIME_CACHE_ROOT="$RUNTIME_CACHE_ROOT" \
+    docker compose --profile authorized-gpu-test \
     --project-name "$EXPERIMENT_PROJECT" "${COMPOSE_FILES[@]}" up --detach
 
 for _ in $(seq 1 180); do

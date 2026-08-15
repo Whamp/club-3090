@@ -113,6 +113,98 @@ def test_every_speed_arm_renders_without_runtime_side_effects(tmp_path: Path) ->
         assert "plan_sha256=" in completed.stdout
 
 
+def test_baseline_runner_executes_stop_up_down_start_lifecycle(
+    tmp_path: Path,
+) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    lifecycle_log = tmp_path / "docker.log"
+    docker = fake_bin / "docker"
+    docker.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$*" >> "$FAKE_DOCKER_LOG"
+format=''
+for ((i=1; i<=$#; i++)); do
+    if [[ "${!i}" == --format ]]; then
+        j=$((i + 1)); format="${!j}"
+    fi
+done
+if [[ "$1 $2" == "image inspect" ]]; then
+    case "$format" in
+        *canonical-commit*) echo 1d6b37c8eb904bb2d1db7ddd05b002157d5e9f26 ;;
+        *opencontainers.image.revision*)
+            echo 1260b4aba8fb5bf92e6632882326eb2b800ff3df
+            ;;
+        *) echo "sha256:$(printf '2%.0s' {1..64})" ;;
+    esac
+elif [[ "$1" == inspect ]]; then
+    case "$format" in
+        *State.Health.Status*) echo healthy ;;
+        *State.Running*) echo true ;;
+        *Image*) echo "sha256:$(printf '1%.0s' {1..64})" ;;
+    esac
+fi
+"""
+    )
+    docker.chmod(0o755)
+    curl = fake_bin / "curl"
+    curl.write_text(
+        """#!/usr/bin/env bash
+printf '%s' '{"data":[{"id":"deepseek-v4-flash-0731-wna16-quality-12035985"}]}'
+"""
+    )
+    curl.chmod(0o755)
+    sleep = fake_bin / "sleep"
+    sleep.write_text("#!/usr/bin/env bash\nexit 0\n")
+    sleep.chmod(0o755)
+
+    runner = EXPERIMENT_DIRECTORY / "run-speed-arm-with-rollback.sh"
+    model = tmp_path / "model"
+    blobs = tmp_path / "blobs"
+    cache = tmp_path / "cache"
+    model.mkdir()
+    blobs.mkdir()
+    cache.mkdir()
+    output_directory = tmp_path / "run"
+    environment = os.environ | {
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "FAKE_DOCKER_LOG": str(lifecycle_log),
+        "APPROVED_PRODUCTION_IMAGE_ID": "sha256:" + "1" * 64,
+        "SPEED_IMAGE": "example.invalid/speed:test",
+        "SPEED_IMAGE_ID": "sha256:" + "2" * 64,
+        "MODEL_SNAPSHOT": str(model),
+        "MODEL_BLOBS": str(blobs),
+        "RUNTIME_CACHE_ROOT": str(cache),
+        "BIND_HOST": "127.0.0.1",
+        "HEALTH_URL": "http://127.0.0.1:8034",
+    }
+    dry_run = subprocess.run(
+        [str(runner), "--dry-run", "baseline", str(output_directory), "--", "true"],
+        env=environment,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    plan_sha256 = dry_run.stdout.strip().split("plan_sha256=")[-1]
+    environment["SERVER60_SPEED_PLAN_SHA256"] = plan_sha256
+
+    completed = subprocess.run(
+        [str(runner), "baseline", str(output_directory), "--", "true"],
+        env=environment,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    lifecycle = lifecycle_log.read_text()
+    assert "stop --time 180 vllm-deepseek-v4-wna16-sm86" in lifecycle
+    assert " up --detach" in lifecycle
+    assert " down --remove-orphans" in lifecycle
+    assert "start vllm-deepseek-v4-wna16-sm86" in lifecycle
+
+
 def test_rollback_runner_never_recreates_production() -> None:
     runner = (EXPERIMENT_DIRECTORY / "run-speed-arm-with-rollback.sh").read_text()
     assert 'docker start "$PRODUCTION_CONTAINER"' in runner
