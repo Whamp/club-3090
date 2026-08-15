@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="data:,">
+  <title>DeepSeek V4 on Ampere — the Whamp/vLLM performance stack</title>
+  <style>
+    :root {
+      --bg: #071018;
+      --panel: #0d1822;
+      --panel-2: #111f2b;
+      --ink: #edf5f7;
+      --muted: #94a8b3;
+      --line: #203542;
+      --cyan: #43d3e3;
+      --green: #68d391;
+      --amber: #f5b84b;
+      --red: #ff7a78;
+      --violet: #ad91ff;
+      --blue: #79a9ff;
+      --max: 1220px;
+      --radius: 16px;
+      --shadow: 0 20px 60px rgba(0,0,0,.28);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 78% -10%, rgba(67,211,227,.10), transparent 32rem),
+        radial-gradient(circle at 0% 20%, rgba(173,145,255,.08), transparent 26rem),
+        var(--bg);
+      font: 15.5px/1.62 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      text-rendering: optimizeLegibility;
+    }
+    a { color: var(--cyan); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+    a:hover { color: #8deaf2; }
+    code, .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .91em;
+      overflow-wrap: anywhere;
+    }
+    code { color: #d4e8ee; background: #07131b; border: 1px solid #1c3340; border-radius: 5px; padding: .08rem .32rem; }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { font-size: clamp(2.6rem, 6vw, 5.7rem); line-height: .98; letter-spacing: -.055em; margin-bottom: 1.4rem; max-width: 960px; }
+    h2 { font-size: clamp(1.7rem, 3vw, 2.5rem); line-height: 1.12; letter-spacing: -.03em; margin-bottom: 1rem; }
+    h3 { font-size: 1.06rem; letter-spacing: -.01em; margin-bottom: .55rem; }
+    p { max-width: 76ch; }
+    .shell { display: grid; grid-template-columns: 225px minmax(0, 1fr); max-width: 1500px; margin: 0 auto; }
+    .rail {
+      position: sticky; top: 0; height: 100vh; padding: 2.2rem 1.25rem 2rem 1.5rem;
+      border-right: 1px solid var(--line); background: rgba(7,16,24,.82); backdrop-filter: blur(12px);
+    }
+    .rail .brand { font-weight: 800; letter-spacing: -.02em; margin-bottom: 2rem; }
+    .rail .brand span { color: var(--cyan); }
+    .rail nav { display: grid; gap: .15rem; }
+    .rail nav a { color: var(--muted); text-decoration: none; padding: .45rem .6rem; border-radius: 7px; font-size: .88rem; }
+    .rail nav a:hover { color: var(--ink); background: var(--panel); }
+    .rail .stamp { position: absolute; bottom: 1.5rem; left: 1.5rem; right: 1.2rem; color: var(--muted); font-size: .73rem; }
+    main { min-width: 0; }
+    .hero { min-height: 86vh; display: flex; align-items: center; padding: 7rem clamp(1.4rem,5vw,5rem) 5rem; border-bottom: 1px solid var(--line); }
+    .hero-inner { width: 100%; max-width: var(--max); margin: 0 auto; }
+    .eyebrow { color: var(--cyan); text-transform: uppercase; letter-spacing: .16em; font-weight: 750; font-size: .76rem; margin-bottom: 1.2rem; }
+    .lede { font-size: clamp(1.05rem, 2vw, 1.35rem); color: #bfd0d7; max-width: 760px; }
+    .badges { display: flex; flex-wrap: wrap; gap: .55rem; margin: 1.7rem 0 2.5rem; }
+    .badge { border: 1px solid var(--line); border-radius: 999px; padding: .38rem .7rem; color: var(--muted); background: rgba(13,24,34,.72); font-size: .77rem; }
+    .badge.good { border-color: rgba(104,211,145,.42); color: var(--green); }
+    .badge.warn { border-color: rgba(245,184,75,.4); color: var(--amber); }
+    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+    .metric { background: var(--panel); padding: 1.2rem; min-height: 125px; }
+    .metric strong { display: block; font-size: clamp(1.65rem,3vw,2.45rem); line-height: 1; letter-spacing: -.045em; color: var(--cyan); margin-bottom: .55rem; }
+    .metric span { color: var(--muted); font-size: .82rem; }
+    section { padding: 5rem clamp(1.4rem,5vw,5rem); border-bottom: 1px solid var(--line); }
+    .section-inner { max-width: var(--max); margin: 0 auto; }
+    .section-head { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 3rem; align-items: end; margin-bottom: 2.5rem; }
+    .section-head p { color: var(--muted); margin-bottom: .25rem; }
+    .callout { border-left: 3px solid var(--cyan); background: linear-gradient(90deg, rgba(67,211,227,.09), transparent); padding: 1rem 1.2rem; color: #c6d8de; margin: 1.5rem 0; }
+    .callout.warn { border-color: var(--amber); background: linear-gradient(90deg, rgba(245,184,75,.10), transparent); }
+    .callout.danger { border-color: var(--red); background: linear-gradient(90deg, rgba(255,122,120,.10), transparent); }
+    .cards { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 1rem; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.35rem; }
+    .card p { color: var(--muted); margin-bottom: 0; }
+    .card .tag { display: inline-block; font-size: .68rem; text-transform: uppercase; letter-spacing: .11em; color: var(--cyan); margin-bottom: .65rem; }
+    .stack { display: grid; gap: .7rem; margin-top: 2rem; }
+    .stack-row { display: grid; grid-template-columns: 190px minmax(0,1fr) 155px; gap: 1rem; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 11px; padding: 1rem 1.1rem; }
+    .stack-row .layer { color: var(--cyan); font-weight: 750; }
+    .stack-row .mechanism { color: #ccdae0; }
+    .stack-row .owner { text-align: right; color: var(--muted); font-size: .77rem; }
+    .stack-row:nth-child(2) .layer { color: var(--violet); }
+    .stack-row:nth-child(3) .layer { color: var(--blue); }
+    .stack-row:nth-child(4) .layer { color: var(--green); }
+    .stack-row:nth-child(5) .layer { color: var(--amber); }
+    .stack-row:nth-child(6) .layer { color: #ff9f71; }
+    .stack-row:nth-child(7) .layer { color: #df8fff; }
+    .legend { display: flex; flex-wrap: wrap; gap: 1rem; color: var(--muted); font-size: .78rem; margin: 1.4rem 0; }
+    .legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: .38rem; background: var(--muted); }
+    .legend .measured::before { background: var(--green); }
+    .legend .source::before { background: var(--cyan); }
+    .legend .enabled::before { background: var(--amber); }
+    .legend .guard::before { background: var(--violet); }
+    .bars { display: grid; gap: .85rem; margin: 2rem 0; }
+    .bar-row { display: grid; grid-template-columns: 175px minmax(0,1fr) 85px; gap: .8rem; align-items: center; }
+    .bar-label { font-size: .82rem; color: #c4d3d9; }
+    .bar-track { height: 31px; border-radius: 7px; background: #08131b; border: 1px solid #1a303d; overflow: hidden; }
+    .bar-fill { height: 100%; display: flex; align-items: center; padding-left: .65rem; border-radius: 6px; background: linear-gradient(90deg, #147c89, var(--cyan)); color: #041014; font-weight: 800; font-size: .72rem; min-width: 2px; }
+    .bar-fill.alt { background: linear-gradient(90deg, #5848a9, var(--violet)); color: white; }
+    .bar-fill.good { background: linear-gradient(90deg, #277c4c, var(--green)); }
+    .bar-value { text-align: right; font-variant-numeric: tabular-nums; font-weight: 750; }
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); font-size: .83rem; }
+    th, td { padding: .75rem .8rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+    th { background: #0a151e; color: #b8c9d0; text-transform: uppercase; letter-spacing: .08em; font-size: .66rem; position: sticky; top: 0; }
+    td { color: #cad8dd; }
+    tr:last-child td { border-bottom: 0; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .status { white-space: nowrap; font-weight: 750; }
+    .status.keep { color: var(--green); }
+    .status.guard { color: var(--violet); }
+    .status.reject { color: var(--red); }
+    .status.base { color: var(--cyan); }
+    .timeline { position: relative; display: grid; gap: 1rem; padding-left: 1.7rem; }
+    .timeline::before { content: ""; position: absolute; left: .38rem; top: .35rem; bottom: .35rem; width: 1px; background: var(--line); }
+    .event { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 1rem 1.1rem; }
+    .event::before { content: ""; position: absolute; left: -1.58rem; top: 1.2rem; width: .68rem; height: .68rem; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 0 5px var(--bg); }
+    .event .commit { color: var(--cyan); font: .75rem ui-monospace, monospace; }
+    .event p { color: var(--muted); margin: .25rem 0 0; }
+    .evidence-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .8rem; }
+    .evidence-item { display: grid; grid-template-columns: 28px 1fr; gap: .7rem; padding: .9rem; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); }
+    .check { color: var(--green); font-weight: 900; }
+    .evidence-item small { display: block; color: var(--muted); margin-top: .18rem; }
+    .config { background: #050c12; border: 1px solid var(--line); border-radius: 12px; padding: 1.15rem; overflow-x: auto; color: #bfe4e8; font: .78rem/1.65 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .sources { columns: 2; column-gap: 2rem; }
+    .sources li { break-inside: avoid; margin-bottom: .65rem; color: var(--muted); }
+    .fine { color: var(--muted); font-size: .78rem; }
+    footer { padding: 3rem clamp(1.4rem,5vw,5rem); color: var(--muted); }
+    footer .section-inner { display: flex; justify-content: space-between; gap: 2rem; }
+    @media (max-width: 980px) {
+      .shell { display: block; }
+      .rail { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 1rem 1.2rem; }
+      .rail nav, .rail .stamp { display: none; }
+      .rail .brand { margin: 0; }
+      .hero { min-height: auto; padding-top: 5rem; }
+      .metrics { grid-template-columns: 1fr 1fr; }
+      .section-head, .split { grid-template-columns: 1fr; gap: 1rem; }
+      .cards { grid-template-columns: 1fr; }
+      .stack-row { grid-template-columns: 1fr; gap: .25rem; }
+      .stack-row .owner { text-align: left; }
+    }
+    @media (max-width: 620px) {
+      .metrics, .evidence-grid { grid-template-columns: 1fr; }
+      .bar-row { grid-template-columns: 115px minmax(0,1fr) 70px; }
+      .sources { columns: 1; }
+      footer .section-inner { display: block; }
+    }
+    @media print {
+      :root { --bg:#fff; --panel:#f6f8f9; --panel-2:#eef2f4; --ink:#101820; --muted:#50606a; --line:#cfd8dc; --cyan:#006d77; --green:#147d45; --amber:#8f5e00; --red:#a32624; --violet:#5842a8; }
+      body { background: white; font-size: 10.5pt; }
+      .shell { display:block; max-width:none; }
+      .rail { display:none; }
+      .hero { min-height:auto; padding: 1cm 0 1.2cm; }
+      section { padding: 1cm 0; }
+      .metric, .card, .event, .stack-row, table { break-inside: avoid; box-shadow:none; }
+      .bar-track, code, .config { border-color:#bbb; }
+      a { color: #075e67; }
+      footer { padding: 1cm 0; }
+    }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <div class="brand"><span>Whamp</span>/vLLM</div>
+    <nav aria-label="Report sections">
+      <a href="#result">Result</a>
+      <a href="#stack">Stack</a>
+      <a href="#foundation">Foundation</a>
+      <a href="#inventory">Change inventory</a>
+      <a href="#mechanisms">Mechanisms</a>
+      <a href="#measurements">Measurements</a>
+      <a href="#validation">Validation</a>
+      <a href="#tradeoffs">Tradeoffs</a>
+      <a href="#live">Live contract</a>
+      <a href="#sources">Sources</a>
+    </nav>
+    <div class="stamp">Evidence through 2026-08-15<br>server60 · 4× RTX 3090 · SM86</div>
+  </aside>
+
+  <main>
+    <header class="hero" id="result">
+      <div class="hero-inner">
+        <div class="eyebrow">Performance stack report · DeepSeek V4 Flash · Ampere</div>
+        <h1>From “it loads” to 75 tokens per second.</h1>
+        <p class="lede">The current Whamp/vLLM fork combines low-bit MoE execution, graph replay, memory-layout repair, native SM86 sparse decode, and topology-aware collectives. On server60, the final stack serves a 230,144-token context at 74.98 decode tokens/s while preserving tool use, deep reasoning, and exact long-context recall.</p>
+        <div class="badges">
+          <span class="badge good">Measured on 4× RTX 3090</span>
+          <span class="badge good">Zero serving-process swap</span>
+          <span class="badge">TP=4 · PCIe-only · no NVLink</span>
+          <span class="badge warn">Measured capacity ceiling</span>
+          <span class="badge">Experimental fork profile</span>
+        </div>
+        <div class="metrics" aria-label="Final measured metrics">
+          <div class="metric"><strong>74.98</strong><span>single-stream decode tok/s<br>3 warmups + 5 measured runs</span></div>
+          <div class="metric"><strong>887.52</strong><span>cache-busted prefill tok/s<br>approximately 9K-token prompts</span></div>
+          <div class="metric"><strong>230,144</strong><span>advertised context tokens<br>277,675 realized KV tokens</span></div>
+          <div class="metric"><strong>0 KiB</strong><span>serving-process swap<br>through accepted measurements</span></div>
+        </div>
+      </div>
+    </header>
+
+    <section id="stack">
+      <div class="section-inner">
+        <div class="section-head">
+          <div><div class="eyebrow">The system, not one kernel</div><h2>Seven layers of work compose the result.</h2></div>
+          <p>The fork changes representation, execution, memory residency, attention dispatch, and inter-GPU coordination. Correctness guards sit beside performance paths because an unlaunchable or numerically wrong kernel is not an optimization.</p>
+        </div>
+        <div class="legend"><span class="source">source-backed</span><span class="measured">server60 measured</span><span class="enabled">production-enabled</span><span class="guard">correctness or support guard</span></div>
+        <div class="stack" aria-label="Current runtime stack">
+          <div class="stack-row"><div class="layer">API &amp; agent loop</div><div class="mechanism">DeepSeek V4 DSML parsing with a hard assistant tool-turn stop boundary</div><div class="owner">Whamp fix · correctness</div></div>
+          <div class="stack-row"><div class="layer">Scheduler &amp; graphs</div><div class="mechanism">Breakable CUDA graphs around eager attention/indexer segments; <code>max_num_seqs=2</code>, token budget 256</div><div class="owner">Ampere base · measured</div></div>
+          <div class="stack-row"><div class="layer">Sparse attention</div><div class="mechanism">Native AppMana FlashMLA for <code>fp8_ds_mla</code> decode; Triton remains the prefill path and fallback</div><div class="owner">Whamp opt-in · measured</div></div>
+          <div class="stack-row"><div class="layer">Output projection</div><div class="mechanism">FP8 Marlin diagonal projection replaces 43 retained BF16 <code>wo_a</code> copies</div><div class="owner">Whamp opt-in · measured</div></div>
+          <div class="stack-row"><div class="layer">Routed experts</div><div class="mechanism">Compressed-tensors W2/W4 WNA16 → Humming indexed MoE with projection-specific groups and preserved SwiGLU semantics</div><div class="owner">Whamp integration · accepted</div></div>
+          <div class="stack-row"><div class="layer">TP communication</div><div class="mechanism">2×2-island hierarchical all-reduce for ranks <code>0,1;2,3</code>, with PyNCCL fallback</div><div class="owner">Inherited backend · locally gated</div></div>
+          <div class="stack-row"><div class="layer">Cache &amp; capacity</div><div class="mechanism">UE8M0 <code>fp8_ds_mla</code>, runtime-bounded RoPE, 16 GiB host KV eviction tier, creator-only mmap registration</div><div class="owner">Mixed · capacity stack</div></div>
+        </div>
+        <div class="callout"><strong>Main result:</strong> relative to the thermally adjacent plain runtime, FlashMLA plus hierarchical all-reduce raised decode from 61.17 to 74.98 tok/s (+22.58%). The same comparison measured prefill at 917.19 → 887.52 tok/s (−3.23%), a disclosed tradeoff rather than a prefill win.</div>
+      </div>
+    </section>
+
+    <section id="foundation">
+      <div class="section-inner">
+        <div class="section-head">
+          <div><div class="eyebrow">Ancestry</div><h2>The fork stands on a specialized Ampere base.</h2></div>
+          <p>The pinned foundation is <a href="https://github.com/haosdent/vllm/commit/12810046c799cbe874967e19b1c0fa134ab7b209">haosdent/vllm@12810046c</a>, itself based on upstream commit <code>62195e978</code>. Whamp’s work extends that base rather than claiming to originate every DeepSeek V4 Ampere mechanism.</p>
+        </div>
+        <div class="cards">
+          <article class="card"><span class="tag">Inherited foundation</span><h3>DeepSeek V4 sparse MLA on SM8x</h3><p>Model dispatch, heterogeneous compressed caches, sparse indexer handling, and Ampere-compatible attention paths made the model executable on SM80/SM86.</p></article>
+          <article class="card"><span class="tag">Inherited execution model</span><h3>Breakable CUDA graphs</h3><p>The base captures graph-compatible segments around eager attention and indexer breaks. On server60, this was the largest measured single speed move: 4.96 → 60.27 decode tok/s.</p></article>
+          <article class="card"><span class="tag">Inherited optional backend</span><h3>Hierarchical all-reduce</h3><p>The base carried the 2-island PCIe backend. Whamp added dispatch proof and enabled it only after Nsight and local numerical/latency gates justified the move.</p></article>
+        </div>
+        <div class="callout warn"><strong>Boundary:</strong> the base commit reports A100-specific improvements, exact top-k work, hot-path trims, chunk sharding, and kernel tuning. This report does not transfer its A100 performance numbers to RTX 3090. Only server60 measurements below support server60 claims.</div>
+      </div>
+    </section>
+
+    <section id="inventory">
+      <div class="section-inner">
+        <div class="section-head">
+          <div><div class="eyebrow">Whamp delta</div><h2>Sixteen commits above the Ampere base.</h2></div>
+          <p>The current speed branch is <a href="https://github.com/Whamp/vllm/commit/b7766cfe4d15d9b68acea43097ceff221e8a739f"><code>b7766cfe4</code></a>, tree <code>6354125afd1306c9286f734d1c47c23c767d77a9</code>. The table separates execution improvements from compatibility and correctness changes that make the fast paths trustworthy.</p>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Commit</th><th>Change</th><th>Mechanism / contract</th><th>Role now</th></tr></thead>
+            <tbody>
+              <tr><td><a href="https://github.com/Whamp/vllm/commit/1bd04b9ad6a49cf226fc52d0ca4c820f9fc89b21"><code>1bd04b9ad</code></a></td><td>W2A16 MoE with Humming</td><td>Loads symmetric packed low-bit routed experts and dispatches indexed Humming kernels.</td><td class="status base">Fit + execution</td></tr>
+              <tr><td><a href="https://github.com/Whamp/vllm/commit/c73b07b10ef180b75c778be0fa428983c7828bca"><code>c73b07b10</code></a></td><td>Mixed projection bits</td><td>Allows fused gate/up <code>w13</code> and down <code>w2</code> to use separate WNA16 bit widths.</td><td class="status base">Quality-aware fit</td></tr>
+              <tr><td><a href="https://github.com/Whamp/vllm/commit/5b82ae778"><code>5b82ae778</code></a></td><td>GPU numerical oracle</td><td>Exercises real compressed-tensors conversion and Humming indexed-MoE execution.</td><td class="status guard">Acceptance gate</td></tr>
+              <tr><td><a href="https://github.com/Whamp/vllm/commit/ba75a9f123e8e393d97972cd32b377b1c4249176"><code>ba75a9f12</code></a></td><td>Hybrid DeepSeek FP8 loading</td><td>Maps preserved block-FP8 linear scales correctly alongside WNA16 routed experts.</td><td class="status guard">Loader correctness</td></tr>
+              <tr><td><a href="https://github.com/Whamp/vllm/commit/5fdb15e2460e9a78989ef4a0a8cb3b5e39c46d8f"><code>5fdb15e24</code></a></td><td>Forward layer into Humming</td><td>Supplies the owning MoE layer required during Humming kernel setup.</td><td class="status guard">Runtime correctness</td></tr>
+              <tr><td><a href="https://github.com/Whamp/vllm/commit/a35de7a02a813cea2209316da767067517e447f3"><code>a35de7a02</code></a></td><td>Composite quantization</td><td>Uses native DeepSeek FP8 for ordinary linears and compressed-tensors/Humming only for routed experts.</td><td class="status base">Correct layout</td></tr>
+              <tr><td><a href="https://github.com/Whamp/vllm/commit/2fed42ca27ddf2c50bdb2be21024ecb0d0c3362c"><code>2fed42ca2</code></a></td><td>SM86 split-K gate</td><td>Routes 101,376-byte-shared-memory RTX 3090s away from an unlaunchable 157,696-byte split-K kernel.</td><td class="status guard">Architecture guard</td></tr>
+              <tr><td><a href="https://github.com/Whamp/vllm/commit/216e5bb15b7826e8dca63f0a853f1ee53d49d5fc"><code>216e5bb15</code></a></td><td>Runtime-bounded RoPE</td><td>Materializes rows only through runtime context while preserving the original 65,536-token YaRN frequency span.</td><td class="status keep">~407 MiB/rank reclaimed</td></tr>
+              <tr><td><a href="https://github.com/Whamp/vllm/commit/dd2d1fd6779addccc73094f77fa4ada7d9106a41"><code>dd2d1fd67</code></a></td><td>Mixed projection groups</td><td>Allocates and validates separate <code>w13</code>/<code>w2</code> group sizes for Humming.</td><td class="status base">Quality-aware fit</td></tr>
+              <tr><td><a href="https://github.com/Whamp/vllm/commit/a7758f7436a713f042e245b3e0aaab64b3a2f2c6"><code>a7758f743</code></a></td><td>Preserve SwiGLU semantics</td><td>Forwards alpha, beta, clamp, and corrected fused-MoE group geometry.</td><td class="status guard">Depth correctness</td></tr>
+              <tr><td><a href="https://github.com/Whamp/vllm/commit/9a2ffbb4534400064e645cb4fef8ab2f2a987f11"><code>9a2ffbb45</code></a></td><td>Stop after DSML tool blocks</td><td>Adds the outer tool-call closing marker as an assistant-turn stop while preserving caller stops.</td><td class="status guard">Agent correctness</td></tr>
+              <tr><td><a href="https://github.com/Whamp/vllm/commit/7b39c93043ffa88729d2cd3dd1f8f482df6ea98c"><code>7b39c9304</code></a></td><td>FP8 Marlin <code>wo_a</code></td><td>Flattens local groups into one projection and selects diagonal outputs without BF16 weight retention.</td><td class="status keep">+75.6% context</td></tr>
+              <tr><td><a href="https://github.com/Whamp/vllm/commit/17ca4bad13e08e326a7a84af89676816e80bc1e7"><code>17ca4bad1</code></a></td><td>AppMana FlashMLA decode</td><td>Opt-in native <code>fp8_ds_mla</code> sparse decode on SM80/SM86; Triton remains prefill and fallback.</td><td class="status keep">Decode speed</td></tr>
+              <tr><td><a href="https://github.com/Whamp/vllm/commit/1d6b37c8eb904bb2d1db7ddd05b002157d5e9f26"><code>1d6b37c8e</code></a></td><td>All-reduce dispatch proof</td><td>Reports HIERARCHICAL in startup backend order so tests can prove actual selection.</td><td class="status guard">Observability</td></tr>
+              <tr><td><a href="https://github.com/Whamp/vllm/commit/91a39786d48f48efb45fbe3a160d448c783b0131"><code>91a39786d</code></a></td><td>KV registration fallback</td><td>First repair for stale CUDA errors after host registration failure; later superseded operationally.</td><td class="status reject">Superseded</td></tr>
+              <tr><td><a href="https://github.com/Whamp/vllm/commit/b7766cfe4d15d9b68acea43097ceff221e8a739f"><code>b7766cfe4</code></a></td><td>Register offload mmap once</td><td>Only the shared mmap creator calls <code>cudaHostRegister</code>; peers skip duplicate registration.</td><td class="status keep">Reliable host tier</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="fine">The numerical-oracle commit is test-only but remains part of the accepted history. “Role now” describes the server60 stack, not a universal recommendation for other vLLM deployments.</p>
+      </div>
+    </section>
+
+    <section id="mechanisms">
+      <div class="section-inner">
+        <div class="section-head">
+          <div><div class="eyebrow">Causal deep dives</div><h2>What each retained move changes.</h2></div>
+          <p>Every accepted move had a precondition, direct mediator, fallback or scope guard, and end-to-end check. The system did not keep settings merely because they sounded fast.</p>
+        </div>
+        <div class="callout"><strong>Artifact contract exercised by this stack:</strong> every routed <code>w2</code> uses group 128; layers 26 and 37–42 upgrade <code>w2</code> to W4. Routed <code>w13</code> uses group 128 on 7 layers, group 256 on 10 layers, and group 512 on 26 layers. MTP is omitted. The remaining non-routed tensors keep source-compatible higher precision. This is the concrete mixed-bit, mixed-group layout behind the results—not a generic claim about every WNA16 checkpoint.</div>
+        <div class="split">
+          <article class="card">
+            <span class="tag">1 · Representation</span>
+            <h3>Low-bit routed experts fit and execute on Humming</h3>
+            <p>Routed experts account for 97.43% of the model’s base parameters. The fork reads packed W2/W4 compressed-tensors, retains projection-specific schemas, and converts them into Humming’s indexed-MoE format after loading. Ordinary attention and shared linears stay on native DeepSeek block-FP8 paths rather than a generic transformed layout.</p>
+          </article>
+          <article class="card">
+            <span class="tag">2 · Frequency</span>
+            <h3>Breakable CUDA graphs remove repeated launch work</h3>
+            <p>The original correctness run used <code>--enforce-eager</code>. Removing it lets the DeepSeek-specific graph system capture compatible segments around eager breaks. A matched A/B raised decode from 4.96 to 60.27 tok/s—about 12.2×—without changing model weights.</p>
+          </article>
+          <article class="card">
+            <span class="tag">3 · Residency</span>
+            <h3>RoPE rows follow served context, not model maximum</h3>
+            <p>Two FP32 RoPE/indexer tables had been materialized for 1,048,576 positions. The patch bounds rows to runtime <code>max_model_len</code> while preserving YaRN frequencies. At the prior 215K profile, this reclaimed roughly 407 MiB per rank.</p>
+          </article>
+          <article class="card">
+            <span class="tag">4 · Representation + execution</span>
+            <h3>Marlin consumes <code>wo_a</code> without a BF16 duplicate</h3>
+            <p>The old path retained one 16 MiB BF16 projection per layer: 688 MiB per rank. Recomputing dequantization saved memory but cut decode to 34.01 tok/s. The retained path keeps FP8 weights, uses Marlin, and selects diagonal group outputs, reaching 230K context at the original ~62 tok/s.</p>
+          </article>
+          <article class="card">
+            <span class="tag">5 · Kernel specialization</span>
+            <h3>FlashMLA replaces only sparse decode</h3>
+            <p>The opt-in AppMana operator consumes the existing 584-byte <code>fp8_ds_mla</code> cache row, so persistent KV format does not change. Seventeen numerical/adversarial tests and seven <code>sm_86</code> cubins cleared the gate. Prefill deliberately remains on Triton.</p>
+          </article>
+          <article class="card">
+            <span class="tag">6 · Coordination</span>
+            <h3>Hierarchical all-reduce matches the 2×2 PCIe topology</h3>
+            <p>Nsight assigned at least 17.15% of warmed decode wall time to non-overlapped NCCL. Local BF16 tests showed the hierarchy at 78.54–85.46% of NCCL latency across tested message sizes. Enabling islands <code>0,1;2,3</code> raised adjacent decode 61.17 → 65.00 tok/s.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="measurements">
+      <div class="section-inner">
+        <div class="section-head">
+          <div><div class="eyebrow">Measured progression</div><h2>Performance moved in distinct, attributable steps.</h2></div>
+          <p>These bars combine two experiment sets. The graph A/B was its own matched campaign; the final four bars are thermally adjacent speed-campaign arms on the capacity image. Read them as bounded measurements, not a single perfectly factorial benchmark.</p>
+        </div>
+
+        <h3>Decode: final speed campaign</h3>
+        <div class="bars" aria-label="Decode throughput comparison">
+          <div class="bar-row"><div class="bar-label">Plain runtime</div><div class="bar-track"><div class="bar-fill" style="width:81.58%">baseline</div></div><div class="bar-value">61.17</div></div>
+          <div class="bar-row"><div class="bar-label">Hierarchy only</div><div class="bar-track"><div class="bar-fill alt" style="width:86.69%">+6.26%</div></div><div class="bar-value">65.00</div></div>
+          <div class="bar-row"><div class="bar-label">FlashMLA only</div><div class="bar-track"><div class="bar-fill good" style="width:94.75%">+16.14%</div></div><div class="bar-value">71.04</div></div>
+          <div class="bar-row"><div class="bar-label">Combined</div><div class="bar-track"><div class="bar-fill good" style="width:100%">+22.58%</div></div><div class="bar-value">74.98</div></div>
+        </div>
+
+        <div class="split">
+          <div>
+            <h3>Largest single execution move</h3>
+            <table><thead><tr><th>Mode</th><th class="num">Decode tok/s</th><th class="num">Ratio</th></tr></thead><tbody>
+              <tr><td>Enforced eager</td><td class="num">4.96</td><td class="num">1.0×</td></tr>
+              <tr><td>Breakable CUDA graphs</td><td class="num">60.27</td><td class="num">12.15×</td></tr>
+              <tr><td>Graph repeat after eager</td><td class="num">60.07</td><td class="num">12.11×</td></tr>
+            </tbody></table>
+          </div>
+          <div>
+            <h3>Capacity without a decode penalty</h3>
+            <table><thead><tr><th>Profile</th><th class="num">Context</th><th class="num">KV tokens</th><th class="num">Decode</th></tr></thead><tbody>
+              <tr><td>Quality baseline</td><td class="num">131,072</td><td class="num">148,290</td><td class="num">61.56</td></tr>
+              <tr><td>Marlin capacity</td><td class="num">230,144</td><td class="num">275,238</td><td class="num">61.91</td></tr>
+              <tr><td>Final combined speed</td><td class="num">230,144</td><td class="num">277,675</td><td class="num">74.98</td></tr>
+            </tbody></table>
+          </div>
+        </div>
+
+        <h3 style="margin-top:2rem">Matched speed arms</h3>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Comparison</th><th class="num">Decode</th><th class="num">Δ decode</th><th class="num">Prefill</th><th class="num">Δ prefill</th><th>Decision</th></tr></thead>
+            <tbody>
+              <tr><td>Final control → <code>BLOCK_M=2</code></td><td class="num">62.06 → 62.18</td><td class="num">+0.19%</td><td class="num">895.78 → 897.72</td><td class="num">+0.22%</td><td class="status reject">Reject: noise</td></tr>
+              <tr><td>Plain → hierarchy</td><td class="num">61.17 → 65.00</td><td class="num">+6.26%</td><td class="num">917.19 → 929.15</td><td class="num">+1.30%</td><td class="status keep">Keep</td></tr>
+              <tr><td>FlashMLA → combined</td><td class="num">71.04 → 74.98</td><td class="num">+5.55%</td><td class="num">922.15 → 887.52</td><td class="num">−3.76%</td><td class="status keep">Keep; disclose prefill</td></tr>
+              <tr><td>Plain → combined</td><td class="num">61.17 → 74.98</td><td class="num">+22.58%</td><td class="num">917.19 → 887.52</td><td class="num">−3.23%</td><td class="status keep">Promoted</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="validation">
+      <div class="section-inner">
+        <div class="section-head">
+          <div><div class="eyebrow">Mechanism to workload</div><h2>The winner passed more than a tokens-per-second test.</h2></div>
+          <p>GPU optimization can preserve a microbenchmark while breaking numerical behavior, dispatch, tool state, long-depth execution, or operational recovery. The acceptance ladder covered each class separately.</p>
+        </div>
+        <div class="evidence-grid">
+          <div class="evidence-item"><div class="check">✓</div><div><strong>Humming mixed-group numerics</strong><small>Seven projection/group cases; 56 cuobjdump-confirmed SM86 cubins.</small></div></div>
+          <div class="evidence-item"><div class="check">✓</div><div><strong>FlashMLA decode numerics</strong><small>17 numerical and adversarial cases; seven packaged SM86 cubins.</small></div></div>
+          <div class="evidence-item"><div class="check">✓</div><div><strong>Hierarchical all-reduce</strong><small>BF16 correctness and latency gates from 4,096 through 262,144 elements.</small></div></div>
+          <div class="evidence-item"><div class="check">✓</div><div><strong>Runtime dispatch</strong><small>Startup logs prove native Ampere FlashMLA and HIERARCHICAL before PyNCCL.</small></div></div>
+          <div class="evidence-item"><div class="check">✓</div><div><strong>Agent behavior</strong><small>Automatic tools, post-tool continuation, multi-turn agent, IDE-agent, and coding probes.</small></div></div>
+          <div class="evidence-item"><div class="check">✓</div><div><strong>Depth behavior</strong><small>7,726-token reasoning completion and exact NIAH retrieval through 211,551 prompt tokens.</small></div></div>
+          <div class="evidence-item"><div class="check">✓</div><div><strong>Operational state</strong><small>Zero serving-process swap; live endpoint healthy; restart policy unless-stopped.</small></div></div>
+          <div class="evidence-item"><div class="check">✓</div><div><strong>Post-promotion API</strong><small>Basic, tools, streaming tools, reasoning, and 2K-token cascade probe passed.</small></div></div>
+        </div>
+        <div class="callout"><strong>The apparent “bad quant” incident was a parser bug.</strong> Both uniform and projection-sensitive artifacts collapsed after tool feedback until <code>9a2ffbb45</code> stopped generation at the outer DSML tool-call boundary. The correction matters to performance reporting: runaway 1,000-call responses were not evidence that low-bit expert kernels lost model capability.</div>
+      </div>
+    </section>
+
+    <section id="tradeoffs">
+      <div class="section-inner">
+        <div class="section-head">
+          <div><div class="eyebrow">Limits and rejected work</div><h2>The stack is faster, not magically unconstrained.</h2></div>
+          <p>The accepted service runs near the physical VRAM boundary. The report keeps unsuccessful arms and unsupported transfers visible so the next optimization starts from evidence rather than folklore.</p>
+        </div>
+        <div class="split">
+          <div>
+            <h3>Retained tradeoffs</h3>
+            <div class="callout danger"><strong>Thin VRAM margin.</strong> Long-depth validation reached 58 MiB free on the combined arm; the earlier capacity release gate recorded 91–94 MiB. This is below the project’s 1 GiB sustained-agent advisory.</div>
+            <ul>
+              <li>Combined prefill measured 3.23% below the adjacent plain baseline; its three samples had 3.8% CV.</li>
+              <li>Two-request validation covers two 90K prompts, not two simultaneous 230K prompts.</li>
+              <li>The 16 GiB KV offload tier is a host eviction safety tier. It is not part of the measured 230K on-GPU speed path.</li>
+              <li>The image and topology are server60-specific. The result does not transfer automatically to stock vLLM or another RTX 3090 host.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Moves rejected or deferred</h3>
+            <table><thead><tr><th>Move</th><th>Why it stopped</th></tr></thead><tbody>
+              <tr><td><code>BLOCK_M=2</code> prefill</td><td>+0.19% decode and +0.22% prefill: performance wash.</td></tr>
+              <tr><td>No-cache BF16 <code>wo_a</code></td><td>Reclaimed memory but decode fell to 34.01 tok/s.</td></tr>
+              <tr><td>CPU/UVA weight offload</td><td>Earlier 200K profiles fell to 12.68–19.54 decode tok/s.</td></tr>
+              <tr><td><code>max_num_batched_tokens=128</code></td><td>Reached 156K but prefill fell below the campaign floor.</td></tr>
+              <tr><td><code>indexer96</code></td><td>Nsight did not establish its mediator.</td></tr>
+              <tr><td><code>batched320</code></td><td>58 MiB final-rung headroom failed its 256 MiB prerequisite.</td></tr>
+              <tr><td>Narrow eager-region upstream patch</td><td>Runner compatibility and later correctness evidence were unresolved.</td></tr>
+            </tbody></table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="live">
+      <div class="section-inner">
+        <div class="section-head">
+          <div><div class="eyebrow">Current deployment</div><h2>The live service matches the recorded winner.</h2></div>
+          <p>At the final promotion audit, server60 served the projection-sensitive artifact through image <code>sha256:eb2884fc…b8f58a0e</code>. The endpoint was healthy and every listed serving process reported zero swap.</p>
+        </div>
+        <pre class="config" aria-label="Current deployment settings">model                  deepseek-v4-flash-0731-wna16-quality-12035985
+artifact revision      12035985bf555d0ddc603c6305586a8fa915589c
+vLLM commit            b7766cfe4d15d9b68acea43097ceff221e8a739f
+vLLM tree              6354125afd1306c9286f734d1c47c23c767d77a9
+runtime image          sha256:eb2884fc60ee332d7adb9d5e424e35acf8817dad0f93c8bb7ea7095cb8f58a0e
+CUDA base              13.0.2
+Torch / wheel variant  2.13.0 / cu130
+Humming kernels        0.1.10
+AppMana flash_mla      2.0.0 (SM86 cubins verified)
+
+--tensor-parallel-size       4
+--max-model-len              230144
+--max-num-seqs               2
+--max-num-batched-tokens     256
+--gpu-memory-utilization     0.98
+--kv-cache-dtype             fp8_ds_mla
+--kv-offloading-size         16
+--disable-custom-all-reduce
+
+VLLM_DSV4_WO_A_MARLIN_DIAGONAL=1
+VLLM_DSV4_FLASH_MLA_DECODE=1
+VLLM_HIER_ALL_REDUCE=0,1;2,3
+VLLM_SPARSE_DENSE_QUERY_BLOCK=0
+VLLM_SPARSE_INDEXER_MAX_LOGITS_MB=64</pre>
+        <div class="callout warn"><strong>Interpretation:</strong> <code>--disable-custom-all-reduce</code> disables vLLM’s legacy custom backend on this PCIe-only host. The selected hierarchical backend remains eligible and dispatches before PyNCCL, as proven in startup logs.</div>
+      </div>
+    </section>
+
+    <section id="sources">
+      <div class="section-inner">
+        <div class="section-head">
+          <div><div class="eyebrow">Reproducibility</div><h2>Source and evidence map.</h2></div>
+          <p>Every performance number in this report comes from committed server60 evidence. Commit descriptions establish implementation; runtime logs establish dispatch; numerical gates establish tested correctness; matched unprofiled runs establish end-to-end speed.</p>
+        </div>
+        <ul class="sources">
+          <li><a href="REPORT.md">End-to-end DeepSeek V4 report</a></li>
+          <li><a href="CAPACITY-MARLIN-20260814.md">Marlin capacity campaign</a></li>
+          <li><a href="VLLM-PERFORMANCE-RESEARCH.md">Scheduler, graph, cache, and runtime research</a></li>
+          <li><a href="SPEED-OPPORTUNITIES-20260814.md">SM86 speed opportunity audit</a></li>
+          <li><a href="evidence/sm86-speed-20260815/README.md">Final matched speed evidence</a></li>
+          <li><a href="evidence/sm86-speed-20260815/SHA256SUMS">Evidence SHA-256 manifest</a></li>
+          <li><a href="https://github.com/Whamp/vllm/pull/1">Whamp/vLLM PR #1 — SM86 WNA16 runtime</a></li>
+          <li><a href="https://github.com/Whamp/vllm/pull/2">Whamp/vLLM PR #2 — FP8 Marlin output projection</a></li>
+          <li><a href="https://github.com/Whamp/vllm/commit/b7766cfe4d15d9b68acea43097ceff221e8a739f">Current speed runtime commit</a></li>
+          <li><a href="https://github.com/Whamp/club-3090/commit/29700df8efa7d7790ddb1f9bb234394d714378b0">Live promotion evidence commit</a></li>
+          <li><a href="https://github.com/AppMana/forks-flash-mla-ampere-dsv4/commit/7f41a5baa5cf57bfbce06458794b4b05737a162a">Pinned AppMana FlashMLA source</a></li>
+          <li><a href="https://huggingface.co/hampsonw/DeepSeek-V4-Flash-0731-WNA16/tree/12035985bf555d0ddc603c6305586a8fa915589c">Immutable projection-sensitive model artifact</a></li>
+        </ul>
+        <div class="callout"><strong>Evidence ledger:</strong> CodeGraph was used only to locate owning modules and symbols. Source reads and Git history establish code behavior. CUDA oracles, cubin inspection, Nsight, API probes, matched benchmarks, long-context tests, and live health records establish runtime claims.</div>
+      </div>
+    </section>
+
+    <footer>
+      <div class="section-inner">
+        <div>Whamp/vLLM DeepSeek V4 SM86 performance stack</div>
+        <div>Prepared 2026-08-15 · bounded to server60 and the pinned revisions above</div>
+      </div>
+    </footer>
+  </main>
+</div>
+</body>
+</html>

@@ -7,6 +7,7 @@ Start with [`REPORT.md`](REPORT.md). It is the cold-reader account of the artifa
 | Document | Purpose |
 | --- | --- |
 | [`REPORT.md`](REPORT.md) | Shareable end-to-end result and evidence map |
+| [`VLLM-PERFORMANCE-STACK.html`](VLLM-PERFORMANCE-STACK.html) | Visual report of the complete Ampere performance stack, measured gains, gates, and tradeoffs |
 | [`PLAN.md`](PLAN.md) | Artifact design, source research, rental, conversion, and implementation ledger |
 | [`VLLM-PERFORMANCE-RESEARCH.md`](VLLM-PERFORMANCE-RESEARCH.md) | vLLM scheduler, CUDA graph, KV-cache, attention, memory, and communication research |
 | [`VLLM-PERFORMANCE-PLAN.md`](VLLM-PERFORMANCE-PLAN.md) | Performance campaign plan and execution ledger |
