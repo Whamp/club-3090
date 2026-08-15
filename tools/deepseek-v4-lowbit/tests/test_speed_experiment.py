@@ -43,8 +43,11 @@ def test_speed_experiment_baseline_is_an_exact_control() -> None:
 def test_speed_experiment_trace_arm_disables_unused_host_kv_tier() -> None:
     trace = EXPERIMENT_ARMS["trace-baseline"]
     assert trace.observational is True
-    assert trace.changed_values == {"KV_OFFLOADING_SIZE": "0"}
-    assert trace.full_profile() == {**BASELINE_PROFILE, "KV_OFFLOADING_SIZE": "0"}
+    assert trace.changed_values == {"KV_OFFLOADING_SIZE": "0.001"}
+    assert trace.full_profile() == {
+        **BASELINE_PROFILE,
+        "KV_OFFLOADING_SIZE": "0.001",
+    }
     assert BASELINE_PROFILE["KV_OFFLOADING_SIZE"] == "16"
 
 

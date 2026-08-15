@@ -236,6 +236,38 @@ cleanup_stale_kv_offload_files() {
     shopt -u nullglob
 }
 
+normalize_production_swap() {
+    local available_kib serving_swap_kib swap_free_kib swap_total_kib swap_used_kib
+    local pid
+    serving_swap_kib=0
+    while read -r pid; do
+        [[ "$pid" =~ ^[0-9]+$ ]] || continue
+        serving_swap_kib=$((
+            serving_swap_kib + $(awk '/^VmSwap:/ {print $2 + 0}' "/proc/$pid/status")
+        ))
+    done < <(docker top "$PRODUCTION_CONTAINER" -eo pid | tail -n +2)
+    (( serving_swap_kib == 0 )) && return 0
+
+    available_kib="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
+    swap_total_kib="$(awk '/^SwapTotal:/ {print $2}' /proc/meminfo)"
+    swap_free_kib="$(awk '/^SwapFree:/ {print $2}' /proc/meminfo)"
+    swap_used_kib=$((swap_total_kib - swap_free_kib))
+    if (( available_kib - swap_used_kib < 8 * 1024 * 1024 )); then
+        echo "Production rollback lacks the 8 GiB RAM reserve required to clear serving swap" >&2
+        return 1
+    fi
+    sudo -n swapoff -a
+    sudo -n swapon -a
+
+    while read -r pid; do
+        [[ "$pid" =~ ^[0-9]+$ ]] || continue
+        if (( $(awk '/^VmSwap:/ {print $2 + 0}' "/proc/$pid/status") != 0 )); then
+            echo "Production rollback did not return serving processes to zero swap" >&2
+            return 1
+        fi
+    done < <(docker top "$PRODUCTION_CONTAINER" -eo pid | tail -n +2)
+}
+
 rollback_started=0
 restore_production() {
     local status=$?
@@ -261,6 +293,7 @@ restore_production() {
         done
         [[ "$(docker inspect "$PRODUCTION_CONTAINER" --format '{{.Image}}')" == "$APPROVED_PRODUCTION_IMAGE_ID" ]] || status=1
         [[ "$(docker inspect "$PRODUCTION_CONTAINER" --format '{{.State.Health.Status}}')" == healthy ]] || status=1
+        normalize_production_swap || status=1
     fi
     exit "$status"
 }
@@ -275,7 +308,7 @@ export VLLM_HIER_ALL_REDUCE=""
 export NSYS_OUTPUT_DIRECTORY NSYS_REPORT_BASENAME
 case "$ARM" in
     baseline) ;;
-    trace-baseline) export KV_OFFLOADING_SIZE=0 ;;
+    trace-baseline) export KV_OFFLOADING_SIZE=0.001 ;;
     prefill-block2) export VLLM_SPARSE_DENSE_QUERY_BLOCK=2 ;;
     flashmla-decode) export VLLM_DSV4_FLASH_MLA_DECODE=1 ;;
     hier-allreduce) export VLLM_HIER_ALL_REDUCE="0,1;2,3" ;;

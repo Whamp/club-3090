@@ -30,6 +30,12 @@ def test_production_default_reserves_host_kv_eviction_tier() -> None:
     ) in compose
 
 
+def test_speed_runner_normalizes_production_swap_after_rollback() -> None:
+    runner = (EXPERIMENT_DIRECTORY / "run-speed-arm-with-rollback.sh").read_text()
+    assert "normalize_production_swap || status=1" in runner
+    assert "Production rollback did not return serving processes to zero swap" in runner
+
+
 def test_speed_patch_and_image_contract() -> None:
     assert (
         _sha256(PATCH_DIRECTORY / "0011-perf-add-opt-in-Ampere-FlashMLA-decode.patch")
