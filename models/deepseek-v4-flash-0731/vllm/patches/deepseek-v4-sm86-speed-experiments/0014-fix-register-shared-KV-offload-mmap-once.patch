@@ -1,0 +1,129 @@
+From b7766cfe4d15d9b68acea43097ceff221e8a739f Mon Sep 17 00:00:00 2001
+From: Will Hampson <whamp@ggl.slmail.me>
+Date: Fri, 14 Aug 2026 21:08:50 -0700
+Subject: [PATCH] fix: register shared KV offload mmap once
+
+Let only the mmap creator call cudaHostRegister so peer workers do not poison their CUDA contexts with duplicate-registration errors; fail clearly if creator registration itself fails.\n\nAssisted-by: OpenAI Codex
+---
+ tests/v1/kv_offload/cpu/test_gpu_worker.py    | 19 +++++++++--
+ vllm/v1/kv_offload/cpu/gpu_worker.py          | 32 ++++++++-----------
+ .../kv_offload/cpu/shared_offload_region.py   |  5 +++
+ 3 files changed, 34 insertions(+), 22 deletions(-)
+
+diff --git a/tests/v1/kv_offload/cpu/test_gpu_worker.py b/tests/v1/kv_offload/cpu/test_gpu_worker.py
+index 523958396..4ac38c918 100644
+--- a/tests/v1/kv_offload/cpu/test_gpu_worker.py
++++ b/tests/v1/kv_offload/cpu/test_gpu_worker.py
+@@ -36,7 +36,7 @@ NUM_MAPPINGS = [3]
+ NUM_MAPPINGS_PER_GROUP = [2]
+ 
+ 
+-def test_pin_mmap_region_clears_failed_cuda_registration(
++def test_pin_mmap_region_fails_closed_on_creator_registration_error(
+     monkeypatch: pytest.MonkeyPatch,
+ ) -> None:
+     class FailedCudaResult(int):
+@@ -46,6 +46,7 @@ def test_pin_mmap_region_clears_failed_cuda_registration(
+     cudart.cudaHostRegister.return_value = FailedCudaResult(1)
+     region = SimpleNamespace(
+         rank=1,
++        is_creator=True,
+         _base=Mock(data_ptr=Mock(return_value=1234)),
+         total_size_bytes=16 * (1 << 30),
+         is_pinned=False,
+@@ -53,10 +54,22 @@ def test_pin_mmap_region_clears_failed_cuda_registration(
+     monkeypatch.setattr(gpu_worker.current_platform, "is_cuda_alike", lambda: True)
+     monkeypatch.setattr(gpu_worker.torch.cuda, "cudart", lambda: cudart)
+ 
++    with pytest.raises(RuntimeError, match="KV offload mmap creator"):
++        gpu_worker.pin_mmap_region(region)
++
++    assert region.is_pinned is False
++
++
++def test_pin_mmap_region_skips_non_creator(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    cudart = Mock()
++    region = SimpleNamespace(is_creator=False)
++    monkeypatch.setattr(gpu_worker.torch.cuda, "cudart", lambda: cudart)
++
+     gpu_worker.pin_mmap_region(region)
+ 
+-    cudart.cudaGetLastError.assert_called_once_with()
+-    assert region.is_pinned is False
++    cudart.cudaHostRegister.assert_not_called()
+ 
+ 
+ @pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-specific test")
+diff --git a/vllm/v1/kv_offload/cpu/gpu_worker.py b/vllm/v1/kv_offload/cpu/gpu_worker.py
+index 5f5f4a552..ddd9d4e73 100644
+--- a/vllm/v1/kv_offload/cpu/gpu_worker.py
++++ b/vllm/v1/kv_offload/cpu/gpu_worker.py
+@@ -121,7 +121,9 @@ def compute_sub_block_ptrs(
+ 
+ 
+ def pin_mmap_region(region: SharedOffloadRegion) -> None:
+-    """Register the entire mmap as CUDA pinned memory via cudaHostRegister."""
++    """Register the creator's mmap once via cudaHostRegister."""
++    if not region.is_creator:
++        return
+     if not current_platform.is_cuda_alike():
+         logger.info(
+             "Skipping mmap host registration on %s; cudaHostRegister is only "
+@@ -133,26 +135,18 @@ def pin_mmap_region(region: SharedOffloadRegion) -> None:
+     rank = region.rank
+ 
+     base_ptr = region._base.data_ptr()
+-    cudart = torch.cuda.cudart()
+-    result = cudart.cudaHostRegister(base_ptr, region.total_size_bytes, 0)
++    result = torch.cuda.cudart().cudaHostRegister(base_ptr, region.total_size_bytes, 0)
+     if result.value != 0:
+-        # cudaHostRegister sets the runtime's last-error state on failure.
+-        # Clear it before taking the documented unpinned fallback so a later,
+-        # unrelated CUDA operation does not surface this stale error.
+-        cudart.cudaGetLastError()
+-        logger.warning(
+-            "cudaHostRegister failed for rank=%d (code=%d) — "
+-            "transfers will still work but may be slower (unpinned DMA)",
+-            rank,
+-            result,
++        raise RuntimeError(
++            "cudaHostRegister failed for the KV offload mmap creator: "
++            f"rank={rank}, code={result.value}"
+         )
+-    else:
+-        logger.debug(
+-            "cudaHostRegister rank=%d %.2f GB",
+-            rank,
+-            region.total_size_bytes / 1e9,
+-        )
+-        region.is_pinned = True
++    logger.debug(
++        "cudaHostRegister rank=%d %.2f GB",
++        rank,
++        region.total_size_bytes / 1e9,
++    )
++    region.is_pinned = True
+ 
+ 
+ def _new_descriptor_buffers(
+diff --git a/vllm/v1/kv_offload/cpu/shared_offload_region.py b/vllm/v1/kv_offload/cpu/shared_offload_region.py
+index 290c0d510..9fc734857 100644
+--- a/vllm/v1/kv_offload/cpu/shared_offload_region.py
++++ b/vllm/v1/kv_offload/cpu/shared_offload_region.py
+@@ -117,6 +117,11 @@ class SharedOffloadRegion:
+         self._views: list[torch.Tensor] = []
+         self.is_pinned: bool = False
+ 
++    @property
++    def is_creator(self) -> bool:
++        """Whether this worker created and owns cleanup of the mmap file."""
++        return self._creator
++
+     def create_next_view(self, tensor_page_size: int) -> torch.Tensor:
+         """Allocate a strided int8 view for this worker, one canonical tensor.
+ 
+-- 
+2.55.0
+

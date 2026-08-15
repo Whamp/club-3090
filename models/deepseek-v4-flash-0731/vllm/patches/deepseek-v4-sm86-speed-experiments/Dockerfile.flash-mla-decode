@@ -29,5 +29,7 @@ COPY vllm/models/deepseek_v4/ampere/ampere_sparse.py \
     /workspace/vllm/vllm/models/deepseek_v4/ampere/ampere_sparse.py
 COPY vllm/v1/kv_offload/cpu/gpu_worker.py \
     /workspace/vllm/vllm/v1/kv_offload/cpu/gpu_worker.py
+COPY vllm/v1/kv_offload/cpu/shared_offload_region.py \
+    /workspace/vllm/vllm/v1/kv_offload/cpu/shared_offload_region.py
 
 RUN rm -f /tmp/flash_mla-2.0.0-cp39-abi3-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl

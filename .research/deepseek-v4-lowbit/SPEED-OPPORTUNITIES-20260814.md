@@ -94,9 +94,10 @@ Evidence status: causal configuration hypotheses; no server60 measurement.
 
 - opt-in Whamp/vLLM FlashMLA commit: `17ca4bad13e08e326a7a84af89676816e80bc1e7`
 - logging-only follow-up: `1d6b37c8eb904bb2d1db7ddd05b002157d5e9f26`
-- KV host-registration fallback fix: `91a39786d48f48efb45fbe3a160d448c783b0131`
-- resulting vLLM tree: `5238d1e4148bc747e122b9bc19bb1562a05b3207`
-- checksum-pinned patches 0011 through 0013
+- initial KV host-registration fallback fix: `91a39786d48f48efb45fbe3a160d448c783b0131`
+- creator-only shared-mmap registration: `b7766cfe4d15d9b68acea43097ceff221e8a739f`
+- resulting vLLM tree: `6354125afd1306c9286f734d1c47c23c767d77a9`
+- checksum-pinned patches 0011 through 0014
 - experiment-only FlashMLA and Nsight image builders
 - FlashMLA and hierarchical all-reduce numerical gates
 - rollback-safe, identity-approved serving runner

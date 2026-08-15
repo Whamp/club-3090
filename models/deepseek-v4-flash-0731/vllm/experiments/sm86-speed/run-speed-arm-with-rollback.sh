@@ -9,8 +9,8 @@ readonly COMPOSE_FILE="$REPOSITORY_ROOT/models/deepseek-v4-flash-0731/vllm/compo
 readonly COMPOSE_OVERRIDE="$SCRIPT_DIRECTORY/compose.override.yml"
 readonly COMPOSE_NSYS_OVERRIDE="$SCRIPT_DIRECTORY/compose.nsight.override.yml"
 readonly TOOL_PROJECT="$REPOSITORY_ROOT/tools/deepseek-v4-lowbit"
-readonly EXPECTED_SPEED_COMMIT="91a39786d48f48efb45fbe3a160d448c783b0131"
-readonly EXPECTED_SPEED_TREE="5238d1e4148bc747e122b9bc19bb1562a05b3207"
+readonly EXPECTED_SPEED_COMMIT="b7766cfe4d15d9b68acea43097ceff221e8a739f"
+readonly EXPECTED_SPEED_TREE="6354125afd1306c9286f734d1c47c23c767d77a9"
 readonly EXPECTED_MODEL_ID="deepseek-v4-flash-0731-wna16-quality-12035985"
 readonly PRODUCTION_CONTAINER="${PRODUCTION_CONTAINER:-vllm-deepseek-v4-wna16-sm86}"
 
