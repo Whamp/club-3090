@@ -39,13 +39,19 @@ def test_speed_patch_and_image_contract() -> None:
         )
         == "ddc4ab71a16f9ee2f36faebdb551b98923d9bdf4d281e68a86b222648d68ef4e"
     )
+    assert (
+        _sha256(
+            PATCH_DIRECTORY / "0013-fix-clear-failed-KV-host-registration-error.patch"
+        )
+        == "1f9faaae13651bac04165fe51f7db448f18e9d2df93b45f057a4b99468090454"
+    )
 
     builder = (PATCH_DIRECTORY / "build-flash-mla-decode-image.sh").read_text()
-    assert 'EXPECTED_VLLM_COMMIT="1d6b37c8eb904bb2d1db7ddd05b002157d5e9f26"' in builder
-    assert 'EXPECTED_VLLM_TREE="1260b4aba8fb5bf92e6632882326eb2b800ff3df"' in builder
+    assert 'EXPECTED_VLLM_COMMIT="91a39786d48f48efb45fbe3a160d448c783b0131"' in builder
+    assert 'EXPECTED_VLLM_TREE="5238d1e4148bc747e122b9bc19bb1562a05b3207"' in builder
     assert (
         'EXPECTED_DOCKERFILE_SHA256="'
-        '6014fd3703132fc9e06f27dcf3ac0e6c8ac129b5aee3046f405054fd6de738dc"'
+        '5a96547fd9bb49afcd42dc9e06fd2f269addce85cd9601e6a6c99c0aaf04ded0"'
     ) in builder
     assert (
         'FLASH_MLA_WHEEL_SHA256="'
@@ -56,6 +62,7 @@ def test_speed_patch_and_image_contract() -> None:
     assert "vllm/envs.py" in dockerfile
     assert "vllm/models/deepseek_v4/ampere/ampere_sparse.py" in dockerfile
     assert "vllm/distributed/device_communicators/cuda_communicator.py" in dockerfile
+    assert "vllm/v1/kv_offload/cpu/gpu_worker.py" in dockerfile
     assert (
         "flash_mla-2.0.0-cp39-abi3-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl"
     ) in dockerfile
@@ -68,7 +75,7 @@ def test_every_speed_arm_renders_without_runtime_side_effects(tmp_path: Path) ->
             {
                 "schema_version": 1,
                 "model_id": "deepseek-v4-flash-0731-wna16-quality-12035985",
-                "vllm_tree": "1260b4aba8fb5bf92e6632882326eb2b800ff3df",
+                "vllm_tree": "5238d1e4148bc747e122b9bc19bb1562a05b3207",
                 "profile_sha256": "a" * 64,
                 "request_sha256": "b" * 64,
                 "all_reduce_critical_path_fraction": 0.2,
@@ -116,7 +123,7 @@ def test_every_speed_arm_renders_without_runtime_side_effects(tmp_path: Path) ->
         manifest = json.loads((output_directory / "plan.json").read_text())
         assert manifest["arm"] == arm
         assert manifest["expected_speed_tree"] == (
-            "1260b4aba8fb5bf92e6632882326eb2b800ff3df"
+            "5238d1e4148bc747e122b9bc19bb1562a05b3207"
         )
         assert len(manifest["harness_commit"]) == 40
         assert len(manifest["harness_tree"]) == 40
@@ -143,9 +150,9 @@ for ((i=1; i<=$#; i++)); do
 done
 if [[ "$1 $2" == "image inspect" ]]; then
     case "$format" in
-        *canonical-commit*) echo 1d6b37c8eb904bb2d1db7ddd05b002157d5e9f26 ;;
+        *canonical-commit*) echo 91a39786d48f48efb45fbe3a160d448c783b0131 ;;
         *opencontainers.image.revision*)
-            echo 1260b4aba8fb5bf92e6632882326eb2b800ff3df
+            echo 5238d1e4148bc747e122b9bc19bb1562a05b3207
             ;;
         *) echo "sha256:$(printf '2%.0s' {1..64})" ;;
     esac

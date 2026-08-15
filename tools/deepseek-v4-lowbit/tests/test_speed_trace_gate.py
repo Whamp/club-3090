@@ -9,7 +9,7 @@ def valid_gate() -> dict[str, object]:
     return {
         "schema_version": 1,
         "model_id": "deepseek-v4-flash-0731-wna16-quality-12035985",
-        "vllm_tree": "1260b4aba8fb5bf92e6632882326eb2b800ff3df",
+        "vllm_tree": "5238d1e4148bc747e122b9bc19bb1562a05b3207",
         "profile_sha256": "a" * 64,
         "request_sha256": "b" * 64,
         "all_reduce_critical_path_fraction": 0.15,

@@ -8,7 +8,7 @@ from typing import Any
 
 _MINIMUM_ALL_REDUCE_FRACTION = 0.10
 _EXPECTED_MODEL_ID = "deepseek-v4-flash-0731-wna16-quality-12035985"
-_EXPECTED_VLLM_TREE = "1260b4aba8fb5bf92e6632882326eb2b800ff3df"
+_EXPECTED_VLLM_TREE = "5238d1e4148bc747e122b9bc19bb1562a05b3207"
 
 
 def _require_sha256(value: Any, field: str) -> str:

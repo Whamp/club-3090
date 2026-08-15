@@ -8,8 +8,9 @@ performance experiments. They are not part of the promoted production image.
 - base: Whamp/vLLM merge `28db4816298293b74fca358cf735ac51c5144acb`
 - patch 0011: opt-in AppMana FlashMLA sparse decode
 - patch 0012: startup reporting for the existing hierarchical all-reduce backend
-- resulting commit: `1d6b37c8eb904bb2d1db7ddd05b002157d5e9f26`
-- resulting tree: `1260b4aba8fb5bf92e6632882326eb2b800ff3df`
+- patch 0013: clear failed CUDA host-registration state before KV offload fallback
+- resulting commit: `91a39786d48f48efb45fbe3a160d448c783b0131`
+- resulting tree: `5238d1e4148bc747e122b9bc19bb1562a05b3207`
 
 Patch 0011 keeps Triton as the default, changes only `fp8_ds_mla` decode when
 `VLLM_DSV4_FLASH_MLA_DECODE=1`, and leaves prefill unchanged. Patch 0012 changes

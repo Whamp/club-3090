@@ -1,0 +1,76 @@
+From 91a39786d48f48efb45fbe3a160d448c783b0131 Mon Sep 17 00:00:00 2001
+From: Will Hampson <whamp@ggl.slmail.me>
+Date: Fri, 14 Aug 2026 20:36:34 -0700
+Subject: [PATCH] fix: clear failed KV host registration error
+
+Reset CUDA's last-error state before taking the documented unpinned KV-offload fallback so a later unrelated CUDA operation does not surface stale cudaErrorInvalidValue.\n\nAssisted-by: OpenAI Codex
+---
+ tests/v1/kv_offload/cpu/test_gpu_worker.py | 25 ++++++++++++++++++++++
+ vllm/v1/kv_offload/cpu/gpu_worker.py       |  7 +++++-
+ 2 files changed, 31 insertions(+), 1 deletion(-)
+
+diff --git a/tests/v1/kv_offload/cpu/test_gpu_worker.py b/tests/v1/kv_offload/cpu/test_gpu_worker.py
+index bfbb18251..523958396 100644
+--- a/tests/v1/kv_offload/cpu/test_gpu_worker.py
++++ b/tests/v1/kv_offload/cpu/test_gpu_worker.py
+@@ -3,6 +3,8 @@
+ import random
+ import time
+ import uuid
++from types import SimpleNamespace
++from unittest.mock import Mock
+ 
+ import pytest
+ import torch
+@@ -34,6 +36,29 @@ NUM_MAPPINGS = [3]
+ NUM_MAPPINGS_PER_GROUP = [2]
+ 
+ 
++def test_pin_mmap_region_clears_failed_cuda_registration(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    class FailedCudaResult(int):
++        value = 1
++
++    cudart = Mock()
++    cudart.cudaHostRegister.return_value = FailedCudaResult(1)
++    region = SimpleNamespace(
++        rank=1,
++        _base=Mock(data_ptr=Mock(return_value=1234)),
++        total_size_bytes=16 * (1 << 30),
++        is_pinned=False,
++    )
++    monkeypatch.setattr(gpu_worker.current_platform, "is_cuda_alike", lambda: True)
++    monkeypatch.setattr(gpu_worker.torch.cuda, "cudart", lambda: cudart)
++
++    gpu_worker.pin_mmap_region(region)
++
++    cudart.cudaGetLastError.assert_called_once_with()
++    assert region.is_pinned is False
++
++
+ @pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-specific test")
+ def test_rocm_cpu_to_gpu_uses_dma(monkeypatch: pytest.MonkeyPatch) -> None:
+     monkeypatch.setattr(gpu_worker, "HAS_TRITON", True)
+diff --git a/vllm/v1/kv_offload/cpu/gpu_worker.py b/vllm/v1/kv_offload/cpu/gpu_worker.py
+index 40b57ac86..5f5f4a552 100644
+--- a/vllm/v1/kv_offload/cpu/gpu_worker.py
++++ b/vllm/v1/kv_offload/cpu/gpu_worker.py
+@@ -133,8 +133,13 @@ def pin_mmap_region(region: SharedOffloadRegion) -> None:
+     rank = region.rank
+ 
+     base_ptr = region._base.data_ptr()
+-    result = torch.cuda.cudart().cudaHostRegister(base_ptr, region.total_size_bytes, 0)
++    cudart = torch.cuda.cudart()
++    result = cudart.cudaHostRegister(base_ptr, region.total_size_bytes, 0)
+     if result.value != 0:
++        # cudaHostRegister sets the runtime's last-error state on failure.
++        # Clear it before taking the documented unpinned fallback so a later,
++        # unrelated CUDA operation does not surface this stale error.
++        cudart.cudaGetLastError()
+         logger.warning(
+             "cudaHostRegister failed for rank=%d (code=%d) — "
+             "transfers will still work but may be slower (unpinned DMA)",
+-- 
+2.55.0
+
