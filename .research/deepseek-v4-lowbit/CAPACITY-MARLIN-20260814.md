@@ -15,8 +15,8 @@ Matched performance against the fresh 131,072-token quality-candidate baseline:
 
 | Metric | Baseline | Selected profile | Change | Required floor |
 | --- | ---: | ---: | ---: | ---: |
-| Decode | 61.56 tok/s | 61.99 tok/s | +0.70% | 46.17 tok/s |
-| Cache-busted prefill | 920.91 tok/s | 914.10 tok/s | -0.74% | 552.546 tok/s |
+| Decode | 61.56 tok/s | 61.91 tok/s | +0.57% | 46.17 tok/s |
+| Cache-busted prefill | 920.91 tok/s | 875.93 tok/s | -4.88% | 552.546 tok/s |
 | Aggregate KV capacity | 148,290 tokens | 275,238 tokens | +85.6% | — |
 | Advertised context | 131,072 | 230,144 | +75.6% | — |
 
@@ -39,7 +39,7 @@ The path is opt-in through `VLLM_DSV4_WO_A_MARLIN_DIAGONAL=1`. Default behavior 
 | `max_num_seqs`: 4 → 2 | 138,240 context at batch budget 256 | 61.45 decode, 968.49 prefill | Useful but small capacity gain |
 | `max_num_batched_tokens`: 256 → 128 | 156,000 context | 59.19 decode, 465.90 prefill | Rejected: prefill below floor |
 | BF16 `wo_a` cache disabled | 230,144 context | 34.01 decode, 899.36 prefill | Rejected: decode below floor |
-| FP8 Marlin diagonal `wo_a` | 230,144 context, 275,238 aggregate KV tokens | 61.99 decode, 914.10 prefill | Selected |
+| FP8 Marlin diagonal `wo_a` | 230,144 context, 275,238 aggregate KV tokens | 61.91 decode, 875.93 prefill | Selected |
 | 260,000 context | Planner rejected; estimated ceiling 255,232 | Not run | Rejected: allocation boundary |
 
 CPU/UVA weight offload was not retested. Earlier matched evidence showed 1–2 GiB per-rank offload reduced decode to 12.68–19.54 tok/s, far below the current floor.
@@ -52,10 +52,10 @@ The selected path passed:
 - automatic tool selection;
 - a tool call followed by a tool result and a normal 18-token final response;
 - IDE-agent, multi-turn-agent, coding, and 7,862-token reasoning probes;
-- exact NIAH recall at 9,213, 27,513, 141,000, and 211,551 prompt tokens;
+- exact NIAH recall at 9,213, 27,513, 141,000, and 211,551 prompt tokens on the acceptance image, plus 211,031 tokens on the clean final image;
 - two simultaneous requests with 90,029 prompt tokens each and distinct exact recalls;
 - five matched 512-token decode runs and three cache-busted approximately 9K-token prefill runs;
-- zero serving-process swap and no post-benchmark VRAM growth beyond 14 MiB.
+- zero serving-process swap and only 8 MiB post-benchmark VRAM growth on the clean final image.
 
 ## Failed production gate
 

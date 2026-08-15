@@ -42,7 +42,7 @@ patches:
         models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/build-runtime-image.sh: c066dd69dcef938689fc8c09afe7a3773d3686a7d223c7223442af556d4da15a
         models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-mixed-groups/Dockerfile.quality-capacity: 0ac5486afceb5abec0e4714a831d40498411c6f7103500e945785a2e5bc67b4c
         models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-mixed-groups/build-quality-capacity-image.sh: b73186d5204e8d29c4d5edcf72b32e226214837cea8cc0b65a80ddcdbf08a757
-        models/deepseek-v4-flash-0731/vllm/compose/multi4/wna16/base.yml: ef09b51375a3aa76b50d0b05368a5405f213d2893ae533b31f81b5ccab5cc6ca
+        models/deepseek-v4-flash-0731/vllm/compose/multi4/wna16/base.yml: 0fb20e4cc603bc6931637cb720b189e78d4a79cc9a93573ac11e8b9df76e54d4
     drift_guard:
       kind: behavioral
       check: "On 4x RTX 3090, the exact image reaches healthy at 230144 context with max_num_seqs=2, serves the projection-sensitive quality artifact, passes basic and post-tool generation, recalls exactly beyond 211K prompt tokens and in two simultaneous 90K requests, and repeats at least 46.17 decode and 552.546 cache-busted prefill tok/s without serving-process swap or post-warm VRAM growth; preserve the documented 93 MiB physical-headroom warning."

@@ -9,9 +9,9 @@
 #   Max ctx:   230,144 tokens; max_num_seqs=2; 275,238 aggregate cache tokens
 #   Genesis:   N/A — Genesis is Qwen3-Next-specific
 #   Status:    🧪 Experimental — accepted server60 capacity profile
-#   Measured:  server60 4x RTX 3090, 2026-08-14: 61.99 decode tok/s mean,
-#              914.10 cache-busted prefill tok/s at ~9K tokens, exact recall at
-#              211,551 tokens, and two simultaneous 90,029-token recalls.
+#   Measured:  server60 4x RTX 3090, 2026-08-14: 61.91 decode tok/s mean,
+#              875.93 cache-busted prefill tok/s at ~9K tokens, exact recall at
+#              211,031 tokens, and two simultaneous 90,029-token recalls.
 #   Correctness: basic, automatic-tool, post-tool, multi-turn-agent, coding,
 #                7,862-token reasoning, and long-context probes passed.
 #   Best for:  One long request through 230K, or two requests within the
