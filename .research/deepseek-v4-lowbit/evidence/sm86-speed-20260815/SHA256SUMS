@@ -54,4 +54,12 @@ cb3312b8b65596fc6a22fd79ba8f029d1a5ad21bee5ec38b99291c84c70124f0  ./nsight-basel
 a02f77fac3ab05623c141ee8e5dbfa1d620079cb113a6d81124b6c0d9a2bdfc0  ./prefill-block2-final/measurement/worker-swap-kib.txt
 26c536433c06088961d1216fe73d24702d63cd57384c89cdff807aa2a6996e38  ./prefill-block2-final/plan.json
 f8ed2ee7cf705c16d68dcef479ff80090c5fccc6312a6d9bf459db879959a989  ./prefill-block2-final/plan.sha256
-65ebd8543186e97f04c90cffb6c4c6c90bba949f818c7e73b7c48620cdfe0c4a  ./README.md
+4c4221cfcd02233dac722a91861eca67cc672300dc5453d8306d4bfe633cb8a4  ./promotion-4d0460f1/container-inspect.json
+9f1a422a56430e01724ccb051627da18b57786fbb5a316c99994bd8c50e034dd  ./promotion-4d0460f1/final-health.txt
+8d15a33274f54cecde9bfdd2ac7b41a4e10578c5558ce364b6fb9a8e33e8fd89  ./promotion-4d0460f1/gpu-final.csv
+6e1ca3361cdec87314f7fc184c5d4c6d21e96ab2210489088db062c9e5e964f1  ./promotion-4d0460f1/models.json
+0e55c85272b8c76b9d054c1dcf419d9d908ad9a76298ad3b39535ae904a3b85e  ./promotion-4d0460f1/startup.log
+007497ba272902d4535eda8aec2c82c78a5e06ede181f8c9176883febc31f715  ./promotion-4d0460f1/summary.txt
+a42930d0525ea695aa51e6e5c0e86c6c0b5e5a9008f98a9e75e9cb97715b34d3  ./promotion-4d0460f1/verify-full.log
+cc3c8a8f2c550953aaf77003b71ca11999d9bcecee1c0a75c48d2271e873c528  ./promotion-4d0460f1/worker-swap-kib.txt
+ac6aaeb0edd517e3b621eccf5644ae114e4321f5a2620403528d451e0bd60464  ./README.md

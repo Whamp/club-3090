@@ -11,6 +11,12 @@ Promote the combined FlashMLA decode and hierarchical all-reduce profile:
 
 The profile keeps the projection-sensitive WNA16 artifact, `fp8_ds_mla`, 230,144-token served context, TP=4, `max_num_seqs=2`, `max_num_batched_tokens=256`, zero CPU weight offload, and the 16 GiB host KV eviction tier.
 
+## Live promotion
+
+Club commit `4d0460f1cdda28806675eece741d5b0be977f2a1` was promoted on server60. At `2026-08-15T08:58:22Z`, the service was healthy on the exact speed image with restart policy `unless-stopped`, all seven serving processes reported zero swap, and the endpoint health check passed. The live argv records `--kv-offloading-size 16`; the environment records both promoted speed flags.
+
+Post-promotion `verify-full.sh` passed basic completion, automatic tools, streaming, streaming tool calls, reasoning, and the 2K-token output-quality/cascade probe. See `promotion-4d0460f1/` for the inspect record, startup dispatch log, verification output, swap record, and final health receipt.
+
 ## Matched results
 
 | Comparison | Decode tok/s | Decode change | Prefill tok/s | Prefill change |

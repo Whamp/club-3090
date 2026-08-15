@@ -1,0 +1,7 @@
+club_commit=4d0460f1cdda28806675eece741d5b0be977f2a1
+club_tree=2f3a39663bf4c33d274c3b904b4270d2f659de18
+production_image=sha256:eb2884fc60ee332d7adb9d5e424e35acf8817dad0f93c8bb7ea7095cb8f58a0e
+production_health=healthy
+production_restart=unless-stopped
+endpoint=http://100.92.238.117:8034
+promoted_from=sha256:f56910530683326051cfdf4e7c8e4d6afc5bace8804cb78b2af9ea799bbba4e6
