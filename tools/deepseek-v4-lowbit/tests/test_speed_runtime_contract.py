@@ -107,6 +107,8 @@ def test_every_speed_arm_renders_without_runtime_side_effects(tmp_path: Path) ->
         "APPROVED_PRODUCTION_IMAGE_ID": "sha256:" + "1" * 64,
         "SPEED_IMAGE": "example.invalid/speed:test",
         "SPEED_IMAGE_ID": "sha256:" + "2" * 64,
+        "NSIGHT_IMAGE": "example.invalid/nsight:test",
+        "NSIGHT_IMAGE_ID": "sha256:" + "3" * 64,
         "MODEL_SNAPSHOT": "/nonexistent/model",
         "MODEL_BLOBS": "/nonexistent/blobs",
         "RUNTIME_CACHE_ROOT": "/nonexistent/cache",
@@ -146,6 +148,12 @@ def test_every_speed_arm_renders_without_runtime_side_effects(tmp_path: Path) ->
         assert len(manifest["harness_tree"]) == 40
         assert len(manifest["harness_sha256"]) == 64
         assert "plan_sha256=" in completed.stdout
+        if arm == "trace-baseline":
+            assert manifest["experiment_image"] == "example.invalid/nsight:test"
+            assert manifest["experiment_image_id"] == "sha256:" + "3" * 64
+        else:
+            assert manifest["experiment_image"] == "example.invalid/speed:test"
+            assert manifest["experiment_image_id"] == "sha256:" + "2" * 64
 
 
 def test_baseline_runner_executes_stop_up_down_start_lifecycle(

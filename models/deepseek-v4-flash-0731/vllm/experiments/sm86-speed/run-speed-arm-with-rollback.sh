@@ -25,6 +25,8 @@ Actual execution requires these identity-bound variables:
   APPROVED_PRODUCTION_IMAGE_ID=sha256:...
   SPEED_IMAGE=repository:tag-or-id
   SPEED_IMAGE_ID=sha256:...
+  NSIGHT_IMAGE=repository:tag-or-id       # trace-baseline only
+  NSIGHT_IMAGE_ID=sha256:...              # trace-baseline only
   MODEL_SNAPSHOT=/immutable/snapshot
   MODEL_BLOBS=/huggingface/blobs
   RUNTIME_CACHE_ROOT=/runtime/cache
@@ -57,6 +59,15 @@ esac
 readonly APPROVED_PRODUCTION_IMAGE_ID="${APPROVED_PRODUCTION_IMAGE_ID:-UNSET}"
 readonly SPEED_IMAGE="${SPEED_IMAGE:-UNSET}"
 readonly SPEED_IMAGE_ID="${SPEED_IMAGE_ID:-UNSET}"
+readonly NSIGHT_IMAGE="${NSIGHT_IMAGE:-UNSET}"
+readonly NSIGHT_IMAGE_ID="${NSIGHT_IMAGE_ID:-UNSET}"
+if [[ "$ARM" == trace-baseline ]]; then
+    readonly EXPERIMENT_IMAGE="$NSIGHT_IMAGE"
+    readonly EXPERIMENT_IMAGE_ID="$NSIGHT_IMAGE_ID"
+else
+    readonly EXPERIMENT_IMAGE="$SPEED_IMAGE"
+    readonly EXPERIMENT_IMAGE_ID="$SPEED_IMAGE_ID"
+fi
 readonly MODEL_SNAPSHOT="${MODEL_SNAPSHOT:-UNSET}"
 readonly MODEL_BLOBS="${MODEL_BLOBS:-UNSET}"
 readonly RUNTIME_CACHE_ROOT="${RUNTIME_CACHE_ROOT:-UNSET}"
@@ -105,6 +116,10 @@ plan_json="$(
     PLAN_PRODUCTION_IMAGE_ID="$APPROVED_PRODUCTION_IMAGE_ID" \
     PLAN_SPEED_IMAGE="$SPEED_IMAGE" \
     PLAN_SPEED_IMAGE_ID="$SPEED_IMAGE_ID" \
+    PLAN_NSIGHT_IMAGE="$NSIGHT_IMAGE" \
+    PLAN_NSIGHT_IMAGE_ID="$NSIGHT_IMAGE_ID" \
+    PLAN_EXPERIMENT_IMAGE="$EXPERIMENT_IMAGE" \
+    PLAN_EXPERIMENT_IMAGE_ID="$EXPERIMENT_IMAGE_ID" \
     PLAN_MODEL_SNAPSHOT="$MODEL_SNAPSHOT" \
     PLAN_MODEL_BLOBS="$MODEL_BLOBS" \
     PLAN_RUNTIME_CACHE_ROOT="$RUNTIME_CACHE_ROOT" \
@@ -127,6 +142,10 @@ manifest = json.loads(os.environ["ARM_MANIFEST"])
 manifest["approved_production_image_id"] = os.environ["PLAN_PRODUCTION_IMAGE_ID"]
 manifest["speed_image"] = os.environ["PLAN_SPEED_IMAGE"]
 manifest["speed_image_id"] = os.environ["PLAN_SPEED_IMAGE_ID"]
+manifest["nsight_image"] = os.environ["PLAN_NSIGHT_IMAGE"]
+manifest["nsight_image_id"] = os.environ["PLAN_NSIGHT_IMAGE_ID"]
+manifest["experiment_image"] = os.environ["PLAN_EXPERIMENT_IMAGE"]
+manifest["experiment_image_id"] = os.environ["PLAN_EXPERIMENT_IMAGE_ID"]
 manifest["model_snapshot"] = os.environ["PLAN_MODEL_SNAPSHOT"]
 manifest["model_blobs"] = os.environ["PLAN_MODEL_BLOBS"]
 manifest["runtime_cache_root"] = os.environ["PLAN_RUNTIME_CACHE_ROOT"]
@@ -188,6 +207,10 @@ if [[ "$ARM" == trace-baseline ]]; then
         echo "trace-baseline requires NSYS_OUTPUT_DIRECTORY" >&2
         exit 2
     }
+    [[ "$NSIGHT_IMAGE" != UNSET && "$NSIGHT_IMAGE_ID" != UNSET ]] || {
+        echo "trace-baseline requires NSIGHT_IMAGE and NSIGHT_IMAGE_ID" >&2
+        exit 2
+    }
     mkdir -p "$NSYS_OUTPUT_DIRECTORY"
 fi
 COMPOSE_FILES=(--file "$COMPOSE_FILE" --file "$COMPOSE_OVERRIDE")
@@ -221,6 +244,25 @@ actual_speed_image_id="$(docker image inspect "$SPEED_IMAGE" --format '{{.Id}}')
     echo "Speed image source tree mismatch" >&2
     exit 2
 }
+if [[ "$ARM" == trace-baseline ]]; then
+    actual_nsight_image_id="$(docker image inspect "$NSIGHT_IMAGE" --format '{{.Id}}')"
+    [[ "$actual_nsight_image_id" == "$NSIGHT_IMAGE_ID" ]] || {
+        echo "Nsight image identity mismatch: $actual_nsight_image_id" >&2
+        exit 2
+    }
+    [[ "$(docker image inspect "$NSIGHT_IMAGE" --format '{{index .Config.Labels "org.club3090.runtime.canonical-commit"}}')" == "$EXPECTED_SPEED_COMMIT" ]] || {
+        echo "Nsight image canonical commit mismatch" >&2
+        exit 2
+    }
+    [[ "$(docker image inspect "$NSIGHT_IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" == "$EXPECTED_SPEED_TREE" ]] || {
+        echo "Nsight image source tree mismatch" >&2
+        exit 2
+    }
+    [[ "$(docker image inspect "$NSIGHT_IMAGE" --format '{{index .Config.Labels "org.club3090.runtime.production-base"}}')" == "$SPEED_IMAGE_ID" ]] || {
+        echo "Nsight image speed base mismatch" >&2
+        exit 2
+    }
+fi
 
 cleanup_stale_kv_offload_files() {
     local file
@@ -274,7 +316,7 @@ restore_production() {
     trap - EXIT INT TERM
     if [[ "$rollback_started" == 1 ]]; then
         docker logs "$EXPERIMENT_CONTAINER" > "$RESULT_DIRECTORY/container.log" 2>&1 || true
-        env VLLM_IMAGE="$SPEED_IMAGE" \
+        env VLLM_IMAGE="$EXPERIMENT_IMAGE" \
             CONTAINER_NAME="$EXPERIMENT_CONTAINER" \
             CLUB3090_RESTART=no \
             BIND_HOST="$BIND_HOST" PORT="$PORT" \
@@ -333,7 +375,7 @@ case "$ARM" in
         ;;
 esac
 
-env VLLM_IMAGE="$SPEED_IMAGE" \
+env VLLM_IMAGE="$EXPERIMENT_IMAGE" \
     CONTAINER_NAME="$EXPERIMENT_CONTAINER" \
     CLUB3090_RESTART=no \
     BIND_HOST="$BIND_HOST" PORT="$PORT" \
