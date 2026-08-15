@@ -71,6 +71,8 @@ def test_speed_patch_and_image_contract() -> None:
     ) in builder
 
     nsys_entrypoint = (PATCH_DIRECTORY / "nsys-vllm-entrypoint.sh").read_text()
+    assert "/usr/local/bin/start-deepseek-v4-wna16-runtime" in nsys_entrypoint
+    assert "/opt/venv/bin/vllm serve" not in nsys_entrypoint
     assert '--profiler-config \'{"profiler":"cuda"}\'' in nsys_entrypoint
     assert "--profiler-config.profiler" not in nsys_entrypoint
 

@@ -13,5 +13,5 @@ exec nsys profile \
     --cuda-graph-trace=node \
     --capture-range=cudaProfilerApi \
     --capture-range-end=stop \
-    /opt/venv/bin/vllm serve "$@" \
+    /usr/local/bin/start-deepseek-v4-wna16-runtime "$@" \
     --profiler-config '{"profiler":"cuda"}'
