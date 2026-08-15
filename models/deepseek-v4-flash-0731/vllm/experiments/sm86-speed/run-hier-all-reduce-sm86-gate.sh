@@ -6,7 +6,7 @@ readonly SCRIPT_DIRECTORY
 readonly GATE_SCRIPT="$SCRIPT_DIRECTORY/hier_all_reduce_sm86_gate.py"
 readonly IMAGE="${1:?usage: run-hier-all-reduce-sm86-gate.sh IMAGE REPORT_DIRECTORY}"
 readonly REPORT_DIRECTORY="${2:?usage: run-hier-all-reduce-sm86-gate.sh IMAGE REPORT_DIRECTORY}"
-readonly EXPECTED_GATE_SHA256="d81265e4f666509eaedee1fa835584220f7cf81ca89e4f382fa65bfdaadc2532"
+readonly EXPECTED_GATE_SHA256="9689ab217010785b88232acd0ce2abf35a26ab9f2152f70353302c6ec4fe0751"
 
 mkdir -p "$REPORT_DIRECTORY"
 printf '%s  %s\n' "$EXPECTED_GATE_SHA256" "$GATE_SCRIPT" | \

@@ -30,6 +30,14 @@ def test_production_default_reserves_host_kv_eviction_tier() -> None:
     ) in compose
 
 
+def test_hierarchical_gate_script_matches_checksum_pin() -> None:
+    gate = EXPERIMENT_DIRECTORY / "hier_all_reduce_sm86_gate.py"
+    gate_runner = (
+        EXPERIMENT_DIRECTORY / "run-hier-all-reduce-sm86-gate.sh"
+    ).read_text()
+    assert f'EXPECTED_GATE_SHA256="{_sha256(gate)}"' in gate_runner
+
+
 def test_nsys_analysis_keeps_profile_mount_read_only() -> None:
     analyzer = (EXPERIMENT_DIRECTORY / "analyze-nsys-decode.sh").read_text()
     assert '"$profile_directory:/profiles:ro"' in analyzer
