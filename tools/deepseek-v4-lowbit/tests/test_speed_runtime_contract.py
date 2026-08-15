@@ -30,6 +30,18 @@ def test_production_default_reserves_host_kv_eviction_tier() -> None:
     ) in compose
 
 
+def test_combined_arm_requires_both_runtime_dispatches() -> None:
+    measurement = (EXPERIMENT_DIRECTORY / "measure-speed-arm.sh").read_text()
+    assert '"flashmla-hier": {' in measurement
+    assert '"VLLM_DSV4_FLASH_MLA_DECODE": "1"' in measurement
+    assert '"VLLM_HIER_ALL_REDUCE": "0,1;2,3"' in measurement
+    combined_case = measurement.split("    flashmla-hier)", 1)[1].split(
+        "        ;;", 1
+    )[0]
+    assert "Using native Ampere FlashMLA sparse decode" in combined_case
+    assert "'HIERARCHICAL'" in combined_case
+
+
 def test_hierarchical_gate_script_matches_checksum_pin() -> None:
     gate = EXPERIMENT_DIRECTORY / "hier_all_reduce_sm86_gate.py"
     gate_runner = (

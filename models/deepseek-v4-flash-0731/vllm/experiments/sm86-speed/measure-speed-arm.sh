@@ -32,6 +32,10 @@ expected_environment = {
     "prefill-block2": {"VLLM_SPARSE_DENSE_QUERY_BLOCK": "2"},
     "flashmla-decode": {"VLLM_DSV4_FLASH_MLA_DECODE": "1"},
     "hier-allreduce": {"VLLM_HIER_ALL_REDUCE": "0,1;2,3"},
+    "flashmla-hier": {
+        "VLLM_DSV4_FLASH_MLA_DECODE": "1",
+        "VLLM_HIER_ALL_REDUCE": "0,1;2,3",
+    },
     "indexer96": {"VLLM_SPARSE_INDEXER_MAX_LOGITS_MB": "96"},
     "batched320": {},
 }[arm]
@@ -50,6 +54,11 @@ case "$SPEED_ARM" in
             "$OUTPUT_DIRECTORY/startup.log" >/dev/null
         ;;
     hier-allreduce)
+        grep -F "'HIERARCHICAL'" "$OUTPUT_DIRECTORY/startup.log" >/dev/null
+        ;;
+    flashmla-hier)
+        grep -F "Using native Ampere FlashMLA sparse decode" \
+            "$OUTPUT_DIRECTORY/startup.log" >/dev/null
         grep -F "'HIERARCHICAL'" "$OUTPUT_DIRECTORY/startup.log" >/dev/null
         ;;
 esac
