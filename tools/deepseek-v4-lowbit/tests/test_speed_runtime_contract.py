@@ -110,6 +110,9 @@ def test_every_speed_arm_renders_without_runtime_side_effects(tmp_path: Path) ->
         assert manifest["expected_speed_tree"] == (
             "1260b4aba8fb5bf92e6632882326eb2b800ff3df"
         )
+        assert len(manifest["harness_commit"]) == 40
+        assert len(manifest["harness_tree"]) == 40
+        assert len(manifest["harness_sha256"]) == 64
         assert "plan_sha256=" in completed.stdout
 
 
@@ -203,6 +206,15 @@ printf '%s' '{"data":[{"id":"deepseek-v4-flash-0731-wna16-quality-12035985"}]}'
     assert " up --detach" in lifecycle
     assert " down --remove-orphans" in lifecycle
     assert "start vllm-deepseek-v4-wna16-sm86" in lifecycle
+
+
+def test_swap_normalization_is_fail_closed() -> None:
+    wrapper = (EXPERIMENT_DIRECTORY / "normalize-swap-then-measure.sh").read_text()
+    assert "mem_available_kib < swap_used_kib + reserve_kib" in wrapper
+    assert "sudo -n swapoff -a" in wrapper
+    assert "sudo -n swapon -a" in wrapper
+    assert 'docker top "$CONTAINER"' in wrapper
+    assert 'exec "$@"' in wrapper
 
 
 def test_host_subprocesses_do_not_reassign_readonly_inputs() -> None:

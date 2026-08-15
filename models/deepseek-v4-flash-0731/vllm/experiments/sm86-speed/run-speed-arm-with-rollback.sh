@@ -66,6 +66,19 @@ readonly HEALTH_URL="${HEALTH_URL:-UNSET}"
 readonly NSYS_OUTPUT_DIRECTORY="${NSYS_OUTPUT_DIRECTORY:-UNSET}"
 readonly NSYS_REPORT_BASENAME="${NSYS_REPORT_BASENAME:-deepseek-v4-decode}"
 readonly HIER_TRACE_GATE_JSON="${HIER_TRACE_GATE_JSON:-UNSET}"
+HARNESS_COMMIT="$(git -C "$REPOSITORY_ROOT" rev-parse HEAD)"
+readonly HARNESS_COMMIT
+HARNESS_TREE="$(git -C "$REPOSITORY_ROOT" rev-parse 'HEAD^{tree}')"
+readonly HARNESS_TREE
+HARNESS_SHA256="$(
+    cd "$SCRIPT_DIRECTORY"
+    find . -maxdepth 1 -type f -print0 \
+        | sort -z \
+        | xargs -0 sha256sum \
+        | sha256sum \
+        | cut -d' ' -f1
+)"
+readonly HARNESS_SHA256
 readonly EXPERIMENT_PROJECT="dsv4-wna16-speed-${ARM}"
 readonly EXPERIMENT_CONTAINER="vllm-deepseek-v4-speed-${ARM}"
 MEASUREMENT_COMMAND="$(printf '%q ' "${COMMAND[@]}")"
@@ -101,6 +114,9 @@ plan_json="$(
     PLAN_NSYS_REPORT_BASENAME="$NSYS_REPORT_BASENAME" \
     PLAN_EXPECTED_SPEED_COMMIT="$EXPECTED_SPEED_COMMIT" \
     PLAN_EXPECTED_SPEED_TREE="$EXPECTED_SPEED_TREE" \
+    PLAN_HARNESS_COMMIT="$HARNESS_COMMIT" \
+    PLAN_HARNESS_TREE="$HARNESS_TREE" \
+    PLAN_HARNESS_SHA256="$HARNESS_SHA256" \
     PLAN_MEASUREMENT_COMMAND="$MEASUREMENT_COMMAND" \
     PLAN_TRACE_GATE_SUMMARY="$trace_gate_summary" \
     python3 - <<'PY'
@@ -121,6 +137,9 @@ manifest["nsys_output_directory"] = os.environ["PLAN_NSYS_OUTPUT_DIRECTORY"]
 manifest["nsys_report_basename"] = os.environ["PLAN_NSYS_REPORT_BASENAME"]
 manifest["expected_speed_commit"] = os.environ["PLAN_EXPECTED_SPEED_COMMIT"]
 manifest["expected_speed_tree"] = os.environ["PLAN_EXPECTED_SPEED_TREE"]
+manifest["harness_commit"] = os.environ["PLAN_HARNESS_COMMIT"]
+manifest["harness_tree"] = os.environ["PLAN_HARNESS_TREE"]
+manifest["harness_sha256"] = os.environ["PLAN_HARNESS_SHA256"]
 manifest["measurement_command"] = os.environ["PLAN_MEASUREMENT_COMMAND"]
 manifest["trace_gate"] = json.loads(os.environ["PLAN_TRACE_GATE_SUMMARY"])
 print(json.dumps(manifest, indent=2, sort_keys=True))

@@ -84,12 +84,18 @@ Render a plan without touching Docker:
 ```bash
 models/deepseek-v4-flash-0731/vllm/experiments/sm86-speed/run-speed-arm-with-rollback.sh \
   --dry-run ARM EVIDENCE_DIRECTORY -- \
+  models/deepseek-v4-flash-0731/vllm/experiments/sm86-speed/normalize-swap-then-measure.sh \
   models/deepseek-v4-flash-0731/vllm/experiments/sm86-speed/measure-speed-arm.sh \
   EVIDENCE_DIRECTORY/measurement
 ```
 
 After reviewing the manifest, rerun the same command without `--dry-run` and
 set `SERVER60_SPEED_PLAN_SHA256` to the printed hash.
+
+The normalization wrapper checks that available RAM exceeds used swap by at
+least 8 GiB, resets host swap with passwordless `sudo`, verifies zero swap for
+every serving process, and only then starts measurement. The plan hash binds
+the exact wrapper command and a digest of the complete harness directory.
 
 Run `baseline` immediately before each candidate arm. Compare results from the
 same thermal window and experiment image:
