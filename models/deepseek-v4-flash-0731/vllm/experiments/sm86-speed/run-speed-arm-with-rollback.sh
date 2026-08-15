@@ -103,7 +103,7 @@ plan_json="$(
     PLAN_EXPECTED_SPEED_TREE="$EXPECTED_SPEED_TREE" \
     PLAN_MEASUREMENT_COMMAND="$MEASUREMENT_COMMAND" \
     PLAN_TRACE_GATE_SUMMARY="$trace_gate_summary" \
-    python - <<'PY'
+    python3 - <<'PY'
 import json
 import os
 
@@ -279,7 +279,7 @@ done
     exit 1
 }
 
-served_model="$(curl --fail --silent "$HEALTH_URL/v1/models" | python -c 'import json,sys; print(json.load(sys.stdin)["data"][0]["id"])')"
+served_model="$(curl --fail --silent "$HEALTH_URL/v1/models" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"][0]["id"])')"
 [[ "$served_model" == "$EXPECTED_MODEL_ID" ]] || {
     echo "Speed experiment served model mismatch: $served_model" >&2
     exit 1

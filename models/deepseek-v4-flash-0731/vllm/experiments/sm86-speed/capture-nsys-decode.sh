@@ -7,7 +7,7 @@ readonly OUTPUT_DIRECTORY="${1:?usage: capture-nsys-decode.sh OUTPUT_DIRECTORY}"
 mkdir -p "$OUTPUT_DIRECTORY"
 
 request_file="$OUTPUT_DIRECTORY/request.json"
-python - "$MODEL" > "$request_file" <<'PY'
+python3 - "$MODEL" > "$request_file" <<'PY'
 import json
 import sys
 
@@ -41,7 +41,7 @@ curl --fail --silent --show-error \
 curl --fail --silent --show-error --request POST \
     "$URL/stop_profile" > "$OUTPUT_DIRECTORY/stop-profile.json"
 
-python - "$OUTPUT_DIRECTORY/profiled-response.json" <<'PY'
+python3 - "$OUTPUT_DIRECTORY/profiled-response.json" <<'PY'
 import json
 import sys
 

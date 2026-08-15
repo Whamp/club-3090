@@ -18,7 +18,7 @@ docker logs "$CONTAINER" > "$OUTPUT_DIRECTORY/startup.log" 2>&1
 nvidia-smi --query-gpu=index,memory.used,memory.free,utilization.gpu,power.draw,temperature.gpu \
     --format=csv,noheader,nounits > "$OUTPUT_DIRECTORY/gpu-before.csv"
 
-SPEED_ARM="$SPEED_ARM" OUTPUT_DIRECTORY="$OUTPUT_DIRECTORY" python - <<'PY'
+SPEED_ARM="$SPEED_ARM" OUTPUT_DIRECTORY="$OUTPUT_DIRECTORY" python3 - <<'PY'
 import json
 import os
 
@@ -54,7 +54,7 @@ case "$SPEED_ARM" in
         ;;
 esac
 
-URL="$URL" MODEL="$MODEL" OUTPUT_DIRECTORY="$OUTPUT_DIRECTORY" python - <<'PY'
+URL="$URL" MODEL="$MODEL" OUTPUT_DIRECTORY="$OUTPUT_DIRECTORY" python3 - <<'PY'
 import json
 import os
 import urllib.request
