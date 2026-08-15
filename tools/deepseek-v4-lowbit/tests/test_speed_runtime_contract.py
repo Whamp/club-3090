@@ -205,6 +205,21 @@ printf '%s' '{"data":[{"id":"deepseek-v4-flash-0731-wna16-quality-12035985"}]}'
     assert "start vllm-deepseek-v4-wna16-sm86" in lifecycle
 
 
+def test_host_subprocesses_do_not_reassign_readonly_inputs() -> None:
+    measurement = (EXPERIMENT_DIRECTORY / "measure-speed-arm.sh").read_text()
+    long_context = (EXPERIMENT_DIRECTORY / "run-long-context-gate.sh").read_text()
+    assert (
+        'env SPEED_ARM="$SPEED_ARM" OUTPUT_DIRECTORY="$OUTPUT_DIRECTORY" python3'
+        in measurement
+    )
+    assert (
+        'env URL="$URL" MODEL="$MODEL" OUTPUT_DIRECTORY="$OUTPUT_DIRECTORY" python3'
+        in measurement
+    )
+    assert 'env URL="$URL" MODEL="$MODEL" CONTAINER="$CONTAINER"' in measurement
+    assert 'env URL="$URL" MODEL="$MODEL" CONTAINER="$CONTAINER"' in long_context
+
+
 def test_rollback_runner_never_recreates_production() -> None:
     runner = (EXPERIMENT_DIRECTORY / "run-speed-arm-with-rollback.sh").read_text()
     assert 'docker start "$PRODUCTION_CONTAINER"' in runner

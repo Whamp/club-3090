@@ -18,7 +18,7 @@ docker logs "$CONTAINER" > "$OUTPUT_DIRECTORY/startup.log" 2>&1
 nvidia-smi --query-gpu=index,memory.used,memory.free,utilization.gpu,power.draw,temperature.gpu \
     --format=csv,noheader,nounits > "$OUTPUT_DIRECTORY/gpu-before.csv"
 
-SPEED_ARM="$SPEED_ARM" OUTPUT_DIRECTORY="$OUTPUT_DIRECTORY" python3 - <<'PY'
+env SPEED_ARM="$SPEED_ARM" OUTPUT_DIRECTORY="$OUTPUT_DIRECTORY" python3 - <<'PY'
 import json
 import os
 
@@ -54,7 +54,7 @@ case "$SPEED_ARM" in
         ;;
 esac
 
-URL="$URL" MODEL="$MODEL" OUTPUT_DIRECTORY="$OUTPUT_DIRECTORY" python3 - <<'PY'
+env URL="$URL" MODEL="$MODEL" OUTPUT_DIRECTORY="$OUTPUT_DIRECTORY" python3 - <<'PY'
 import json
 import os
 import urllib.request
@@ -143,7 +143,7 @@ PY
 
 (
     cd "$REPOSITORY_ROOT"
-    URL="$URL" MODEL="$MODEL" CONTAINER="$CONTAINER" \
+    env URL="$URL" MODEL="$MODEL" CONTAINER="$CONTAINER" \
     WARMUPS=3 RUNS=5 ONLY=code MAX_TOKENS_CODE=512 \
     PREFILL_PROBE=1 PREFILL_DEPTHS=8984 PREFILL_RUNS=3 \
     bash scripts/bench.sh

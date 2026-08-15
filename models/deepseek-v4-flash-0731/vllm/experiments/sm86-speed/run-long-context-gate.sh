@@ -16,7 +16,7 @@ mkdir -p "$OUTPUT_DIRECTORY"
 # this gate records actual free memory and never relabels that ceiling as safe.
 (
     cd "$REPOSITORY_ROOT"
-    URL="$URL" MODEL="$MODEL" CONTAINER="$CONTAINER" \
+    env URL="$URL" MODEL="$MODEL" CONTAINER="$CONTAINER" \
     VRAM_MARGIN_MB=0 STRESS_LONGCTX_TIMEOUT_S=900 \
     bash scripts/verify-stress.sh
 ) | tee "$OUTPUT_DIRECTORY/verify-stress-functional.log"
