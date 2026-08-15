@@ -1,0 +1,7 @@
+services:
+  deepseek-v4-wna16-sm86:
+    volumes:
+      - ${NSYS_OUTPUT_DIRECTORY:?set NSYS_OUTPUT_DIRECTORY for trace-baseline}:/profiles
+    environment:
+      NSYS_REPORT_DIRECTORY: /profiles
+      NSYS_REPORT_BASENAME: ${NSYS_REPORT_BASENAME:-deepseek-v4-decode}

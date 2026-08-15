@@ -24,6 +24,10 @@ deepseek-v4-run-frontier-batch = "deepseek_v4_lowbit.frontier_batch_cli:main"
 deepseek-v4-validate-frontier-resume = "deepseek_v4_lowbit.frontier_resume_cli:main"
 deepseek-v4-require-frontier-resume = "deepseek_v4_lowbit.frontier_resume_receipt_cli:main"
 deepseek-v4-publish-frontier = "deepseek_v4_lowbit.frontier_publish_cli:main"
+deepseek-v4-speed-experiment = "deepseek_v4_lowbit.speed_experiment:main"
+deepseek-v4-validate-speed-trace = "deepseek_v4_lowbit.speed_trace_gate:main"
+deepseek-v4-summarize-nsys-kernels = "deepseek_v4_lowbit.nsys_kernel_summary:main"
+deepseek-v4-compare-speed-results = "deepseek_v4_lowbit.speed_result:main"
 
 [build-system]
 requires = ["hatchling"]

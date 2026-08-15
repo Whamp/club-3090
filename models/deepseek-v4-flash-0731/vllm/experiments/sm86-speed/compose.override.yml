@@ -1,0 +1,9 @@
+# Experiment-only overlay. Never register this as a public c3 profile.
+services:
+  deepseek-v4-wna16-sm86:
+    restart: "no"
+    environment:
+      VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: ${VLLM_SPARSE_INDEXER_MAX_LOGITS_MB:-64}
+      VLLM_SPARSE_DENSE_QUERY_BLOCK: ${VLLM_SPARSE_DENSE_QUERY_BLOCK:-0}
+      VLLM_DSV4_FLASH_MLA_DECODE: ${VLLM_DSV4_FLASH_MLA_DECODE:-0}
+      VLLM_HIER_ALL_REDUCE: ${VLLM_HIER_ALL_REDUCE:-}

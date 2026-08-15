@@ -1,0 +1,31 @@
+# syntax=docker/dockerfile:1.7
+ARG VERIFIED_CAPACITY_RUNTIME_IMAGE
+FROM ${VERIFIED_CAPACITY_RUNTIME_IMAGE}
+
+COPY flash_mla-2.0.0-cp39-abi3-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl \
+    /tmp/flash_mla-2.0.0-cp39-abi3-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl
+RUN uv pip install --python /opt/venv/bin/python --no-deps \
+        /tmp/flash_mla-2.0.0-cp39-abi3-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl \
+    && uv pip install --python /opt/venv/bin/python pytest==9.1.1 \
+    && /opt/venv/bin/python - <<'PY'
+import importlib.metadata
+import importlib.util
+
+assert importlib.metadata.version("flash-mla") == "2.0.0"
+for module_name in ("flash_mla", "flash_mla_cuda"):
+    spec = importlib.util.find_spec(module_name)
+    assert spec is not None and spec.origin is not None, module_name
+    print(f"flash_mla_component={module_name} path={spec.origin}")
+PY
+RUN extension="$(find /opt/venv -name 'flash_mla_cuda*.so' -type f -print -quit)" \
+    && test -n "$extension" \
+    && cuobjdump --list-elf "$extension" | grep -F 'sm_86'
+
+COPY vllm/envs.py \
+    /workspace/vllm/vllm/envs.py
+COPY vllm/distributed/device_communicators/cuda_communicator.py \
+    /workspace/vllm/vllm/distributed/device_communicators/cuda_communicator.py
+COPY vllm/models/deepseek_v4/ampere/ampere_sparse.py \
+    /workspace/vllm/vllm/models/deepseek_v4/ampere/ampere_sparse.py
+
+RUN rm -f /tmp/flash_mla-2.0.0-cp39-abi3-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl

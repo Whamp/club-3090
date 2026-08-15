@@ -76,6 +76,27 @@ patches:
       drop_when: "replace after equivalent mixed-group WNA16 and Marlin output-projection support reaches an upstream runtime validated on SM86"
     status: verified
 
+  - id: deepseek-v4-sm86-speed-experiments
+    model: [deepseek-v4-flash-0731]
+    files:
+      - models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-sm86-speed-experiments
+    load_bearing_when: []
+    delivery:
+      dockerfile_bake: false
+      entrypoint_invoke: false
+      genesis: false
+    delivery_gaps: []
+    delivery_mechanism: none
+    delivery_spec: null
+    drift_guard: null
+    capability: dsv4-sm86-speed-experiments
+    foundational: false
+    upstream:
+      ref: AppMana/forks-flash-mla-ampere-dsv4@7f41a5baa5cf57bfbce06458794b4b05737a162a,vllm-project/vllm#50941
+      status: experiment-only
+      drop_when: "remove after an equivalent SM86 sparse-MLA path and measured topology-appropriate collective optimization reach the selected runtime"
+    status: suspect
+
   - id: qwen-sglang-autoround-fused-bf16
     deprecated_on: "2026-06-05"
     deprecation_reason: "SGLang path parked; no functional compose uses it (#254)."

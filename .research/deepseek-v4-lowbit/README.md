@@ -11,6 +11,7 @@ Start with [`REPORT.md`](REPORT.md). It is the cold-reader account of the artifa
 | [`VLLM-PERFORMANCE-RESEARCH.md`](VLLM-PERFORMANCE-RESEARCH.md) | vLLM scheduler, CUDA graph, KV-cache, attention, memory, and communication research |
 | [`VLLM-PERFORMANCE-PLAN.md`](VLLM-PERFORMANCE-PLAN.md) | Performance campaign plan and execution ledger |
 | [`CAPACITY-MARLIN-20260814.md`](CAPACITY-MARLIN-20260814.md) | Causal 131K-to-230K capacity campaign |
+| [`SPEED-OPPORTUNITIES-20260814.md`](SPEED-OPPORTUNITIES-20260814.md) | Source-grounded, capacity-preserving speed opportunities and experiment order |
 | [`evidence/capacity-marlin-20260814/`](evidence/capacity-marlin-20260814/) | Compact final-image evidence and SHA-256 manifest |
 
 ## Immutable external evidence

@@ -1,0 +1,77 @@
+From 1d6b37c8eb904bb2d1db7ddd05b002157d5e9f26 Mon Sep 17 00:00:00 2001
+From: Will Hampson <whamp@ggl.slmail.me>
+Date: Fri, 14 Aug 2026 19:04:56 -0700
+Subject: [PATCH] chore: report hierarchical all-reduce dispatch
+
+Include the existing opt-in backend in the startup dispatch-order proof line so performance experiments can verify eligibility from logs.\n\nAssisted-by: OpenAI Codex
+---
+ .../test_hier_all_reduce_logging.py           | 35 +++++++++++++++++++
+ .../device_communicators/cuda_communicator.py |  3 ++
+ 2 files changed, 38 insertions(+)
+ create mode 100644 tests/distributed/test_hier_all_reduce_logging.py
+
+diff --git a/tests/distributed/test_hier_all_reduce_logging.py b/tests/distributed/test_hier_all_reduce_logging.py
+new file mode 100644
+index 000000000..71f1682eb
+--- /dev/null
++++ b/tests/distributed/test_hier_all_reduce_logging.py
+@@ -0,0 +1,35 @@
++# SPDX-License-Identifier: Apache-2.0
++# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
++
++from unittest.mock import Mock
++
++from vllm.distributed.device_communicators import cuda_communicator
++
++
++def test_hierarchical_all_reduce_is_reported_in_dispatch_order(monkeypatch) -> None:
++    communicator = object.__new__(cuda_communicator.CudaCommunicator)
++    communicator.world_size = 4
++    communicator.unique_name = "tp"
++    communicator.pynccl_comm = None
++    communicator.qr_comm = None
++    communicator.fi_ar_comm = None
++    communicator.aiter_ar_comm = None
++    communicator.hier_ar_comm = object()
++    communicator.ca_comm = None
++    communicator.symm_mem_comm = None
++    logger = Mock()
++    monkeypatch.setattr(cuda_communicator, "logger", logger)
++    monkeypatch.setattr(
++        cuda_communicator,
++        "is_symmetric_memory_enabled",
++        lambda: False,
++    )
++
++    communicator._log_all_reduce_backend_selection()
++
++    enabled_backends = logger.info_once.call_args.args[1]
++    potential_backends = logger.info_once.call_args.args[3]
++    assert "'HIERARCHICAL'" in enabled_backends
++    assert potential_backends.index("'HIERARCHICAL'") < potential_backends.index(
++        "'CUSTOM'"
++    )
+diff --git a/vllm/distributed/device_communicators/cuda_communicator.py b/vllm/distributed/device_communicators/cuda_communicator.py
+index 9e8086c57..3d4d8dda2 100644
+--- a/vllm/distributed/device_communicators/cuda_communicator.py
++++ b/vllm/distributed/device_communicators/cuda_communicator.py
+@@ -249,6 +249,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
+             "QUICK_REDUCE",
+             "FLASHINFER",
+             "AITER_CUSTOM",
++            "HIERARCHICAL",
+             "CUSTOM",
+             "SYMM_MEM",
+             "PYNCCL",
+@@ -284,6 +285,8 @@ class CudaCommunicator(DeviceCommunicatorBase):
+             enabled_ar_backends.append("FLASHINFER")
+         if self.aiter_ar_comm is not None and not self.aiter_ar_comm.disabled:
+             enabled_ar_backends.append("AITER_CUSTOM")
++        if self.hier_ar_comm is not None:
++            enabled_ar_backends.append("HIERARCHICAL")
+         if self.ca_comm is not None and not self.ca_comm.disabled:
+             enabled_ar_backends.append("CUSTOM")
+         if self.symm_mem_comm is not None and not self.symm_mem_comm.disabled:
+-- 
+2.55.0
+

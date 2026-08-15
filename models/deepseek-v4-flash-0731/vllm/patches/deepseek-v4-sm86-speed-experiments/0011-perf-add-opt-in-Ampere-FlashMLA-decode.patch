@@ -1,0 +1,397 @@
+From 17ca4bad13e08e326a7a84af89676816e80bc1e7 Mon Sep 17 00:00:00 2001
+From: Will Hampson <whamp@ggl.slmail.me>
+Date: Fri, 14 Aug 2026 18:47:50 -0700
+Subject: [PATCH] perf: add opt-in Ampere FlashMLA decode
+
+Keep the existing Triton sparse-MLA path as the default and complete fallback. When explicitly enabled, dispatch fp8_ds_mla decode through the pinned AppMana sparse_mla_decode_fp8 operator while leaving prefill unchanged.\n\nSource design: AppMana/forks-flash-mla-int@7f41a5baa5cf57bfbce06458794b4b05737a162a (MIT).\n\nAssisted-by: OpenAI Codex
+---
+ .../test_ampere_flash_mla_decode.py           | 213 ++++++++++++++++++
+ vllm/envs.py                                  |   4 +
+ .../deepseek_v4/ampere/ampere_sparse.py       | 117 +++++++++-
+ 3 files changed, 333 insertions(+), 1 deletion(-)
+ create mode 100644 tests/models/deepseek_v4/test_ampere_flash_mla_decode.py
+
+diff --git a/tests/models/deepseek_v4/test_ampere_flash_mla_decode.py b/tests/models/deepseek_v4/test_ampere_flash_mla_decode.py
+new file mode 100644
+index 000000000..10113f02b
+--- /dev/null
++++ b/tests/models/deepseek_v4/test_ampere_flash_mla_decode.py
+@@ -0,0 +1,213 @@
++# SPDX-License-Identifier: Apache-2.0
++# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
++
++import importlib
++from types import SimpleNamespace
++from unittest.mock import Mock
++
++import pytest
++import torch
++
++from vllm.models.deepseek_v4.ampere import ampere_sparse
++
++
++def test_flash_mla_decode_dependency_fails_closed(monkeypatch) -> None:
++    def missing_flash_mla(name: str):
++        assert name == "flash_mla"
++        raise ModuleNotFoundError(name)
++
++    monkeypatch.setattr(importlib, "import_module", missing_flash_mla)
++
++    with pytest.raises(RuntimeError, match="FlashMLA decode was enabled"):
++        ampere_sparse.load_ampere_flash_mla_decode()
++
++
++def test_flash_mla_decode_dependency_requires_fp8_operator(monkeypatch) -> None:
++    monkeypatch.setattr(
++        importlib,
++        "import_module",
++        lambda name: SimpleNamespace(),
++    )
++
++    with pytest.raises(RuntimeError, match="sparse_mla_decode_fp8"):
++        ampere_sparse.load_ampere_flash_mla_decode()
++
++
++def test_flash_mla_decode_dependency_returns_operator(monkeypatch) -> None:
++    expected = Mock()
++    monkeypatch.setattr(
++        importlib,
++        "import_module",
++        lambda name: SimpleNamespace(sparse_mla_decode_fp8=expected),
++    )
++
++    assert ampere_sparse.load_ampere_flash_mla_decode() is expected
++
++
++def test_flash_mla_decode_is_opt_in(monkeypatch) -> None:
++    monkeypatch.setattr(ampere_sparse.envs, "VLLM_DSV4_FLASH_MLA_DECODE", False)
++    load_decode = Mock()
++    monkeypatch.setattr(ampere_sparse, "load_ampere_flash_mla_decode", load_decode)
++
++    layer = object.__new__(ampere_sparse.DeepseekV4AmpereMLAAttention)
++    torch.nn.Module.__init__(layer)
++    monkeypatch.setattr(
++        ampere_sparse.DeepseekV4ROCMAiterMLAAttention,
++        "__init__",
++        lambda self, *args, **kwargs: None,
++    )
++
++    ampere_sparse.DeepseekV4AmpereMLAAttention.__init__(layer)
++
++    assert layer._flash_mla_decode is None
++    load_decode.assert_not_called()
++
++
++def test_flash_mla_decode_uses_existing_triton_path_when_disabled(monkeypatch) -> None:
++    layer = object.__new__(ampere_sparse.DeepseekV4AmpereMLAAttention)
++    torch.nn.Module.__init__(layer)
++    layer._flash_mla_decode = None
++    fallback = Mock()
++    monkeypatch.setattr(
++        ampere_sparse.DeepseekV4ROCMAiterMLAAttention,
++        "_forward_decode",
++        fallback,
++    )
++    arguments = {
++        "q": Mock(),
++        "kv_cache": Mock(),
++        "swa_metadata": Mock(),
++        "attn_metadata": Mock(),
++        "swa_only": False,
++        "output": Mock(),
++    }
++
++    layer._forward_decode(**arguments)
++
++    fallback.assert_called_once_with(**arguments)
++
++
++def test_flash_mla_decode_dispatches_c128a_batch() -> None:
++    flash_decode = Mock(return_value=torch.full((2, 64, 512), 3.0))
++    layer = object.__new__(ampere_sparse.DeepseekV4AmpereMLAAttention)
++    torch.nn.Module.__init__(layer)
++    layer._flash_mla_decode = flash_decode
++    layer.kv_cache_dtype = "fp8_ds_mla"
++    layer.compress_ratio = 128
++    layer.scale = 0.125
++    layer.attn_sink = None
++    layer.swa_cache_layer = SimpleNamespace(
++        kv_cache=torch.zeros((4, 64, 584), dtype=torch.uint8)
++    )
++
++    q = torch.zeros((2, 64, 512), dtype=torch.bfloat16)
++    output = torch.empty_like(q)
++    compressed_cache = torch.zeros((3, 64, 584), dtype=torch.uint8)
++    extra_indices = torch.tensor([[[1, 2]], [[3, -1]]], dtype=torch.int32)
++    extra_lens = torch.tensor([2, 1], dtype=torch.int32)
++    attn_metadata = SimpleNamespace(
++        c128a_global_decode_topk_indices=extra_indices,
++        c128a_decode_topk_lens=extra_lens,
++    )
++    swa_metadata = SimpleNamespace(
++        num_decodes=2,
++        num_decode_tokens=2,
++        decode_swa_indices=torch.tensor([[4, 5], [6, -1]], dtype=torch.int32),
++        decode_swa_lens=torch.tensor([2, 1], dtype=torch.int32),
++    )
++
++    layer._forward_decode(
++        q=q,
++        kv_cache=compressed_cache,
++        swa_metadata=swa_metadata,
++        attn_metadata=attn_metadata,
++        swa_only=False,
++        output=output,
++    )
++
++    torch.testing.assert_close(output, torch.full_like(output, 3.0))
++    call = flash_decode.call_args.kwargs
++    assert call["q"] is q
++    assert call["swa_cache"] is layer.swa_cache_layer.kv_cache
++    assert call["extra_cache"] is compressed_cache
++    torch.testing.assert_close(call["extra_indices"], extra_indices.reshape(2, -1))
++    torch.testing.assert_close(call["extra_lens"], extra_lens)
++
++
++def test_flash_mla_decode_dispatches_c4a_global_indices(monkeypatch) -> None:
++    flash_decode = Mock(return_value=torch.full((1, 64, 512), 2.0))
++    layer = object.__new__(ampere_sparse.DeepseekV4AmpereMLAAttention)
++    torch.nn.Module.__init__(layer)
++    layer._flash_mla_decode = flash_decode
++    layer.kv_cache_dtype = "fp8_ds_mla"
++    layer.compress_ratio = 4
++    layer.scale = 0.125
++    layer.attn_sink = None
++    layer.swa_cache_layer = SimpleNamespace(
++        kv_cache=torch.zeros((4, 64, 584), dtype=torch.uint8)
++    )
++    layer.topk_indices_buffer = torch.tensor([[0, 1]], dtype=torch.int32)
++    output_buffers = (torch.empty_like(layer.topk_indices_buffer), torch.empty(1))
++    monkeypatch.setattr(
++        layer,
++        "_global_topk_output_buffers",
++        lambda source: output_buffers,
++    )
++    global_indices = torch.tensor([[8, 9]], dtype=torch.int32)
++    global_lens = torch.tensor([2], dtype=torch.int32)
++    compute_indices = Mock(return_value=(global_indices, global_lens))
++    monkeypatch.setattr(
++        ampere_sparse,
++        "compute_global_topk_indices_and_lens",
++        compute_indices,
++    )
++
++    q = torch.zeros((1, 64, 512), dtype=torch.bfloat16)
++    output = torch.empty_like(q)
++    compressed_cache = torch.zeros((3, 64, 584), dtype=torch.uint8)
++    attn_metadata = SimpleNamespace(
++        block_size=256,
++        block_table=torch.tensor([[0, 1]], dtype=torch.int32),
++    )
++    swa_metadata = SimpleNamespace(
++        num_decodes=1,
++        num_decode_tokens=1,
++        is_valid_token=torch.tensor([True]),
++        token_to_req_indices=torch.tensor([0], dtype=torch.int32),
++        decode_swa_indices=torch.tensor([[4, 5]], dtype=torch.int32),
++        decode_swa_lens=torch.tensor([2], dtype=torch.int32),
++    )
++
++    layer._forward_decode(
++        q=q,
++        kv_cache=compressed_cache,
++        swa_metadata=swa_metadata,
++        attn_metadata=attn_metadata,
++        swa_only=False,
++        output=output,
++    )
++
++    compute_indices.assert_called_once()
++    assert compute_indices.call_args.kwargs["output_buffers"] is output_buffers
++    torch.testing.assert_close(
++        flash_decode.call_args.kwargs["extra_indices"], global_indices
++    )
++    torch.testing.assert_close(flash_decode.call_args.kwargs["extra_lens"], global_lens)
++    torch.testing.assert_close(output, torch.full_like(output, 2.0))
++
++
++def test_flash_mla_decode_rejects_non_fp8_cache() -> None:
++    layer = object.__new__(ampere_sparse.DeepseekV4AmpereMLAAttention)
++    torch.nn.Module.__init__(layer)
++    layer._flash_mla_decode = Mock()
++    layer.kv_cache_dtype = "bfloat16"
++
++    with pytest.raises(ValueError, match="requires fp8_ds_mla"):
++        layer._forward_decode(
++            q=Mock(),
++            kv_cache=Mock(),
++            swa_metadata=Mock(),
++            attn_metadata=Mock(),
++            swa_only=False,
++            output=Mock(),
++        )
+diff --git a/vllm/envs.py b/vllm/envs.py
+index fa7305b97..16d54507e 100755
+--- a/vllm/envs.py
++++ b/vllm/envs.py
+@@ -196,6 +196,7 @@ if TYPE_CHECKING:
+     VLLM_SPARSE_DECODE_MAXNREG: int = 0
+     VLLM_SPARSE_DENSE_QUERY_BLOCK: int = -1
+     VLLM_SPARSE_DENSE_QUERY_BLOCK_DECODE: int = -1
++    VLLM_DSV4_FLASH_MLA_DECODE: bool = False
+     VLLM_MARLIN_FP8_DEQUANT_BF16: bool = False
+     VLLM_MARLIN_FP8_DEQUANT_EXCLUDE: str = ""
+     VLLM_DSPARK_FUSED_MARKOV: bool = True
+@@ -1700,6 +1701,9 @@ environment_variables: dict[str, Callable[[], Any]] = {
+     "VLLM_SPARSE_DENSE_QUERY_BLOCK_DECODE": lambda: int(
+         os.environ.get("VLLM_SPARSE_DENSE_QUERY_BLOCK_DECODE", "-1")
+     ),
++    "VLLM_DSV4_FLASH_MLA_DECODE": lambda: bool(
++        int(os.getenv("VLLM_DSV4_FLASH_MLA_DECODE", "0"))
++    ),
+     # On GPUs without native FP8 (where block-quantized FP8 linear layers fall
+     # back to weight-only Marlin), dequantize those weights to the model dtype
+     # once at load and run them through cuBLAS instead. Trades weight VRAM
+diff --git a/vllm/models/deepseek_v4/ampere/ampere_sparse.py b/vllm/models/deepseek_v4/ampere/ampere_sparse.py
+index f9806a312..e568592ff 100644
+--- a/vllm/models/deepseek_v4/ampere/ampere_sparse.py
++++ b/vllm/models/deepseek_v4/ampere/ampere_sparse.py
+@@ -9,12 +9,45 @@ Triton/torch (the aiter-only preshuffle GEMMs self-disable off ROCm), and
+ where Triton refuses native fp8 converts.
+ """
+ 
++import importlib
++from collections.abc import Callable
++
++import torch
++
++import vllm.envs as envs
++from vllm.logger import init_logger
+ from vllm.models.deepseek_v4.amd.rocm import (
+     DeepseekV4ROCMAiterMLAAttention,
+     DeepseekV4ROCMAiterMLASparseBackend,
++    DeepseekV4ROCMAiterMLASparseMetadata,
++    DeepseekV4ROCMAiterSparseSWAMetadata,
++)
++from vllm.models.deepseek_v4.common.ops.cache_utils import (
++    compute_global_topk_indices_and_lens,
+ )
+ from vllm.platforms.interface import DeviceCapability
+ 
++logger = init_logger(__name__)
++
++FlashMLADecode = Callable[..., torch.Tensor]
++
++
++def load_ampere_flash_mla_decode() -> FlashMLADecode:
++    """Load the optional Ampere sparse MLA decode operator or fail closed."""
++    try:
++        flash_mla = importlib.import_module("flash_mla")
++    except ModuleNotFoundError as error:
++        raise RuntimeError(
++            "DeepSeek V4 FlashMLA decode was enabled, but flash_mla is not installed"
++        ) from error
++    decode = getattr(flash_mla, "sparse_mla_decode_fp8", None)
++    if decode is None:
++        raise RuntimeError(
++            "DeepSeek V4 FlashMLA decode was enabled, but flash_mla does not "
++            "export sparse_mla_decode_fp8"
++        )
++    return decode
++
+ 
+ class DeepseekV4AmpereMLASparseBackend(DeepseekV4ROCMAiterMLASparseBackend):
+     @staticmethod
+@@ -27,6 +60,88 @@ class DeepseekV4AmpereMLASparseBackend(DeepseekV4ROCMAiterMLASparseBackend):
+ 
+ 
+ class DeepseekV4AmpereMLAAttention(DeepseekV4ROCMAiterMLAAttention):
+-    """SM8x DeepSeek V4 attention: ROCm Triton path on CUDA Ampere."""
++    """SM8x DeepSeek V4 attention with optional native FlashMLA decode."""
+ 
+     backend_cls = DeepseekV4AmpereMLASparseBackend
++
++    def __init__(self, *args, **kwargs) -> None:
++        super().__init__(*args, **kwargs)
++        self._flash_mla_decode = (
++            load_ampere_flash_mla_decode() if envs.VLLM_DSV4_FLASH_MLA_DECODE else None
++        )
++        if self._flash_mla_decode is not None:
++            if self.kv_cache_dtype != "fp8_ds_mla":
++                raise ValueError(
++                    "DeepSeek V4 FlashMLA decode requires fp8_ds_mla KV cache, "
++                    f"got {self.kv_cache_dtype}"
++                )
++            logger.info_once(
++                "Using native Ampere FlashMLA sparse decode; prefill remains "
++                "on the Triton sparse MLA path."
++            )
++
++    def _forward_decode(
++        self,
++        q: torch.Tensor,
++        kv_cache: torch.Tensor | None,
++        swa_metadata: DeepseekV4ROCMAiterSparseSWAMetadata,
++        attn_metadata: DeepseekV4ROCMAiterMLASparseMetadata | None,
++        swa_only: bool,
++        output: torch.Tensor,
++    ) -> None:
++        flash_mla_decode = self._flash_mla_decode
++        if flash_mla_decode is None:
++            super()._forward_decode(
++                q=q,
++                kv_cache=kv_cache,
++                swa_metadata=swa_metadata,
++                attn_metadata=attn_metadata,
++                swa_only=swa_only,
++                output=output,
++            )
++            return
++        if self.kv_cache_dtype != "fp8_ds_mla":
++            raise ValueError(
++                "DeepSeek V4 FlashMLA decode requires fp8_ds_mla KV cache, "
++                f"got {self.kv_cache_dtype}"
++            )
++
++        num_decodes = swa_metadata.num_decodes
++        num_decode_tokens = swa_metadata.num_decode_tokens
++        topk_indices = None
++        topk_lens = None
++        if not swa_only:
++            assert attn_metadata is not None
++            if self.compress_ratio == 4:
++                assert swa_metadata.is_valid_token is not None
++                assert self.topk_indices_buffer is not None
++                block_size = attn_metadata.block_size // self.compress_ratio
++                source_indices = self.topk_indices_buffer[:num_decode_tokens]
++                global_indices, topk_lens = compute_global_topk_indices_and_lens(
++                    source_indices,
++                    swa_metadata.token_to_req_indices,
++                    attn_metadata.block_table[:num_decodes],
++                    block_size,
++                    swa_metadata.is_valid_token[:num_decode_tokens],
++                    output_buffers=self._global_topk_output_buffers(source_indices),
++                )
++                topk_indices = global_indices.view(num_decode_tokens, 1, -1)
++            else:
++                topk_indices = attn_metadata.c128a_global_decode_topk_indices
++                topk_lens = attn_metadata.c128a_decode_topk_lens
++
++        extra_indices = None
++        if topk_indices is not None:
++            extra_indices = topk_indices.reshape(num_decode_tokens, -1).contiguous()
++        result = flash_mla_decode(
++            q=q,
++            swa_cache=self.swa_cache_layer.kv_cache,
++            swa_indices=swa_metadata.decode_swa_indices[:num_decode_tokens],
++            swa_lens=swa_metadata.decode_swa_lens[:num_decode_tokens],
++            scale=self.scale,
++            attn_sink=self.attn_sink,
++            extra_cache=None if swa_only else kv_cache,
++            extra_indices=extra_indices,
++            extra_lens=topk_lens,
++        )
++        output.copy_(result)
+-- 
+2.55.0
+

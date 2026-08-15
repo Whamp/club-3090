@@ -1,0 +1,14 @@
+# syntax=docker/dockerfile:1.7
+ARG VERIFIED_SPEED_RUNTIME_IMAGE
+FROM ${VERIFIED_SPEED_RUNTIME_IMAGE}
+
+COPY NsightSystems-linux-cli-public-2026.4.1.191-3860507.deb /tmp/nsight.deb
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends /tmp/nsight.deb \
+    && nsys --version \
+    && rm -f /tmp/nsight.deb \
+    && rm -rf /var/lib/apt/lists/*
+COPY nsys-vllm-entrypoint.sh /usr/local/bin/nsys-vllm-entrypoint
+RUN chmod 0755 /usr/local/bin/nsys-vllm-entrypoint
+
+ENTRYPOINT ["/usr/local/bin/nsys-vllm-entrypoint"]
