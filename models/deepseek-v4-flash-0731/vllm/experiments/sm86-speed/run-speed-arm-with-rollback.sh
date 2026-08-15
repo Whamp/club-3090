@@ -268,12 +268,14 @@ trap restore_production EXIT INT TERM
 
 # Every arm uses the same speed image. Only these exported profile values differ.
 export MAX_MODEL_LEN=230144 GPU_MEMORY_UTILIZATION=0.98 MAX_NUM_SEQS=2
-export MAX_NUM_BATCHED_TOKENS=256 VLLM_SPARSE_INDEXER_MAX_LOGITS_MB=64
+export MAX_NUM_BATCHED_TOKENS=256 KV_OFFLOADING_SIZE=16
+export VLLM_SPARSE_INDEXER_MAX_LOGITS_MB=64
 export VLLM_SPARSE_DENSE_QUERY_BLOCK=0 VLLM_DSV4_FLASH_MLA_DECODE=0
 export VLLM_HIER_ALL_REDUCE=""
 export NSYS_OUTPUT_DIRECTORY NSYS_REPORT_BASENAME
 case "$ARM" in
     baseline) ;;
+    trace-baseline) export KV_OFFLOADING_SIZE=0 ;;
     prefill-block2) export VLLM_SPARSE_DENSE_QUERY_BLOCK=2 ;;
     flashmla-decode) export VLLM_DSV4_FLASH_MLA_DECODE=1 ;;
     hier-allreduce) export VLLM_HIER_ALL_REDUCE="0,1;2,3" ;;

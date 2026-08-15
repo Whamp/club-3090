@@ -44,7 +44,7 @@ image. Do not promote a small gain within run-to-run noise.
 | `hier-allreduce` | `VLLM_HIER_ALL_REDUCE=0,1;2,3` | island-local reduce plus cross-island transfer replaces PyNCCL | a reviewed Nsight trace shows all-reduce on the critical path, the numerical gate passes, and decode rises |
 | `indexer96` | sparse-indexer logits workspace 64 MiB to 96 MiB | fewer query-dimension splits | prefill or decode rises with negligible KV loss |
 | `batched320` | `max_num_batched_tokens=256` to `320` | larger prefill chunks | prefill rises while decode and KV capacity remain acceptable |
-| `trace-baseline` | Nsight Systems observation | attributes warmed decode time | evidence only; never use trace throughput as benchmark data |
+| `trace-baseline` | observational trace with `KV_OFFLOADING_SIZE=0` | attributes warmed decode time without an unused 16 GiB host tier competing with Nsight | evidence only; never use trace throughput as benchmark data |
 
 The upstream narrow-eager-region change is excluded. Its current V1 PIECEWISE
 configuration has a documented correctness failure. Query-blocked sparse decode
@@ -114,7 +114,9 @@ capacity, and the predicted mediator before keeping an arm.
 ## Nsight attribution and hierarchical all-reduce
 
 1. Run `trace-baseline` with the Nsight image and
-   `capture-nsys-decode.sh` as the measurement command.
+   `capture-nsys-decode.sh` as the measurement command. This observational arm
+   records `KV_OFFLOADING_SIZE=0`: its 256-token request cannot use host KV,
+   while retaining the unused 16 GiB tier can make Nsight pressure host swap.
 2. Summarize the `.nsys-rep` with `analyze-nsys-decode.sh`.
 3. Review the timeline. Record the critical-path all-reduce fraction and note.
 4. Validate the review with `deepseek-v4-speed-trace-gate`.

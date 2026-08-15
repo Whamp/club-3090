@@ -10,6 +10,7 @@ BASELINE_PROFILE: dict[str, str] = {
     "GPU_MEMORY_UTILIZATION": "0.98",
     "MAX_NUM_SEQS": "2",
     "MAX_NUM_BATCHED_TOKENS": "256",
+    "KV_OFFLOADING_SIZE": "16",
     "VLLM_SPARSE_INDEXER_MAX_LOGITS_MB": "64",
     "VLLM_SPARSE_DENSE_QUERY_BLOCK": "0",
     "VLLM_DSV4_FLASH_MLA_DECODE": "0",
@@ -34,7 +35,7 @@ REQUIRED_GATES = [
 
 @dataclass(frozen=True)
 class ExperimentArm:
-    """One DeepSeek V4 speed hypothesis with exactly one changed variable."""
+    """One DeepSeek V4 speed hypothesis or explicit observation profile."""
 
     name: str
     outcome: str
@@ -48,11 +49,11 @@ class ExperimentArm:
         unknown = set(self.changed_values) - set(BASELINE_PROFILE)
         if unknown:
             raise ValueError(f"unknown speed experiment variables: {sorted(unknown)}")
-        if self.name == "baseline" or self.observational:
+        if self.name == "baseline":
             if self.changed_values:
-                raise ValueError(
-                    f"observational speed arm {self.name!r} must not change variables"
-                )
+                raise ValueError("the baseline speed arm must not change variables")
+            return
+        if self.observational:
             return
         if len(self.changed_values) != 1:
             raise ValueError(
@@ -80,6 +81,7 @@ EXPERIMENT_ARMS: dict[str, ExperimentArm] = {
         name="trace-baseline",
         outcome="Attribute one baseline decode interval with Nsight Systems.",
         precondition="The unprofiled baseline passes and profiling is not benchmarked.",
+        changed_values={"KV_OFFLOADING_SIZE": "0"},
         predicted_mediator="Reports sparse MLA, NCCL, MoE, and host-gap time shares.",
         lose_condition="Trace misses CUDA graphs/NCCL or changes request behavior.",
         observational=True,

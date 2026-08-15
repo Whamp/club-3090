@@ -97,7 +97,7 @@ services:
       - --kv-cache-dtype
       - fp8_ds_mla
       - --kv-offloading-size
-      - "16"
+      - "${KV_OFFLOADING_SIZE:-16}"
       - --disable-custom-all-reduce
       - --enable-chunked-prefill
       - --enable-auto-tool-choice
