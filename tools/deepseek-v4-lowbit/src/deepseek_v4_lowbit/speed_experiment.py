@@ -44,6 +44,7 @@ class ExperimentArm:
     predicted_mediator: str = ""
     lose_condition: str = ""
     observational: bool = False
+    composite: bool = False
 
     def validate(self) -> None:
         unknown = set(self.changed_values) - set(BASELINE_PROFILE)
@@ -55,15 +56,20 @@ class ExperimentArm:
             return
         if self.observational:
             return
-        if len(self.changed_values) != 1:
+        if self.composite:
+            if len(self.changed_values) < 2:
+                raise ValueError(
+                    f"composite speed arm {self.name!r} must change multiple variables"
+                )
+        elif len(self.changed_values) != 1:
             raise ValueError(
                 f"speed experiment arm {self.name!r} must change exactly one variable"
             )
-        key, value = next(iter(self.changed_values.items()))
-        if BASELINE_PROFILE[key] == value:
-            raise ValueError(
-                f"speed experiment arm {self.name!r} does not change {key}"
-            )
+        for key, value in self.changed_values.items():
+            if BASELINE_PROFILE[key] == value:
+                raise ValueError(
+                    f"speed experiment arm {self.name!r} does not change {key}"
+                )
 
     def full_profile(self) -> dict[str, str]:
         self.validate()
@@ -117,6 +123,26 @@ EXPERIMENT_ARMS: dict[str, ExperimentArm] = {
             "IPC/P2P mismatch, hang, extra serialization, or macro slowdown."
         ),
     ),
+    "flashmla-hier": ExperimentArm(
+        name="flashmla-hier",
+        outcome="Compose the independently measured decode winners.",
+        changed_values={
+            "VLLM_DSV4_FLASH_MLA_DECODE": "1",
+            "VLLM_HIER_ALL_REDUCE": "0,1;2,3",
+        },
+        precondition=(
+            "FlashMLA and hierarchical all-reduce each pass their numerical gates "
+            "and independently improve matched decode throughput."
+        ),
+        predicted_mediator=(
+            "Lower sparse-MLA decode time and lower tensor-parallel collective time."
+        ),
+        lose_condition=(
+            "Either dispatch is absent, the gains do not compose, or any release "
+            "correctness/capacity gate regresses."
+        ),
+        composite=True,
+    ),
     "indexer96": ExperimentArm(
         name="indexer96",
         outcome=(
@@ -162,6 +188,7 @@ def build_speed_experiment_manifest(arm_name: str) -> dict[str, Any]:
         "lose_condition": arm.lose_condition,
         "changed_values": dict(sorted(arm.changed_values.items())),
         "observational": arm.observational,
+        "composite": arm.composite,
         "full_profile": dict(sorted(arm.full_profile().items())),
         "required_gates": REQUIRED_GATES,
         "server_changed": False,

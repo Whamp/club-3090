@@ -42,6 +42,7 @@ image. Do not promote a small gain within run-to-run noise.
 | `prefill-block2` | `VLLM_SPARSE_DENSE_QUERY_BLOCK=2` | fewer sparse-prefill query blocks than the disabled fallback | prefill rises without decode or capacity regression |
 | `flashmla-decode` | `VLLM_DSV4_FLASH_MLA_DECODE=1` | AppMana SM86 native sparse MLA replaces Triton only during decode | numerical gate passes and end-to-end decode rises |
 | `hier-allreduce` | `VLLM_HIER_ALL_REDUCE=0,1;2,3` | island-local reduce plus cross-island transfer replaces PyNCCL | a reviewed Nsight trace shows all-reduce on the critical path, the numerical gate passes, and decode rises |
+| `flashmla-hier` | compose the independently proven FlashMLA and hierarchical changes | lower sparse-MLA and collective decode time | both numerical gates pass, both dispatches are present, and gains compose without release-gate regression |
 | `indexer96` | sparse-indexer logits workspace 64 MiB to 96 MiB | fewer query-dimension splits | prefill or decode rises with negligible KV loss |
 | `batched320` | `max_num_batched_tokens=256` to `320` | larger prefill chunks | prefill rises while decode and KV capacity remain acceptable |
 | `trace-baseline` | observational trace with `KV_OFFLOADING_SIZE=0.001` | attributes warmed decode time without an unused 16 GiB host tier competing with Nsight | evidence only; never use trace throughput as benchmark data |

@@ -137,6 +137,7 @@ def test_every_speed_arm_renders_without_runtime_side_effects(tmp_path: Path) ->
         "prefill-block2",
         "flashmla-decode",
         "hier-allreduce",
+        "flashmla-hier",
         "indexer96",
         "batched320",
     ):

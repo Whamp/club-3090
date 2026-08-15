@@ -21,7 +21,12 @@ EXPECTED_CHANGES = {
 
 
 def test_speed_experiment_arms_change_one_variable() -> None:
-    assert set(EXPERIMENT_ARMS) == {"baseline", "trace-baseline", *EXPECTED_CHANGES}
+    assert set(EXPERIMENT_ARMS) == {
+        "baseline",
+        "trace-baseline",
+        "flashmla-hier",
+        *EXPECTED_CHANGES,
+    }
     for name, expected_change in EXPECTED_CHANGES.items():
         arm = EXPERIMENT_ARMS[name]
         assert arm.changed_values == expected_change
@@ -49,6 +54,16 @@ def test_speed_experiment_trace_arm_disables_unused_host_kv_tier() -> None:
         "KV_OFFLOADING_SIZE": "0.001",
     }
     assert BASELINE_PROFILE["KV_OFFLOADING_SIZE"] == "16"
+
+
+def test_combined_speed_arm_records_both_proven_winners() -> None:
+    arm = EXPERIMENT_ARMS["flashmla-hier"]
+    assert arm.composite is True
+    assert arm.changed_values == {
+        "VLLM_DSV4_FLASH_MLA_DECODE": "1",
+        "VLLM_HIER_ALL_REDUCE": "0,1;2,3",
+    }
+    assert arm.full_profile() == {**BASELINE_PROFILE, **arm.changed_values}
 
 
 def test_speed_experiment_rejects_more_than_one_change() -> None:

@@ -19,7 +19,8 @@ usage() {
 usage: run-speed-arm-with-rollback.sh [--dry-run] ARM RESULT_DIRECTORY [-- COMMAND ...]
 
 ARM is one of baseline, prefill-block2, flashmla-decode, hier-allreduce,
-indexer96, or batched320. Dry-run never calls Docker or contacts server60.
+flashmla-hier, indexer96, or batched320. Dry-run never calls Docker or contacts
+server60.
 Actual execution requires these identity-bound variables:
 
   APPROVED_PRODUCTION_IMAGE_ID=sha256:...
@@ -52,7 +53,7 @@ fi
 COMMAND=("$@")
 
 case "$ARM" in
-    baseline | trace-baseline | prefill-block2 | flashmla-decode | hier-allreduce | indexer96 | batched320) ;;
+    baseline | trace-baseline | prefill-block2 | flashmla-decode | hier-allreduce | flashmla-hier | indexer96 | batched320) ;;
     *) echo "Unknown DeepSeek V4 speed arm: $ARM" >&2; exit 2 ;;
 esac
 
@@ -100,7 +101,7 @@ arm_manifest="$(
     uv run --python 3.12 deepseek-v4-speed-experiment "$ARM"
 )"
 trace_gate_summary='{}'
-if [[ "$ARM" == hier-allreduce ]]; then
+if [[ "$ARM" == hier-allreduce || "$ARM" == flashmla-hier ]]; then
     [[ "$HIER_TRACE_GATE_JSON" != UNSET ]] || {
         echo "hier-allreduce requires HIER_TRACE_GATE_JSON" >&2
         exit 2
@@ -354,6 +355,10 @@ case "$ARM" in
     prefill-block2) export VLLM_SPARSE_DENSE_QUERY_BLOCK=2 ;;
     flashmla-decode) export VLLM_DSV4_FLASH_MLA_DECODE=1 ;;
     hier-allreduce) export VLLM_HIER_ALL_REDUCE="0,1;2,3" ;;
+    flashmla-hier)
+        export VLLM_DSV4_FLASH_MLA_DECODE=1
+        export VLLM_HIER_ALL_REDUCE="0,1;2,3"
+        ;;
     indexer96) export VLLM_SPARSE_INDEXER_MAX_LOGITS_MB=96 ;;
     batched320) export MAX_NUM_BATCHED_TOKENS=320 ;;
 esac
@@ -364,16 +369,14 @@ rollback_started=1
 docker stop --time 180 "$PRODUCTION_CONTAINER" >/dev/null
 cleanup_stale_kv_offload_files
 
-case "$ARM" in
-    flashmla-decode)
-        "$SCRIPT_DIRECTORY/run-flash-mla-sm86-gate.sh" \
-            "$SPEED_IMAGE" "$RESULT_DIRECTORY/flash-mla-gate"
-        ;;
-    hier-allreduce)
-        "$SCRIPT_DIRECTORY/run-hier-all-reduce-sm86-gate.sh" \
-            "$SPEED_IMAGE" "$RESULT_DIRECTORY/hier-all-reduce-gate"
-        ;;
-esac
+if [[ "$ARM" == flashmla-decode || "$ARM" == flashmla-hier ]]; then
+    "$SCRIPT_DIRECTORY/run-flash-mla-sm86-gate.sh" \
+        "$SPEED_IMAGE" "$RESULT_DIRECTORY/flash-mla-gate"
+fi
+if [[ "$ARM" == hier-allreduce || "$ARM" == flashmla-hier ]]; then
+    "$SCRIPT_DIRECTORY/run-hier-all-reduce-sm86-gate.sh" \
+        "$SPEED_IMAGE" "$RESULT_DIRECTORY/hier-all-reduce-gate"
+fi
 
 env VLLM_IMAGE="$EXPERIMENT_IMAGE" \
     CONTAINER_NAME="$EXPERIMENT_CONTAINER" \
