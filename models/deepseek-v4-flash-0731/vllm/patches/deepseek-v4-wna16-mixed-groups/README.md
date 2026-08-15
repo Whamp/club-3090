@@ -5,9 +5,11 @@ for fused gate/up (`w13`) and down (`w2`). It exists to support
 projection-sensitive DeepSeek V4 quants without changing the accepted
 uniform-W2 service.
 
-The canonical source is branch `incubate/deepseek-v4-wna16-sm86` at
+The validated implementation is
 [`Whamp/vllm@7b39c9304`](https://github.com/Whamp/vllm/commit/7b39c93043ffa88729d2cd3dd1f8f482df6ea98c).
-Mixed projection groups were introduced at
+[Whamp/vLLM PR #2](https://github.com/Whamp/vllm/pull/2) merged its exact tree
+into `incubate/deepseek-v4-sm8x-base` as
+`28db4816298293b74fca358cf735ac51c5144acb`. Mixed projection groups were introduced at
 [`dd2d1fd67`](https://github.com/Whamp/vllm/commit/dd2d1fd6779addccc73094f77fa4ada7d9106a41);
 the later commit retains the SwiGLU and DSML tool-turn fixes and adds the
 promoted FP8 Marlin output-projection path.

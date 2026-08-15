@@ -16,7 +16,7 @@ A projection- and layer-sensitive DeepSeek-V4-Flash-0731 safetensors artifact no
 - exact retrieval from a 211,031-token prompt; and
 - exact retrieval from two simultaneous 90,029-token prompts.
 
-The model is `hampsonw/DeepSeek-V4-Flash-0731-WNA16` revision `12035985bf555d0ddc603c6305586a8fa915589c`. The validated vLLM source is `Whamp/vllm@7b39c93043ffa88729d2cd3dd1f8f482df6ea98c`, tree `670643653f99448f90192b79dd0842bcfa073ab8`. The server60 image is `sha256:f56910530683326051cfdf4e7c8e4d6afc5bace8804cb78b2af9ea799bbba4e6`.
+The model is `hampsonw/DeepSeek-V4-Flash-0731-WNA16` revision `12035985bf555d0ddc603c6305586a8fa915589c`. The validated vLLM source is `Whamp/vllm@7b39c93043ffa88729d2cd3dd1f8f482df6ea98c`, tree `670643653f99448f90192b79dd0842bcfa073ab8`. Whamp/vLLM PR #2 merged that exact tree into `incubate/deepseek-v4-sm8x-base` as `28db4816298293b74fca358cf735ac51c5144acb`. The server60 image is `sha256:f56910530683326051cfdf4e7c8e4d6afc5bace8804cb78b2af9ea799bbba4e6`.
 
 This result depends on custom DeepSeek V4 Ampere support, compressed-tensors WNA16 loading, Humming low-bit MoE kernels, runtime-bounded RoPE caches, SM86 sparse-attention fallbacks, corrected SwiGLU semantics, a DSML tool-turn stop fix, and an FP8 Marlin output-projection path.
 
@@ -220,7 +220,8 @@ The final artifact passed tool/post-tool canaries, focused quality checks, long 
 | Antirez imatrix content SHA-256 | `02a7c78c29875e4653d6ce21d8821c02161e83ed90c506bdd8d275f76d4ac97e` |
 | Screen evidence | `2686304a68557827d847e1954050cde6b5e7fd08` |
 | Quality artifact | `12035985bf555d0ddc603c6305586a8fa915589c` |
-| Canonical vLLM commit | `7b39c93043ffa88729d2cd3dd1f8f482df6ea98c` |
+| Validated vLLM implementation commit | `7b39c93043ffa88729d2cd3dd1f8f482df6ea98c` |
+| Whamp/vLLM incubation merge | PR #2, `28db4816298293b74fca358cf735ac51c5144acb` |
 | Canonical vLLM tree | `670643653f99448f90192b79dd0842bcfa073ab8` |
 | Mirrored Marlin patch SHA-256 | `bb9fdf4e2452647bccd29934cb2c073a0efa21474a41f0ae659c7be18da4b2fd` |
 | Final runtime image | `sha256:f56910530683326051cfdf4e7c8e4d6afc5bace8804cb78b2af9ea799bbba4e6` |

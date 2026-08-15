@@ -17,7 +17,7 @@ Start with [`REPORT.md`](REPORT.md). It is the cold-reader account of the artifa
 
 - Full quantization screen and recovered recipe bundle: `hampsonw/DeepSeek-V4-Flash-0731-WNA16`, branch `evidence-quant-frontier-screen-20260813`, commit `2686304a68557827d847e1954050cde6b5e7fd08`.
 - Projection-sensitive artifact: revision `12035985bf555d0ddc603c6305586a8fa915589c`.
-- Canonical runtime source: `Whamp/vllm@7b39c93043ffa88729d2cd3dd1f8f482df6ea98c`, tree `670643653f99448f90192b79dd0842bcfa073ab8`.
+- Validated runtime source: `Whamp/vllm@7b39c93043ffa88729d2cd3dd1f8f482df6ea98c`, tree `670643653f99448f90192b79dd0842bcfa073ab8`; merged through Whamp/vLLM PR #2 as `28db4816298293b74fca358cf735ac51c5144acb`.
 - Deployment source: `Whamp/club-3090@e625a892b3af6c32ec22394e2341eed4bb8bdc17` plus later research-index commits.
 
 ## Local forensic archives

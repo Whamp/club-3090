@@ -71,9 +71,9 @@ patches:
     capability: wna16-projection-group-sizes
     foundational: false
     upstream:
-      ref: Whamp/vllm#1
-      status: experimental-incubation
-      drop_when: "replace after equivalent projection-specific WNA16 group sizing reaches the selected Ampere runtime and passes the SM86 and coding-agent gates"
+      ref: Whamp/vllm#1,Whamp/vllm#2
+      status: merged-incubation
+      drop_when: "replace after equivalent mixed-group WNA16 and Marlin output-projection support reaches an upstream runtime validated on SM86"
     status: verified
 
   - id: qwen-sglang-autoround-fused-bf16
