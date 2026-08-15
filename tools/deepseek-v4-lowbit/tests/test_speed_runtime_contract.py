@@ -30,6 +30,13 @@ def test_production_default_reserves_host_kv_eviction_tier() -> None:
     ) in compose
 
 
+def test_nsys_analysis_keeps_profile_mount_read_only() -> None:
+    analyzer = (EXPERIMENT_DIRECTORY / "analyze-nsys-decode.sh").read_text()
+    assert '"$profile_directory:/profiles:ro"' in analyzer
+    assert '"$OUTPUT_DIRECTORY:/analysis"' in analyzer
+    assert "--sqlite /analysis/profile.sqlite" in analyzer
+
+
 def test_speed_runner_normalizes_production_swap_after_rollback() -> None:
     runner = (EXPERIMENT_DIRECTORY / "run-speed-arm-with-rollback.sh").read_text()
     assert "normalize_production_swap || status=1" in runner

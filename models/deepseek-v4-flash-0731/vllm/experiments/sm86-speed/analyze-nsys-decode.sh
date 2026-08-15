@@ -19,7 +19,9 @@ profile_name="$(basename -- "$PROFILE")"
 # attribution; the timeline still requires operator review before hier-allreduce.
 docker run --rm --entrypoint nsys \
     --volume "$profile_directory:/profiles:ro" \
+    --volume "$OUTPUT_DIRECTORY:/analysis" \
     "$NSIGHT_IMAGE" stats --report cuda_gpu_kern_sum --format csv \
+    --sqlite /analysis/profile.sqlite \
     "/profiles/$profile_name" > "$OUTPUT_DIRECTORY/cuda-gpu-kernel-summary.csv"
 (
     cd "$TOOL_PROJECT"
