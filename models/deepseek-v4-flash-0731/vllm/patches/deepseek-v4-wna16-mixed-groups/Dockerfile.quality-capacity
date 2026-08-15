@@ -1,0 +1,10 @@
+# syntax=docker/dockerfile:1.7
+ARG VERIFIED_QUALITY_RUNTIME_IMAGE
+FROM ${VERIFIED_QUALITY_RUNTIME_IMAGE}
+
+COPY vllm/envs.py \
+    /workspace/vllm/vllm/envs.py
+COPY vllm/model_executor/kernels/linear/scaled_mm/marlin.py \
+    /workspace/vllm/vllm/model_executor/kernels/linear/scaled_mm/marlin.py
+COPY vllm/v1/attention/ops/rocm_aiter_mla_sparse.py \
+    /workspace/vllm/vllm/v1/attention/ops/rocm_aiter_mla_sparse.py

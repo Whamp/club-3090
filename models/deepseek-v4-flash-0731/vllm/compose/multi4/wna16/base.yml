@@ -1,36 +1,39 @@
 # ===========================================================================
 # Profile (at-a-glance):
-#   Model:     DeepSeek-V4-Flash-0731 (imatrix-weighted W2A16 routed experts)
+#   Model:     DeepSeek-V4-Flash-0731 projection-sensitive WNA16 quality quant
 #   Topology:  Four RTX 3090 PCIe (TP=4, no NVLink)
-#   Runtime:   haosdent/vLLM 12810046 + checksum-pinned SM86 WNA16 patches
+#   Runtime:   Whamp/vLLM 7b39c9304, FP8 Marlin wo_a diagonal projection
 #   Drafter:   none — MTP permanently omitted from this artifact
 #   KV:        fp8_ds_mla (DeepSeek UE8M0 packed cache)
 #   Vision:    no
-#   Max ctx:   215,000 tokens
+#   Max ctx:   230,144 tokens; max_num_seqs=2; 275,238 aggregate cache tokens
 #   Genesis:   N/A — Genesis is Qwen3-Next-specific
-#   Status:    🧪 Experimental — accepted 215K server60 profile
-#   Measured:  server60 4x RTX 3090, 2026-08-12: 60.79 decode tok/s mean,
-#              968.97 prefill tok/s at 8,984 tokens, 204,900-token NIAH pass,
-#              concurrency 2/4 aggregate 65.47/89.94 tok/s with no VRAM leak.
-#   Quality:   toolcall-15 11/15 (73%) · instructfollow-15 14/15 (93%)
-#              (`quality-test.sh --quick`; pass@3 total 26/30).
-#   Best for:  Four-RTX-3090 DeepSeek V4 serving through 215K context
+#   Status:    🧪 Experimental — accepted server60 capacity profile
+#   Measured:  server60 4x RTX 3090, 2026-08-14: 61.99 decode tok/s mean,
+#              914.10 cache-busted prefill tok/s at ~9K tokens, exact recall at
+#              211,551 tokens, and two simultaneous 90,029-token recalls.
+#   Correctness: basic, automatic-tool, post-tool, multi-turn-agent, coding,
+#                7,862-token reasoning, and long-context probes passed.
+#   Best for:  One long request through 230K, or two requests within the
+#              measured 275K-token aggregate KV capacity.
 # ---------------------------------------------------------------------------
-# Limits: local custom image; no CPU weight offload; focused quality evidence
-# only; custom all-reduce disabled. The standard stress ladder recalled exactly
-# through 197,580 tokens with 127 MiB/card observed free. That narrow reserve
-# passed repeated decode, prefill, near-ceiling, and short concurrency tests
-# without serving-process swap, VRAM growth, or allocation failure. Concurrency
-# 4 is validated for short requests, not four simultaneous 215K requests.
-# Plain `docker compose up` starts nothing. The authorized profile is explicit
-# because this service occupies all four GPUs. MODEL_SNAPSHOT must be the
-# immutable artifact revision 75d9286c37f3037f3ab390cfbc10747466eac714;
+# FAILED PRODUCTION GATE — DO NOT OMIT: after the 211,551-token stress fill,
+# only 93 MiB physical VRAM remained per card versus verify-stress.sh's 1 GiB
+# sustained-agent advisory threshold. The service stayed healthy and zero-swap,
+# and rank 0 retained ~437 MiB of reclaimable Torch allocator cache, but this is
+# a measured capacity ceiling rather than a generous-headroom profile.
+#
+# Other limits: local custom image; no CPU weight offload; custom all-reduce
+# disabled. Two-request validation covered 2x90K, not two simultaneous 230K
+# requests. Plain `docker compose up` starts nothing. The authorized profile is
+# explicit because this service occupies all four GPUs. MODEL_SNAPSHOT must be
+# immutable artifact revision 12035985bf555d0ddc603c6305586a8fa915589c;
 # the image-owned materializer verifies its config and index before launch.
 # ===========================================================================
 services:
   deepseek-v4-wna16-sm86:
     profiles: [authorized-gpu-test]
-    image: ${VLLM_IMAGE:-club-3090/deepseek-v4-wna16-sm86:aeb62948-rope-cu130@sha256:0beb1f0cba2e41837f4ba5af01cc5c4686afde4f40ab1df5147a6ad945b0af1f}
+    image: ${VLLM_IMAGE:-club-3090/deepseek-v4-wna16-sm86:quality-12035985-marlin-7b39c930@sha256:f56910530683326051cfdf4e7c8e4d6afc5bace8804cb78b2af9ea799bbba4e6}
     container_name: ${CONTAINER_NAME:-vllm-deepseek-v4-wna16-sm86}
     restart: ${CLUB3090_RESTART:-unless-stopped}
     ports:
@@ -58,6 +61,7 @@ services:
       TORCH_EXTENSIONS_DIR: /root/.cache/torch_extensions
       VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: 64
       VLLM_SPARSE_DENSE_QUERY_BLOCK: 0
+      VLLM_DSV4_WO_A_MARLIN_DIAGONAL: 1
     shm_size: "16gb"
     ipc: host
     deploy:
@@ -77,15 +81,15 @@ services:
       - --model
       - /runtime-model
       - --served-model-name
-      - deepseek-v4-flash-0731-wna16
+      - deepseek-v4-flash-0731-wna16-quality-12035985
       - --tensor-parallel-size
       - "4"
       - --max-model-len
-      - "${MAX_MODEL_LEN:-215000}"
+      - "${MAX_MODEL_LEN:-230144}"
       - --gpu-memory-utilization
       - "${GPU_MEMORY_UTILIZATION:-0.98}"
       - --max-num-seqs
-      - "${MAX_NUM_SEQS:-4}"
+      - "${MAX_NUM_SEQS:-2}"
       - --max-num-batched-tokens
       - "${MAX_NUM_BATCHED_TOKENS:-256}"
       - --kv-cache-dtype

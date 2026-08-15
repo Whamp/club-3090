@@ -47,6 +47,12 @@ _QUALITY_CANDIDATE_BUILD_SCRIPT = (
 _QUALITY_CANDIDATE_MATERIALIZER = (
     _MIXED_GROUP_PATCH_DIRECTORY / "materialize-quality-candidate-runtime-view.py"
 )
+_QUALITY_CAPACITY_DOCKERFILE = (
+    _MIXED_GROUP_PATCH_DIRECTORY / "Dockerfile.quality-capacity"
+)
+_QUALITY_CAPACITY_BUILD_SCRIPT = (
+    _MIXED_GROUP_PATCH_DIRECTORY / "build-quality-capacity-image.sh"
+)
 _FINAL_COMPOSE = (
     _REPOSITORY_ROOT
     / "models/deepseek-v4-flash-0731/vllm/compose/multi4/wna16/base.yml"
@@ -69,6 +75,10 @@ _PATCH_8 = (
 _PATCH_9 = (
     _MIXED_GROUP_PATCH_DIRECTORY
     / "0009-feat-support-mixed-WNA16-MoE-projection-groups.patch"
+)
+_PATCH_10 = (
+    _MIXED_GROUP_PATCH_DIRECTORY
+    / "0010-perf-run-DeepSeek-V4-output-projection-with-Marlin.patch"
 )
 _SM86_ORACLE_SCRIPT = _RUNTIME_PATCH_DIRECTORY / "run-sm86-oracle.sh"
 _SERVER60_ROLLBACK_SCRIPT = (
@@ -272,6 +282,32 @@ class RuntimeImageContractTests(unittest.TestCase):
         )
         self.assertIn("quality-candidate-deepswe-gate", builder)
 
+    def test_quality_capacity_image_pins_marlin_runtime(self) -> None:
+        dockerfile = _QUALITY_CAPACITY_DOCKERFILE.read_text(encoding="utf-8")
+        builder = _QUALITY_CAPACITY_BUILD_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("FROM ${VERIFIED_QUALITY_RUNTIME_IMAGE}", dockerfile)
+        for production_file in (
+            "vllm/envs.py",
+            "vllm/model_executor/kernels/linear/scaled_mm/marlin.py",
+            "vllm/v1/attention/ops/rocm_aiter_mla_sparse.py",
+        ):
+            self.assertIn(production_file, dockerfile)
+        self.assertIn(
+            'EXPECTED_CANONICAL_COMMIT="7b39c93043ffa88729d2cd3dd1f8f482df6ea98c"',
+            builder,
+        )
+        self.assertIn(
+            'EXPECTED_CANONICAL_TREE="670643653f99448f90192b79dd0842bcfa073ab8"',
+            builder,
+        )
+        self.assertIn(
+            'EXPECTED_QUALITY_RUNTIME_IMAGE_ID="sha256:'
+            'ed16ef3a2eadd6898d6c675a523efb455977d260324c97b8fd829830f8ab7d64"',
+            builder,
+        )
+        self.assertIn("quality-capacity-marlin", builder)
+        self.assertNotIn("model_memory_diagnostics.py", dockerfile)
+
     def test_mixed_group_oracle_image_is_acceptance_only(self) -> None:
         dockerfile = _MIXED_GROUP_DOCKERFILE.read_text(encoding="utf-8")
         builder = _MIXED_GROUP_BUILD_SCRIPT.read_text(encoding="utf-8")
@@ -343,12 +379,14 @@ class RuntimeImageContractTests(unittest.TestCase):
         self.assertIn("VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: 64", compose)
         self.assertIn("VLLM_SPARSE_DENSE_QUERY_BLOCK: 0", compose)
         self.assertIn(
-            "club-3090/deepseek-v4-wna16-sm86:aeb62948-rope-cu130@"
-            "sha256:0beb1f0cba2e41837f4ba5af01cc5c4686afde4f40ab1df5147a6ad945b0af1f",
+            "quality-12035985-marlin-7b39c930@sha256:"
+            "f56910530683326051cfdf4e7c8e4d6afc5bace8804cb78b2af9ea799bbba4e6",
             compose,
         )
-        self.assertIn("MAX_MODEL_LEN:-215000", compose)
-        self.assertIn("MAX_NUM_SEQS:-4", compose)
+        self.assertIn("MAX_MODEL_LEN:-230144", compose)
+        self.assertIn("MAX_NUM_SEQS:-2", compose)
+        self.assertIn("VLLM_DSV4_WO_A_MARLIN_DIAGONAL: 1", compose)
+        self.assertIn("deepseek-v4-flash-0731-wna16-quality-12035985", compose)
         self.assertIn("MAX_NUM_BATCHED_TOKENS:-256", compose)
         self.assertIn("--enable-auto-tool-choice", compose)
         self.assertIn("--tool-call-parser", compose)
@@ -479,6 +517,20 @@ class RuntimeImageContractTests(unittest.TestCase):
         self.assertIn(
             "48095e6d336f6f852d699ddce74e1c192c4b0c9f9bee566e56a15478a95b1def"
             "  0009-feat-support-mixed-WNA16-MoE-projection-groups.patch",
+            readme,
+        )
+
+    def test_marlin_output_projection_patch_is_checksum_pinned(self) -> None:
+        self.assertEqual(
+            hashlib.sha256(_PATCH_10.read_bytes()).hexdigest(),
+            "bb9fdf4e2452647bccd29934cb2c073a0efa21474a41f0ae659c7be18da4b2fd",
+        )
+        readme = (_MIXED_GROUP_PATCH_DIRECTORY / "README.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "bb9fdf4e2452647bccd29934cb2c073a0efa21474a41f0ae659c7be18da4b2fd"
+            "  0010-perf-run-DeepSeek-V4-output-projection-with-Marlin.patch",
             readme,
         )
 

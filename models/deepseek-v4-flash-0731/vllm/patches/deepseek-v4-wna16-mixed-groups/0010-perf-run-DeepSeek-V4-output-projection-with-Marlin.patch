@@ -1,0 +1,169 @@
+From 7b39c93043ffa88729d2cd3dd1f8f482df6ea98c Mon Sep 17 00:00:00 2001
+From: Will Hampson <whamp@ggl.slmail.me>
+Date: Fri, 14 Aug 2026 17:36:39 -0700
+Subject: [PATCH] perf: run DeepSeek V4 output projection with Marlin
+
+Signed-off-by: Will Hampson <whamp@ggl.slmail.me>
+---
+ .../test_marlin_fp8_dequant_bf16.py           | 59 +++++++++++++++++++
+ vllm/envs.py                                  |  6 ++
+ .../kernels/linear/scaled_mm/marlin.py        | 11 ++--
+ .../v1/attention/ops/rocm_aiter_mla_sparse.py | 22 +++++++
+ 4 files changed, 93 insertions(+), 5 deletions(-)
+
+diff --git a/tests/kernels/quantization/test_marlin_fp8_dequant_bf16.py b/tests/kernels/quantization/test_marlin_fp8_dequant_bf16.py
+index 209e68d7a..46468f662 100644
+--- a/tests/kernels/quantization/test_marlin_fp8_dequant_bf16.py
++++ b/tests/kernels/quantization/test_marlin_fp8_dequant_bf16.py
+@@ -68,3 +68,62 @@ def test_dequant_matches_reference_and_frees_fp8(n, k, scale_dtype):
+     x = torch.randn(4, k, dtype=torch.bfloat16)
+     out = kernel.apply_weights(layer, x)
+     torch.testing.assert_close(out, torch.nn.functional.linear(x, layer.weight))
++
++
++def test_dsv4_marlin_diagonal_packs_bmm_weight(monkeypatch):
++    layer = _make_layer(256, 256, torch.float32)
++    layer.is_bmm = True
++    kernel = object.__new__(MarlinFP8ScaledMMLinearKernel)
++    kernel.block_quant = False
++    kernel.size_k_first = False
++    kernel.marlin_input_dtype = None
++    packed = False
++
++    def prepare(layer, size_k_first, input_dtype):
++        nonlocal packed
++        packed = True
++
++    monkeypatch.setattr(
++        "vllm.model_executor.kernels.linear.scaled_mm.marlin."
++        "prepare_fp8_layer_for_marlin",
++        prepare,
++    )
++    monkeypatch.setattr(
++        "vllm.model_executor.kernels.linear.scaled_mm.marlin."
++        "envs.VLLM_DSV4_WO_A_MARLIN_DIAGONAL",
++        True,
++    )
++
++    kernel.process_weights_after_loading(layer)
++
++    assert packed
++
++
++def test_dsv4_marlin_diagonal_selects_group_outputs():
++    from vllm.v1.attention.ops.rocm_aiter_mla_sparse import (
++        _apply_dsv4_wo_a_marlin_diagonal,
++    )
++
++    n_tokens = 3
++    n_groups = 2
++    hidden_dim = 5
++    output_rank = 4
++    o_ref = torch.randn(n_tokens, n_groups, hidden_dim)
++    weight = torch.randn(n_groups * output_rank, hidden_dim)
++
++    class FakeWoA(torch.nn.Module):
++        def forward(self, x):
++            return torch.nn.functional.linear(x, weight)
++
++    result = _apply_dsv4_wo_a_marlin_diagonal(
++        o_ref,
++        FakeWoA(),
++        n_local_groups=n_groups,
++        o_lora_rank=output_rank,
++    )
++    expected = torch.einsum(
++        "tgd,grd->tgr", o_ref, weight.view(n_groups, output_rank, hidden_dim)
++    )
++
++    assert result.shape == expected.shape
++    torch.testing.assert_close(result, expected)
+diff --git a/vllm/envs.py b/vllm/envs.py
+index 67f91f7e1..fa7305b97 100755
+--- a/vllm/envs.py
++++ b/vllm/envs.py
+@@ -58,6 +58,7 @@ if TYPE_CHECKING:
+     VLLM_XLA_CACHE_PATH: str = os.path.join(VLLM_CACHE_ROOT, "xla_cache")
+     VLLM_XLA_CHECK_RECOMPILATION: bool = False
+     VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: int = 512
++    VLLM_DSV4_WO_A_MARLIN_DIAGONAL: bool = False
+     VLLM_USE_RAY_COMPILED_DAG_CHANNEL_TYPE: Literal["auto", "nccl", "shm"] = "auto"
+     VLLM_USE_RAY_COMPILED_DAG_OVERLAP_COMM: bool = False
+     VLLM_USE_RAY_WRAPPED_PP_COMM: bool = True
+@@ -1078,6 +1079,11 @@ environment_variables: dict[str, Callable[[], Any]] = {
+     "VLLM_SPARSE_INDEXER_MAX_LOGITS_MB": lambda: int(
+         os.getenv("VLLM_SPARSE_INDEXER_MAX_LOGITS_MB", "512")
+     ),
++    # Pack DeepSeek V4's grouped output projection for FP8 Marlin, apply one
++    # local full projection, and select the block-diagonal group outputs.
++    "VLLM_DSV4_WO_A_MARLIN_DIAGONAL": lambda: (
++        os.environ.get("VLLM_DSV4_WO_A_MARLIN_DIAGONAL", "0") == "1"
++    ),
+     # If set, the OpenAI API server will stay alive even after the underlying
+     # AsyncLLMEngine errors and stops serving requests
+     "VLLM_KEEP_ALIVE_ON_ENGINE_DEATH": lambda: bool(
+diff --git a/vllm/model_executor/kernels/linear/scaled_mm/marlin.py b/vllm/model_executor/kernels/linear/scaled_mm/marlin.py
+index 3198ccad1..0149f79e4 100644
+--- a/vllm/model_executor/kernels/linear/scaled_mm/marlin.py
++++ b/vllm/model_executor/kernels/linear/scaled_mm/marlin.py
+@@ -93,11 +93,12 @@ class MarlinFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
+             replace_parameter(layer, "weight_scale_inv", weight_scale_inv.data)
+         # Non-block: callers must pass weight in (K, N) layout.
+ 
+-        if getattr(layer, "is_bmm", False):
+-            # BMM layers (DeepSeek V4 `wo_a`) are consumed as raw block-fp8
+-            # weight + weight_scale_inv by the attention einsum, never
+-            # through apply_weights(); the Marlin repack would destroy them.
+-            # Same exemption the deep_gemm and xpu kernels make.
++        if getattr(layer, "is_bmm", False) and not (
++            envs.VLLM_DSV4_WO_A_MARLIN_DIAGONAL
++        ):
++            # BMM layers are normally consumed as raw block-fp8 weight and
++            # weight_scale_inv. The opt-in DeepSeek V4 diagonal path below is
++            # the only BMM caller that consumes Marlin-packed weights.
+             return
+ 
+         if envs.VLLM_MARLIN_FP8_DEQUANT_BF16 and not _dequant_excluded(layer):
+diff --git a/vllm/v1/attention/ops/rocm_aiter_mla_sparse.py b/vllm/v1/attention/ops/rocm_aiter_mla_sparse.py
+index 72f377a0e..399e68d80 100644
+--- a/vllm/v1/attention/ops/rocm_aiter_mla_sparse.py
++++ b/vllm/v1/attention/ops/rocm_aiter_mla_sparse.py
+@@ -978,6 +978,21 @@ def _get_cached_wo_a_bf16(
+     return cached
+ 
+ 
++def _apply_dsv4_wo_a_marlin_diagonal(
++    o_ref: torch.Tensor,
++    wo_a: torch.nn.Module,
++    *,
++    n_local_groups: int,
++    o_lora_rank: int,
++) -> torch.Tensor:
++    """Apply one local FP8 Marlin projection and select matching groups."""
++    full_output = wo_a(o_ref.flatten(0, 1))
++    grouped_output = full_output.view(
++        o_ref.shape[0], n_local_groups, n_local_groups, o_lora_rank
++    )
++    return grouped_output.diagonal(dim1=1, dim2=2).movedim(-1, 1)
++
++
+ def rocm_inv_rope_einsum(
+     rotary_emb: torch.nn.Module,
+     o: torch.Tensor,
+@@ -996,6 +1011,13 @@ def rocm_inv_rope_einsum(
+         o, positions, rotary_emb.cos_sin_cache, rope_head_dim
+     )
+     o_ref = o_ref.view(o.shape[0], n_local_groups, -1)
++    if envs.VLLM_DSV4_WO_A_MARLIN_DIAGONAL:
++        return _apply_dsv4_wo_a_marlin_diagonal(
++            o_ref,
++            wo_a,
++            n_local_groups=n_local_groups,
++            o_lora_rank=o_lora_rank,
++        )
+ 
+     wo_a_weight = _get_cached_wo_a_bf16(
+         wo_a, n_local_groups, o_lora_rank, o_ref.shape[-1]
+-- 
+2.55.0
+

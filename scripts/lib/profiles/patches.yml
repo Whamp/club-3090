@@ -28,26 +28,24 @@ patches:
     delivery_gaps: []
     delivery_mechanism: runtime_image
     delivery_spec:
-      image: club-3090/deepseek-v4-wna16-sm86:aeb62948-rope-cu130@sha256:0beb1f0cba2e41837f4ba5af01cc5c4686afde4f40ab1df5147a6ad945b0af1f
-      dockerfile: models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/Dockerfile.final-overlay
-      builder: models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/build-final-overlay-image.sh
+      image: club-3090/deepseek-v4-wna16-sm86:quality-12035985-marlin-7b39c930@sha256:f56910530683326051cfdf4e7c8e4d6afc5bace8804cb78b2af9ea799bbba4e6
+      dockerfile: models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-mixed-groups/Dockerfile.quality-capacity
+      builder: models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-mixed-groups/build-quality-capacity-image.sh
       runtime_dockerfile: models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/Dockerfile.runtime-cu130
       runtime_builder: models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/build-runtime-image.sh
-      source_tree: aeb62948e33074514a742d19c2f9a1a3c2ee3e1f
-      base_image_digest: sha256:0e8cc6dc48081e907d553febc8002b1f6d61298454340840f27f18b3a2e66c6c
-      runtime_contract_sha256: 7d4ab7f124d1ca5fc68facaafec8c55b98683e249cf669a2c102ac8ba6013838
+      source_tree: 670643653f99448f90192b79dd0842bcfa073ab8
+      base_image_digest: sha256:ed16ef3a2eadd6898d6c675a523efb455977d260324c97b8fd829830f8ab7d64
+      runtime_contract_sha256: 0ac5486afceb5abec0e4714a831d40498411c6f7103500e945785a2e5bc67b4c
       wired_at: image
       file_sha256:
         models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/Dockerfile.runtime-cu130: 7d4ab7f124d1ca5fc68facaafec8c55b98683e249cf669a2c102ac8ba6013838
         models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/build-runtime-image.sh: c066dd69dcef938689fc8c09afe7a3773d3686a7d223c7223442af556d4da15a
-        models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/Dockerfile.final-overlay: 68294c48a11d8f8f0b20d4284a2877798dee7d51cf1cc7237c1de92cabc0ab4a
-        models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/build-final-overlay-image.sh: ff8837e7e46368b5c8b095cea6bfb5b1a21a2ecd4f079c9f590feb126d05ef9b
-        models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/materialize-runtime-model-view.py: 8aff33ec192e0a67203c974918ad4c74bb875ec6d320ede6276077cce872d80c
-        models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-sm86/start-final-runtime.sh: 6bf86f1e90c58bd3e5964bca8938515dc73073b3d27fe9a41f6ba67b7ed0eeaa
-        models/deepseek-v4-flash-0731/vllm/compose/multi4/wna16/base.yml: 8116ac968f0c8cb668ea6f7c1f80edca3742411c3abbb08fae5949c189e3d475
+        models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-mixed-groups/Dockerfile.quality-capacity: 0ac5486afceb5abec0e4714a831d40498411c6f7103500e945785a2e5bc67b4c
+        models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-mixed-groups/build-quality-capacity-image.sh: b73186d5204e8d29c4d5edcf72b32e226214837cea8cc0b65a80ddcdbf08a757
+        models/deepseek-v4-flash-0731/vllm/compose/multi4/wna16/base.yml: ef09b51375a3aa76b50d0b05368a5405f213d2893ae533b31f81b5ccab5cc6ca
     drift_guard:
       kind: behavioral
-      check: "On 4x RTX 3090, the exact image reaches healthy at 215000 context with max_num_seqs=4, returns deterministic HTTP 200 generation, preserves forced-tool and reasoning parsing, retrieves exactly beyond 200K prompt tokens, and repeats at least 45.6 decode and 723 cache-busted prefill tok/s without serving-process swap or post-warm VRAM growth."
+      check: "On 4x RTX 3090, the exact image reaches healthy at 230144 context with max_num_seqs=2, serves the projection-sensitive quality artifact, passes basic and post-tool generation, recalls exactly beyond 211K prompt tokens and in two simultaneous 90K requests, and repeats at least 46.17 decode and 552.546 cache-busted prefill tok/s without serving-process swap or post-warm VRAM growth; preserve the documented 93 MiB physical-headroom warning."
       on_fail: refuse-promotion
     capability: wna16-moe-sm86
     foundational: false
@@ -75,8 +73,8 @@ patches:
     upstream:
       ref: Whamp/vllm#1
       status: experimental-incubation
-      drop_when: "replace after equivalent projection-specific WNA16 group sizing reaches the selected Ampere runtime and passes the SM86 and DeepSWE gates"
-    status: suspect
+      drop_when: "replace after equivalent projection-specific WNA16 group sizing reaches the selected Ampere runtime and passes the SM86 and coding-agent gates"
+    status: verified
 
   - id: qwen-sglang-autoround-fused-bf16
     deprecated_on: "2026-06-05"

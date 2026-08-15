@@ -203,9 +203,12 @@ After a Hugging Face upload, `deepseek-v4-verify-upload LOCAL_DIRECTORY REPOSITO
 
 ## Projection-sensitive frontier
 
-The uniform all-W2/group-128 artifact failed the intended coding-agent workload.
-The replacement frontier keeps W2 and WNA16 but treats gate/up and down
-projections separately. `deepseek-v4-run-frontier-screen` gathers independent
+The uniform all-W2/group-128 and projection-sensitive artifacts both exposed a
+shared vLLM DSML tool-turn stop bug during coding-agent tests. Whamp/vLLM commit
+`9a2ffbb4534400064e645cb4fef8ab2f2a987f11` fixed that runtime defect; those
+runs did not establish artifact causality. The projection-sensitive frontier
+keeps W2 and WNA16 but treats gate/up and down projections separately.
+`deepseek-v4-run-frontier-screen` gathers independent
 `w13` and `w2` reconstruction evidence. `deepseek-v4-build-frontier-recipes`
 then applies two quality priors before measured byte allocation:
 
@@ -222,11 +225,18 @@ For the exact 72,317-tensor source header capture, the four bounded recipes are:
 | `balanced` | 76.238934 GiB | W4 down at layers 26 and 42 |
 | `quality` | 78.738934 GiB | W4 down at layer 26 and layers 37–42 |
 
-The generated `config.json`, candidate manifest, and model card pin
-`Whamp/vllm@dd2d1fd6779addccc73094f77fa4ada7d9106a41`, required tree
-`f73b30cc5a2ed9de200ca2e4de3cdef1a06f6538`. This runtime is not promoted. It
-must first pass the rollback-wrapped seven-case SM86 numerical/cubin oracle in
-`models/deepseek-v4-flash-0731/vllm/patches/deepseek-v4-wna16-mixed-groups/`.
+The generated `config.json`, candidate manifest, and model card retain the
+minimum mixed-group contract at
+`Whamp/vllm@dd2d1fd6779addccc73094f77fa4ada7d9106a41`, tree
+`f73b30cc5a2ed9de200ca2e4de3cdef1a06f6538`. The promoted runtime is
+`Whamp/vllm@7b39c93043ffa88729d2cd3dd1f8f482df6ea98c`, tree
+`670643653f99448f90192b79dd0842bcfa073ab8`; it retains the SwiGLU and DSML
+fixes and uses FP8 Marlin for the grouped output projection. The quality
+candidate passed all seven rollback-wrapped SM86 numerical/cubin cases, served
+230,144 tokens, recalled a needle at 211,551 tokens, and sustained two
+simultaneous 90K-token recalls. See
+`.research/deepseek-v4-lowbit/CAPACITY-MARLIN-20260814.md` for the performance
+and thin-VRAM-margin evidence.
 
 `rental/run-verda-frontier-host.sh` is the bounded host orchestrator. Larger
 A100 shapes disappeared before provisioning, so its guarded default is now one
