@@ -40,8 +40,21 @@ assert model.compatible_drafters == (), model.compatible_drafters
 compose_files = sorted(
     path.relative_to(root).as_posix()
     for path in (root / "models/deepseek-v4-flash-0731/llama-cpp/compose").rglob("*.yml")
+    if "_archive" not in path.parts
 )
 assert compose_files == [canonical_compose], compose_files
+
+archived_compose_files = sorted(
+    path
+    for path in (
+        root / "models/deepseek-v4-flash-0731/llama-cpp/compose/_archive"
+    ).rglob("*.yml")
+)
+assert len(archived_compose_files) == 3, archived_compose_files
+for archived in archived_compose_files:
+    archived_text = archived.read_text()
+    assert archived_text.startswith("# ARCHIVED 2026-08-16 — DO NOT LAUNCH.")
+    assert "#   Status:    🗑️ Deprecated" in archived_text
 
 setup = (root / "scripts/setup.sh").read_text()
 assert 'PRIMARY_WEIGHT_KEY="deepseek-v4-flash-0731:antirez-iq2-xxs"' in setup

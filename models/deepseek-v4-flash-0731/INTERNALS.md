@@ -4,10 +4,11 @@ This page records the engineering behind the canonical DeepSeek V4 Flash
 llama.cpp profile:
 `llamacpp/deepseek-flash-multi4-antirez-iq2-fast-prefill`.
 
-The former Unsloth CPU-offload profiles were retired from the catalog and disk
-layout. They were slower, less completely validated, and added ambiguity after
-the Antirez profile proved superior for the four-RTX-3090 target. Their measured
-history remains in Git; they are not supported launch alternatives.
+The former Unsloth CPU-offload profiles were retired from the catalog and moved
+to `compose/_archive/`. They were slower, less completely validated, and added
+ambiguity after the Antirez profile proved superior for the four-RTX-3090
+target. The archive preserves historical links; it is not a supported launch
+surface.
 
 ## Validated configuration
 
@@ -41,8 +42,8 @@ The profile became server60's sole DeepSeek service on 2026-08-16:
 
 The 430K profile still carries the measured low-headroom caveat. After final
 verification, server60 removed the stopped WNA16, stock llama.cpp, Unsloth
-router, and duplicate pre-publication fast-prefill containers. Model artifacts
-and research evidence remain available; the retired profiles do not.
+router, and duplicate pre-publication fast-prefill containers. Model artifacts,
+research evidence, and non-launchable archived composes remain available.
 
 The engine image is separately named and digest-pinned in
 `scripts/lib/profiles/engines/llama-cpp-ds4-longctx.yml`. It does not replace
