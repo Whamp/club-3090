@@ -13,6 +13,7 @@ Start with [`REPORT.md`](REPORT.md). It is the cold-reader account of the artifa
 | [`VLLM-PERFORMANCE-PLAN.md`](VLLM-PERFORMANCE-PLAN.md) | Performance campaign plan and execution ledger |
 | [`CAPACITY-MARLIN-20260814.md`](CAPACITY-MARLIN-20260814.md) | Causal 131K-to-230K capacity campaign |
 | [`SPEED-OPPORTUNITIES-20260814.md`](SPEED-OPPORTUNITIES-20260814.md) | Source-grounded, capacity-preserving speed opportunities and experiment order |
+| [`GGUF-RUNTIME-CONFIGS-20260816.md`](GGUF-RUNTIME-CONFIGS-20260816.md) | Antirez and Unsloth llama.cpp profile matrix and fast-prefill compatibility boundary |
 | [`evidence/capacity-marlin-20260814/`](evidence/capacity-marlin-20260814/) | Compact capacity-image evidence and SHA-256 manifest |
 | [`evidence/sm86-speed-20260815/`](evidence/sm86-speed-20260815/) | Matched speed results, numerical gates, trace review, long-context checks, and SHA-256 manifest |
 
