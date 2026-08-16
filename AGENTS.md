@@ -25,6 +25,16 @@ Before making non-trivial changes:
 - **Ampere (sm_86) has no native FP8 compute** — there, FP8 KV is a storage optimization only. On Ada/Hopper/Blackwell, FP8 compute paths are real (fp8-weights composes are 5090-safe via the launcher's `VLLM_USE_DEEP_GEMM` pass-through — an arch-conditional guard, not a blanket "everything works on 5090").
 - Speculative decoding using EAGLE / DFlash **inside vLLM** is blocked on Qwen3-Next family on every arch (DeltaNet rollback). MTP works, and DFlash works via the beellama engine (external drafter). See [`docs/UPSTREAM.md`](docs/UPSTREAM.md) — vllm#39931.
 
+### Server60 GPU safety boundary
+
+On server60, GPU power limits and clock policy are hardware-safety constraints,
+not performance-tuning controls. Never raise a power limit or clock, remove an
+existing cap, or install a dynamic boost controller. Read-only telemetry is
+allowed. A static SM-clock ceiling at or below 1650 MHz may be applied only when
+Will explicitly requests it as a safety cap; “probably okay” is not deployment
+authorization. The repository's general-purpose power-cap tooling is not
+authorization to use it on server60.
+
 **The rig you're running on may not be the reference rig.** Supported hardware classes live in `scripts/lib/profiles/hardware/*.yml` (3060 → 5090, A5000, A100, H100, DGX Spark, …); the profile-catalog compat layer and launchers key on the *detected* class and inject arch-aware env. Before assuming any constraint above applies, check which class you're on (`nvidia-smi` + the matching hardware YAML) — and never hand-copy a reference-rig workaround (e.g. disabling all-reduce) onto an NVLink-equipped or non-Ampere rig without checking it's still warranted.
 
 ## Upstream issues — single source of truth
