@@ -176,23 +176,17 @@ All measurements below came from the same 4× RTX 3090 rig at its unchanged
 
 ### Decode profile (2026-08-16)
 
-A fresh single-stream baseline used the canonical Antirez artifact, 430,080
-reserved context, Q8 K/V, the then-installed 210–1550 MHz safety ceiling, three
-warm-ups, and five measured 512-token runs. Client wall throughput was 31.88
-tokens/s (CV 0.08%); corresponding engine steps averaged about 37.55 decode
-tokens/s. These are different boundaries because each client request also paid
-roughly 2.4 seconds of short-prompt work.
+Baselines exist for two authorized safety ceilings. Under the prior 210–1550
+MHz policy the canonical profile measured 31.88 client-wall tokens/s (CV 0.08%)
+and about 37.55 engine decode tokens/s. After Will changed the persistent
+policy to 210–1650 MHz (230 W unchanged), a fresh matched run measured:
 
-Nsight Systems 2026.4.1 captured CUDA graph nodes for one shallow continuation
-and one continuation after a roughly 100K-token prompt. Node-level tracing more
-than doubled request wall time, so the traces are attribution evidence only,
-not benchmarks. Normalized aggregate kernel time rose from about 28.5
-GPU-ms/token shallow to 29.5 GPU-ms/token deep. Quantized Q8_0, IQ2_XXS, and
-Q2_K projections remained the dominant device work. Sparse attention,
-Lightning Indexer, and radix selection grew with context but lacked enough
-causal budget to close the gap to vLLM's approximately 70-token/s path. Layer
-placement was balanced across the four devices, forming one serial per-token
-GPU chain rather than four independent decode lanes.
+| Metric (1650 MHz ceiling) | Result |
+|---|---:|
+| Client wall, 5×512-token fixed-output runs | 33.05 tok/s (CV 0.18%) |
+| Engine decode | 39.15 tok/s |
+| Engine prefill, 3× ~28K-token fresh prompts | 1,166.6 tok/s |
+| Max SM clock observed under load (6,136 samples) | 1650 MHz |
 
 A later 1995 MHz clock-lock experiment measured higher decode throughput, but
 it violated server60's hardware-safety boundary and is rejected. Never raise
@@ -205,14 +199,49 @@ observed a maximum SM clock of 1650 MHz. The persistent script and unit SHA-256
 values are `da373fbd32fb34c1c63ae8b1c37489ce7af4fb589e071c509dca9f932a6724f9`
 and `a734642d9d14cca2139fcf7c99747a0465050546e29b3e59079ad60887552029`.
 
+Nsight Systems 2026.4.1 (attribution only; node tracing more than doubled
+request wall time) showed quantized Q8_0/IQ2_XXS/Q2_K matrix-vector kernels as
+the dominant device work, rising from about 28.5 shallow to 29.5 aggregate
+GPU-ms/token near 100K context, with layer placement balanced across the four
+cards as one serial per-token chain. Sparse attention, Lightning Indexer, and
+radix selection grew with context but lack the causal budget to close the gap
+to vLLM's ~70-token/s path.
+
+An isolated MMVQ microbenchmark
+(`llama-cpp/bench-mmvq/`, fork's real dispatch, serving launch env) measured
+saturated achieved bandwidth on one RTX 3090 under the 1650 MHz ceiling:
+
+| Kernel (K=4096) | Achieved | NCU attribution |
+|---|---:|---|
+| Q8_0 matvec, R4096 | 713 GB/s | latency-bound: 47% SM, 20.1 cycles/issue, 56% occupancy |
+| Q2_K matvec, R12288 | ~310 GB/s | instruction-bound: 78% SM, 70% occupancy, fp32 accumulation |
+| IQ2_XXS matvec, R12288 | 346 GB/s | instruction-bound: 64% SM, 36% occupancy (grid-lookup/sign chain) |
+
+The routed-expert i-quant kernels achieve only ~43–49% of the Q8_0 matvec
+bandwidth on identical silicon. Gated decode hypotheses, in priority order:
+
+1. **Q2_K MMVQ integer accumulation** — port the fork's own
+   `vec_dot_q2_K_q8_1_impl_mmq` integer-accumulate pattern into the MMVQ path
+   behind an env guard. Gate: 78% SM throughput on fp32 FMAs. Falsifier: SM
+   throughput does not drop below ~60% or kernel time fails to improve ≥15%.
+2. **IQ2_XXS MMVQ instruction reduction** — cut per-byte instructions
+   (shared-memory grid table or cheaper sign unpack), possibly raising
+   occupancy past the 41.67% theoretical cap. Gate: 64% SM at 36% occupancy
+   with only 7.19 cycles/issue. Falsifier: SM% unchanged or bandwidth flat.
+3. **Q8_0 rows-per-block overlap** — more output rows per block to overlap
+   DRAM latency (56% achieved occupancy, 20 cycles/issue). Bounded by the
+   existing `calc_rows_per_block` table; small expected gain.
+
+Estimated combined decode ceiling from measured pool shares: about 6–8%.
+Each move is one-variable, correctness-gated (reference-identical dot
+products on random blocks, then deterministic generation canaries), and
+must preserve context capacity and the Q8 KV contract.
+
 The profile also rejects several software shortcuts for this build: CUDA weight
 repacking is not available for the dominant GPU tensors; the previous 1/2/4/8
 MoE rows-per-block sweep was flat; four-way expert parallelism improved prefill
 but reduced decode; row/tensor split cannot reserve the DeepSeek V4 grouped
 attention graph; and the existing DSpark speculative path was net-negative.
-The remaining code-level candidate is a wider-load, more-rows-in-flight i-quant
-MMVQ port for IQ2_XXS/Q2_K, estimated from measured kernel share to offer about
-6–8%, not a route to 70 tokens/s by itself.
 
 Raw attribution reports remain on server60 rather than in Git:
 
