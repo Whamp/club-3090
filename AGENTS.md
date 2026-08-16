@@ -27,13 +27,16 @@ Before making non-trivial changes:
 
 ### Server60 GPU safety boundary
 
-On server60, GPU power limits and clock policy are hardware-safety constraints,
-not performance-tuning controls. Never raise a power limit or clock, remove an
-existing cap, or install a dynamic boost controller. Read-only telemetry is
-allowed. A static SM-clock ceiling at or below 1650 MHz may be applied only when
-Will explicitly requests it as a safety cap; “probably okay” is not deployment
-authorization. The repository's general-purpose power-cap tooling is not
-authorization to use it on server60.
+Server60's installed GPU safety policy is owned by
+`gpu-power-limit.service` and `/usr/local/sbin/set-gpu-power-limit.sh`: every RTX
+3090 is limited to 230 W and a 210–1650 MHz graphics-clock range. Treat those
+exact values as fixed hardware-safety constraints, not tuning controls. Before
+GPU work, verify the unit is enabled and active and that load clocks do not
+exceed 1650 MHz. Never raise or remove either limit, run `nvidia-smi -rgc`, or
+install a dynamic boost controller. If GPU reset or experimentation disturbs the
+policy, immediately restart `gpu-power-limit.service` and verify it under load.
+Read-only telemetry is allowed. The repository's general-purpose power-cap
+tooling is not authorization to use it on server60.
 
 **The rig you're running on may not be the reference rig.** Supported hardware classes live in `scripts/lib/profiles/hardware/*.yml` (3060 → 5090, A5000, A100, H100, DGX Spark, …); the profile-catalog compat layer and launchers key on the *detected* class and inject arch-aware env. Before assuming any constraint above applies, check which class you're on (`nvidia-smi` + the matching hardware YAML) — and never hand-copy a reference-rig workaround (e.g. disabling all-reduce) onto an NVLink-equipped or non-Ampere rig without checking it's still warranted.
 

@@ -177,10 +177,11 @@ All measurements below came from the same 4× RTX 3090 rig at its unchanged
 ### Decode profile (2026-08-16)
 
 A fresh single-stream baseline used the canonical Antirez artifact, 430,080
-reserved context, Q8 K/V, three warm-ups, and five measured 512-token runs.
-Client wall throughput was 31.88 tokens/s (CV 0.08%); corresponding engine steps
-averaged about 37.55 decode tokens/s. These are different boundaries because
-each client request also paid roughly 2.4 seconds of short-prompt work.
+reserved context, Q8 K/V, the then-installed 210–1550 MHz safety ceiling, three
+warm-ups, and five measured 512-token runs. Client wall throughput was 31.88
+tokens/s (CV 0.08%); corresponding engine steps averaged about 37.55 decode
+tokens/s. These are different boundaries because each client request also paid
+roughly 2.4 seconds of short-prompt work.
 
 Nsight Systems 2026.4.1 captured CUDA graph nodes for one shallow continuation
 and one continuation after a roughly 100K-token prompt. Node-level tracing more
@@ -193,13 +194,16 @@ causal budget to close the gap to vLLM's approximately 70-token/s path. Layer
 placement was balanced across the four devices, forming one serial per-token
 GPU chain rather than four independent decode lanes.
 
-A clock-lock experiment measured higher decode throughput, but it violated
-server60's hardware-safety boundary and is rejected. Never raise this host's
-power limits or clocks for performance work, and do not deploy a dynamic clock
-controller. A static SM-clock ceiling at or below 1650 MHz is a possible safety
-cap only when Will explicitly requests it. The rejected controller was removed
-from the host and repository; the service returned to driver-managed P8/210 MHz
-idle clocks with its 230 W/card safety limit unchanged.
+A later 1995 MHz clock-lock experiment measured higher decode throughput, but
+it violated server60's hardware-safety boundary and is rejected. Never raise
+this host's power limits or clocks for performance work, and do not deploy a
+dynamic clock controller. The rejected controller was removed. The pre-existing
+safety owner, `gpu-power-limit.service`, was restored and Will then explicitly
+changed its RTX 3090 graphics-clock range from 210–1550 to 210–1650 MHz while
+retaining the 230 W/card limit. A generation-time audit sampled 180 readings and
+observed a maximum SM clock of 1650 MHz. The persistent script and unit SHA-256
+values are `da373fbd32fb34c1c63ae8b1c37489ce7af4fb589e071c509dca9f932a6724f9`
+and `a734642d9d14cca2139fcf7c99747a0465050546e29b3e59079ad60887552029`.
 
 The profile also rejects several software shortcuts for this build: CUDA weight
 repacking is not available for the dominant GPU tensors; the previous 1/2/4/8
