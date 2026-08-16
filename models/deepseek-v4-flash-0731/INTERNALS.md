@@ -24,6 +24,26 @@ history remains in Git; they are not supported launch alternatives.
 | Power | observed at the rig's unchanged 230 W/card setting |
 | Reasoning controls | off, or thinking at `low` (default), `high`, or `max` effort |
 
+## Canonical server60 deployment
+
+The profile became server60's sole DeepSeek service on 2026-08-16:
+
+- deployment source: `Whamp/club-3090@8e63f07c0dec044ebbc7818a557e5fcce2db1c12`;
+- image: `sha256:a96bd947d63eb81d8baf9f6f5ecb26669476383976717237450fbb5727b03745`;
+- artifact: 86,720,111,488-byte Antirez GGUF with SHA-256
+  `ca22ae2f838e14077c22bc1c1417b71b45b5e5a3687bd96c2ac6e17fdb6261c0`;
+- service identity: `deepseek-v4-flash-0731-q8-fast-prefill` on port 8033;
+- warm-up: 429,568 tokens at 276.43 tokens/s;
+- functional gate: all applicable `verify-full.sh` checks passed, including
+  ordinary and streaming tool calls, thinking separation, and output-quality
+  checks;
+- final state: healthy, zero restarts, `unless-stopped`, and zero process swap.
+
+The 430K profile still carries the measured low-headroom caveat. After final
+verification, server60 removed the stopped WNA16, stock llama.cpp, Unsloth
+router, and duplicate pre-publication fast-prefill containers. Model artifacts
+and research evidence remain available; the retired profiles do not.
+
 The engine image is separately named and digest-pinned in
 `scripts/lib/profiles/engines/llama-cpp-ds4-longctx.yml`. It does not replace
 `llama-cpp-local`. See [`docs/UPSTREAM.md`](../../docs/UPSTREAM.md) for the pin,
