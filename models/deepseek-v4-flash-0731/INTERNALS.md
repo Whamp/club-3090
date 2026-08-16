@@ -285,18 +285,20 @@ shape (K=4096, R=12288):
 Q8_0 VDR4 re-measured with correct work: 713 GB/s, exactly flat — the DRAM
 floor conclusion stands.
 
-**End-to-end bound.** The IQ2_XXS and Q2_K MMVQ pools are together roughly
-10% of aggregate kernel time (9.0% + <2% shallow trace; even a generous 20%
-assumption does not change the conclusion). Applying the best legal kernel
-gains to the entire pool bounds the serving decode improvement at **≤2%
-(realistic) to ≤4% (generous)**, before subtracting the measured regressions
-on the smaller shapes that share those kernels. That is far below the 10%
-materiality threshold, and the remaining mechanisms are bounded below it:
-Q8_0 at its DRAM floor, no idle time in the serial chain, no viable
-speculative path (DSpark measured net negative), P2P already flat. A serving
-A/B for the residual ~2% was judged not worth the fork-delta maintenance
-and regression risk; archived here as the measured infeasibility record for
-the 10% threshold.
+**End-to-end bound.** Serving shape mapping closes this arm. Routed gate/up
+(IQ2_XXS) matmuls at K=4096 with 6 active experts (R=12288) — the one shape
+VDR4 improves (+16%). But routed down (Q2_K) matmuls at K=2048 (per-expert
+`[4096, 2048]`), where VDR4 measured −6% (K2048/R2048) to −32% (K1024);
+its +18% K4096 result applies to no serving shape. Net: Q2_K VDR4 is a
+serving wash-or-regression, and the IQ2_XXS pool is ~9% of kernel time, so
+its +16% bounds the campaign's serving gain at **≈+1.5%** before subtracting
+the single-expert R2048 (−6%) slices. That is far below the 10% materiality
+threshold, and the remaining mechanisms are bounded below it: Q8_0 at its
+DRAM floor, no idle time in the serial chain, no viable speculative path
+(DSpark measured net negative), P2P already flat. A serving A/B for the
+residual ≈1.5% was judged not worth the fork-delta maintenance and
+regression risk; this section is the infeasibility record for the 10%
+threshold. Campaign closed with the service unchanged.
 
 The profile also rejects several software shortcuts for this build: CUDA weight
 repacking is not available for the dominant GPU tensors; the previous 1/2/4/8
