@@ -237,6 +237,26 @@ Each move is one-variable, correctness-gated (reference-identical dot
 products on random blocks, then deterministic generation canaries), and
 must preserve context capacity and the Q8 KV contract.
 
+Two arms were implemented as compile-time variants and measured in the
+microbench (three A/B repetitions each, co-resident with the idle service):
+
+- **A1 (Q2_K integer-domain micro-optimization) — rejected.** Hoisting the
+  scale product into the integer domain and building the m broadcast with one
+  `__byte_perm` measured ~288 vs ~285 GB/s on Q2_K K4096 R12288 (within
+  noise). Falsifier met: no ≥15% kernel improvement.
+- **A3 (Q8_0 rows-per-block 2) — rejected.** Overlapping two output rows per
+  block measured ~713 vs 713 GB/s on Q8_0 K4096 R4096 (within noise). The
+  latency-bound pool does not benefit from row overlap at these shapes.
+
+A duty-cycle audit during live decode (50 ms sampling, prefill samples
+excluded) measured 23.2/23.9/24.8/24.7% mean per-GPU utilization with 24–26%
+  maxima: each GPU is busy ~6.4 ms per 25.5 ms token — exactly its quarter of
+the tight serial layer-split chain. There is no idle inter-GPU time to
+reclaim; decode wall time equals the sum of per-GPU kernel time. The
+remaining untested arm is A4 (IQ2_XXS instruction-density reduction), with an
+uncertain ceiling of roughly 3% and intrinsic format instruction density as
+the risk.
+
 The profile also rejects several software shortcuts for this build: CUDA weight
 repacking is not available for the dominant GPU tensors; the previous 1/2/4/8
 MoE rows-per-block sweep was flat; four-way expert parallelism improved prefill
