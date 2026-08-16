@@ -1004,72 +1004,9 @@ COMPOSE_REGISTRY = {
         category="uncensored",
     ),
 
-    # Tess-4-27B — Qwen3.5-based dense 27B (migtissera Q4_K_M GGUF), llama.cpp dual.
-    # First EXTERNAL-MTP compose in the catalog: the nextn head ships as a SEPARATE
-    # GGUF (mtp-Tess-*.gguf), engaged via --spec-draft-model + --spec-type draft-mtp
-    # (contrast Deckard's embedded head). kv_format q4_0 (K+V). kvcalc SKIP.
-    # ── DeepSeek-V4-Flash-0731 (284B MoE) — the catalog's first CPU-OFFLOAD slugs.
-    # 137 GiB of routed experts live in HOST RAM; a few bundles are pinned back onto
-    # the GPUs (residency) and the rules are INJECTED by the launcher from detected
-    # free VRAM, never hardcoded. kvcalc SKIP (hybrid MoE + MLA — the calculator has
-    # no model for it). required_sm 8.6 so 3090/4090/5090 all qualify; the 4090/5090
-    # paths are INFERRED from the image's arch list, never booted here.
-    # No DEFAULTS row on purpose: incubating is excluded from the curated walk.
-    "llamacpp/deepseek-flash-dual-q8": _entry(
-        model="deepseek-v4-flash-0731", weights_variant="unsloth-q8-kxl", workload="long-ctx-single",
-        engine="llama-cpp-local", drafter="dspark", kv_format="fp16",
-        tp=2, max_ctx=204800, max_num_seqs=1, mem_util=None,
-        compose_path="models/deepseek-v4-flash-0731/llama-cpp/compose/dual/unsloth-q8-kxl/offload.yml",
-        # DSpark is REQUIRED, not optional -- the compose passes -md and will not
-        # boot without it, so readiness must gate on it (c3 Start would serve-fail).
-        weights_companions=("dspark",),  # DSpark draft GGUF the compose mounts
-        default_port=8030,
-        kvcalc_key="SKIP",
-        offload="n-cpu-moe",
-        host_ram_gb=146,
-        required_sm=8.6,
-        status="incubating",
-        status_note="A 284B MoE on 2x24 GB. QUALITY TIER of the two DeepSeek-Flash offload slugs. Stock upstream b10236, zero patches. Three levers compose: CPU expert offload (137 GiB of routed experts in host RAM) + partial residency (bundles pinned back onto the GPUs, sized by the launcher from DETECTED free VRAM) + the DSpark drafter. HARD GATE: ~146 GB host RAM worst case -- preflight REFUSES below it. Ships 200K, NOT 262K: at 262K with the drafter it boots READY at 97.4% VRAM, passes a trivial decode, then dies on a ~15.7K-token prefill (CUDA OOM in cuMemCreate, reproduced 2026-08-06). CANONICAL BENCH PUBLISHED 2026-08-09 (BENCHMARKS.md row 2, reference 2x3090, 3-boot medians): decode 17.1 narrative / 26.9 code at canonical sampling, prefill 369 @10K / 287 @90K, TTFT 169 ms; greedy-replay 35.2. The 8-pack is still owed -- stays incubating until quality lands.",
-        category="frontier",
-    ),
-
-    "llamacpp/deepseek-flash-dual-iq2": _entry(
-        model="deepseek-v4-flash-0731", weights_variant="unsloth-iq2-xxs", workload="long-ctx-single",
-        engine="llama-cpp-local", drafter="dspark", kv_format="fp16",
-        tp=2, max_ctx=204800, max_num_seqs=1, mem_util=None,
-        compose_path="models/deepseek-v4-flash-0731/llama-cpp/compose/dual/unsloth-iq2-xxs/offload.yml",
-        # DSpark is REQUIRED, not optional -- the compose passes -md and will not
-        # boot without it, so readiness must gate on it (c3 Start would serve-fail).
-        weights_companions=("dspark",),  # DSpark draft GGUF the compose mounts
-        default_port=8031,
-        kvcalc_key="SKIP",
-        offload="n-cpu-moe",
-        host_ram_gb=86,
-        required_sm=8.6,
-        status="incubating",
-        status_note="REACH TIER of the two DeepSeek-Flash offload slugs: ~86 GB host RAM worst case vs the Q8 tier's ~146 GB, which is what makes a 284B model fit a constrained box. Stock upstream b10236, zero patches; same three levers (offload + launcher-sized residency + DSpark). ~2.6-bit experts. Scoped to dual 24 GB by design. CANONICAL BENCH PUBLISHED 2026-08-09 (BENCHMARKS.md row 3, reference 2x3090): decode 15.4 narrative / 24.3 code at canonical sampling, prefill 436 @10K / 311 @90K -- decode ~10% SLOWER than Q8 (lower draft acceptance on 2.6-bit experts); this tier's case is the RAM gate and prefill, not decode. The 8-pack is still owed, and quality is the open question on a quant this low -- stays incubating. FIRST COMMUNITY VALIDATION: 2x5090 + 123 GB (#931) -- asymmetric 7+8 residency, prefill-90K x3 clean, NIAH ladder to 188K, soak-stable VRAM; that pair of runs is the calibration source for the additive auto-sizer.",
-        category="frontier",
-    ),
-
-    # multi4: AUTHORED HERE, VALIDATED ELSEWHERE. We have 2 cards.
-    "llamacpp/deepseek-flash-multi4-q8": _entry(
-        model="deepseek-v4-flash-0731", weights_variant="unsloth-q8-kxl", workload="long-ctx-single",
-        engine="llama-cpp-local", drafter="dspark", kv_format="fp16",
-        tp=4, max_ctx=204800, max_num_seqs=1, mem_util=None,
-        compose_path="models/deepseek-v4-flash-0731/llama-cpp/compose/multi4/unsloth-q8-kxl/offload.yml",
-        # DSpark is REQUIRED, not optional -- the compose passes -md and will not
-        # boot without it, so readiness must gate on it (c3 Start would serve-fail).
-        weights_companions=("dspark",),  # DSpark draft GGUF the compose mounts
-        default_port=8032,
-        kvcalc_key="SKIP",
-        offload="n-cpu-moe",
-        host_ram_gb=120,
-        required_sm=8.6,
-        status="incubating",
-        status_note="4-card QUALITY tier. NEVER BOOTED BY US. 2026-08-07: a 4x3090 + 128 GB owner (@milano, Discord) BOOTED it after correcting two constants this compose had COPIED from the dual file and never re-derived for four cards -- reserve 18000 (a 2-way dense split) granted 1 bundle/card where 2 fit, and the 146 GB gate then REFUSED the 128 GB box this slug exists to serve. Reserve now 14500 (additive #931 recalibration; the interim x0.55-era value was 12000); host_ram_gb=120 HERE is the nominal 4x24 figure (what the catalog displays -- @milano measured it), while the COMPOSE HEADER carries the 146 all-experts-on-CPU worst case and preflight computes the rig-specific need by subtracting detected residency (~121 at 4x24; 4x16 GB fits zero bundles and correctly gates at ~146). The mismatch is deliberate -- do not 'fix' either number to match the other. STILL UNVALIDATED BEYOND BOOT: no real prefill probe yet, and on this model boot is NOT sufficient -- the 262K config booted, passed a trivial decode, then died on the first ~15.7K prefill. Prefill probe requested. The argument is NOT throughput: every layer pinned to a GPU is a layer NOT in host RAM, so host RAM FALLS with card count -- **120 GB MEASURED** at 4x24 GB (was ~113 est.) vs ~146 at 2x24 -- first 4-card boot by @milano 2026-08-07. 128 GB is a very common host config, which the 2-card Q8 slug EXCLUDES and this one FITS, so multi4 is what puts the quality tier inside a mainstream RAM budget. Residency should also be at its best here (~23% of expert traffic on GPU vs 4.7% on two cards). No IQ2 multi slug: on four cards Q8 itself drops into a 128 GB budget, so a low-bit tier is not needed to fit.",
-        category="frontier",
-    ),
-
+    # DeepSeek-V4-Flash-0731 has one canonical llama.cpp profile. The former
+    # Unsloth CPU-offload slugs were retired after the fully resident Antirez
+    # fast-prefill path proved faster and more completely validated on 4x3090.
     "llamacpp/deepseek-flash-multi4-antirez-iq2-fast-prefill": _entry(
         model="deepseek-v4-flash-0731", weights_variant="antirez-iq2-xxs", workload="long-ctx-single",
         engine="llama-cpp-ds4-longctx", drafter=None, kv_format="q8_0",
@@ -1084,11 +1021,14 @@ COMPOSE_REGISTRY = {
         required_engine_features=("deepseek4_q8_kv", "dsv4_prefill_graphs"),
         required_sm=8.6,
         requires_homogeneous_arch=True,
-        status="incubating",
-        status_note="4x RTX 3090 resident fast-prefill specialist: Antirez IQ2_XXS + matching q8_0 K/V on the separately pinned alesha-pro ds4-longctx engine with Whamp's validated Q8 repair. Full graph warm-up is automatic and keeps the public endpoint closed for ~26 minutes at the 430080 default. Exact recall passed at 395282 tokens; minimum observed free VRAM was 794 MiB, below the repo's normal 1024 MiB production guard but above the accepted 750 MiB experiment floor. Full 8-pack quality: 109/150 thinking-off; thinking-on scored 121/150 at low, 121/150 at high, and 123/150 at max. The same Antirez Q8 weights on stock b10200 scored 111/150 thinking-off and 122/150 at default-low thinking-on, supporting serving/quantization parity. The max run used a 65536-token output cap and 4 of 226 API responses hit it. These scores are regression evidence, not an intelligence ceiling; several failures overlap open benchlocal-cli benchmark-definition problems. This is the first catalog profile with graded reasoning effort: low (default when thinking is enabled), high, and max. Full 200K operational gate passed (verify-full, verify-stress, quality, agentic, soak); 430K passed verify-full and the fast stress ceiling ladder. sm_86 and this exact Antirez quant only. No DEFAULTS row.",
+        status="caveats",
+        status_note="Canonical 4x RTX 3090 DeepSeek V4 llama.cpp profile (production with caveats): Antirez IQ2_XXS + matching q8_0 K/V on the separately pinned alesha-pro ds4-longctx engine with Whamp's validated Q8 repair. Full graph warm-up is automatic and keeps the public endpoint closed for ~26 minutes at the 430080 default. Exact recall passed at 395282 tokens; minimum observed free VRAM was 794 MiB, below the repo's normal 1024 MiB production guard but above the accepted 750 MiB experiment floor. Full 8-pack quality: 109/150 thinking-off; thinking-on scored 121/150 at low, 121/150 at high, and 123/150 at max. The same Antirez Q8 weights on stock b10200 scored 111/150 thinking-off and 122/150 at default-low thinking-on, supporting serving/quantization parity. The max run used a 65536-token output cap and 4 of 226 API responses hit it. These scores are regression evidence, not an intelligence ceiling; several failures overlap open benchlocal-cli benchmark-definition problems. This is the first catalog profile with graded reasoning effort: low (default when thinking is enabled), high, and max. Full 200K operational gate passed (verify-full, verify-stress, quality, agentic, soak); 430K passed verify-full and the fast stress ceiling ladder. sm_86 and this exact Antirez quant only. This is the sole supported DeepSeek V4 llama.cpp profile; former Unsloth CPU-offload profiles are retained only in Git history.",
         category="frontier",
     ),
 
+    # Tess-4-27B — Qwen3.5-based dense 27B (migtissera Q4_K_M GGUF), llama.cpp dual.
+    # Its external nextn head is engaged via --spec-draft-model + --spec-type
+    # draft-mtp. kv_format q4_0 (K+V). kvcalc SKIP.
     "llamacpp/tess-dual-mtp": _entry(
         model="tess-4-27b", weights_variant="migtissera-q4km", workload="fast-chat",
         engine="llama-cpp-local", drafter="tess-mtp-gguf", kv_format="q4_0",
@@ -1260,6 +1200,9 @@ DEFAULTS = {
     ("qwen3.6-40b-deckard", "llamacpp", "dual"): "llamacpp/deckard40B-dual-mtp",
     # Tess-4-27B: single dual llama.cpp compose (external MTP); ⚠️ caveats = functional.
     ("tess-4-27b", "llamacpp", "dual"): "llamacpp/tess-dual-mtp",
+    # DeepSeek V4 Flash: one supported llama.cpp profile on four homogeneous
+    # RTX 3090-class GPUs. No lower-topology fallback is intentionally exposed.
+    ("deepseek-v4-flash-0731", "llamacpp", "multi4"): "llamacpp/deepseek-flash-multi4-antirez-iq2-fast-prefill",
     # Tess-4-27B vLLM: the W4A16 MTP-revival slug (2026-07-17). ⚠️ NOTE: because
     # ENGINE_PREFERENCE[dual] walks vllm first and status=caveats is functional,
     # this row ALSO flips the curated `tess-4-27b/default` from llamacpp to vllm

@@ -9,8 +9,9 @@
 #   Max ctx:   430080 reserved · 395282 exact-recall validated
 #   Genesis:   N/A — Genesis is Qwen3-Next-specific
 #   Reasoning: off · low (default when enabled) · high · max
-#   Status:    🐣 Incubating
-#   Caveats:   External DeepSeek-only fork; sm_86 image; requires
+#   Status:    ⚠️ Production with caveats
+#   Caveats:   Canonical DeepSeek llama.cpp profile. External DeepSeek-only
+#              fork; sm_86 image; requires
 #              LLAMA_ATTN_ROT_DISABLE=1 and a ~26-minute full-context warm-up.
 #              Minimum observed free VRAM was 794 MiB, below the repo's usual
 #              1024 MiB production guard but above the validated 750 MiB floor.
@@ -19,9 +20,8 @@
 #   Best for:  One persistent coding-agent session with deep repeated prefill
 # Requires-homogeneous-arch: true
 # ---------------------------------------------------------------------------
-# Sibling comparison:
-#   unsloth-q8-kxl/offload.yml  · mainline b10236 · FP16 KV · 200K · CPU offload
-#   antirez-iq2-xxs/fast-prefill.yml · external fork · Q8 KV · 430K · all-GPU
+# This is the only supported DeepSeek V4 Flash llama.cpp profile in the catalog.
+# Retired Unsloth CPU-offload and IQ1_M experiments remain in Git history only.
 #
 # The entrypoint keeps :8080 CLOSED until one synthetic context_size-512 prefill
 # completes on internal :8081. That warm-up prepares the allocator and CUDA
@@ -52,7 +52,7 @@ services:
   llama-cpp-deepseek-v4-fast-prefill:
     image: ${LLAMACPP_DSV4_LONGCTX_IMAGE:-ghcr.io/whamp/llama-cpp-ds4-longctx@sha256:a96bd947d63eb81d8baf9f6f5ecb26669476383976717237450fbb5727b03745}
     container_name: "${ESTATE_CONTAINER:-llama-cpp-deepseek-v4-fast-prefill}"
-    restart: "no"
+    restart: unless-stopped
     ports:
       - "${BIND_HOST:-0.0.0.0}:${ESTATE_PORT:-${PORT:-8033}}:8080"
     environment:

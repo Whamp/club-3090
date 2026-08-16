@@ -36,7 +36,7 @@ assert len(p.hardware) == 10  # +dgx-spark (#576 follow-up)
 assert len(p.models) == 15   # +deepseek-v4-flash-0731
 assert len(p.workloads) == 5
 assert len(p.engines) == 14  # +llama-cpp-ds4-longctx
-assert len(p.drafters) == 16  # +dspark
+assert len(p.drafters) == 15  # DeepSeek DSpark experiment retired
 assert len(p.calibration) == 5
 PY
 

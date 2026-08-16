@@ -1,9 +1,13 @@
 # DeepSeek V4 Flash internals
 
-This page records the engineering behind
-`llamacpp/deepseek-flash-multi4-antirez-iq2-fast-prefill`. The profile is an
-incubating specialist, not a replacement for the stock llama.cpp DeepSeek
-profiles.
+This page records the engineering behind the canonical DeepSeek V4 Flash
+llama.cpp profile:
+`llamacpp/deepseek-flash-multi4-antirez-iq2-fast-prefill`.
+
+The former Unsloth CPU-offload profiles were retired from the catalog and disk
+layout. They were slower, less completely validated, and added ambiguity after
+the Antirez profile proved superior for the four-RTX-3090 target. Their measured
+history remains in Git; they are not supported launch alternatives.
 
 ## Validated configuration
 
@@ -159,9 +163,9 @@ All measurements below came from the same 4× RTX 3090 rig at its unchanged
 | Minimum observed free VRAM | 794 MiB |
 
 The 794 MiB floor is 44 MiB above the experiment's accepted 750 MiB floor but
-below the repo's normal 1,024 MiB production guard. That narrow margin is one
-reason the profile remains incubating. Set `CTX_SIZE=200000` for the higher-margin
-fallback.
+below the repo's normal 1,024 MiB production guard. That narrow margin remains
+an operational caveat even though this is now the canonical profile. Set
+`CTX_SIZE=200000` for the higher-margin fallback.
 
 ### Q8 versus F16 at 200K
 

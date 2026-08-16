@@ -27,10 +27,36 @@ for fn in is_cpu_offload_compose preflight_offload_split_mode preflight_cpu_offl
   declare -F "$fn" >/dev/null 2>&1 && ok "$fn defined" || bad "$fn missing"
 done
 
-Q8=models/deepseek-v4-flash-0731/llama-cpp/compose/dual/unsloth-q8-kxl/offload.yml
-IQ2=models/deepseek-v4-flash-0731/llama-cpp/compose/dual/unsloth-iq2-xxs/offload.yml
-M4=models/deepseek-v4-flash-0731/llama-cpp/compose/multi4/unsloth-q8-kxl/offload.yml
+# DeepSeek's former CPU-offload profiles are retired. Keep this generic preflight
+# machinery covered with synthetic composes rather than retaining launchable,
+# obsolete model profiles as test fixtures.
+fixture_dir="$(mktemp -d)"
+Q8="$fixture_dir/q8-dual.yml"
+IQ2="$fixture_dir/iq2-dual.yml"
+M4="$fixture_dir/q8-multi4.yml"
 NONOFF=models/tess-4-27b/llama-cpp/compose/dual/migtissera-q4km/mtp.yml
+
+_write_offload_fixture() {
+  local path="$1" host_ram="$2" bundle="$3" reserve="$4"
+  cat > "$path" <<EOF
+# CPU-Offload-Host-RAM-GB: $host_ram
+# CPU-Offload-Bundle-MiB: $bundle
+# CPU-Offload-MoE-Layers: 43
+# CPU-Offload-First-MoE-Layer: 0
+# CPU-Offload-GPU-Reserve-MiB: $reserve
+services:
+  x:
+    command:
+      - '--split-mode'
+      - 'layer'
+      - '-ot'
+      - 'blk\\.(gate|up|down)=CPU'
+      - '\${THREADS:-8}'
+EOF
+}
+_write_offload_fixture "$Q8" 146 3264 18000
+_write_offload_fixture "$IQ2" 86 1840 16500
+_write_offload_fixture "$M4" 146 3264 14500
 
 # ---- detector ----
 for f in "$Q8" "$IQ2" "$M4"; do
@@ -42,7 +68,7 @@ is_cpu_offload_compose "$NONOFF" && bad "FALSE POSITIVE on a non-offload compose
 
 # ⚠️ the detector must key on =CPU, NOT on the presence of -ot: our offload composes
 # carry 2-4 `-ot ...=CUDA*` RESIDENCY rules, which are the opposite of offload.
-tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
+tmp="$(mktemp)"; trap 'rm -f "$tmp"; rm -rf "$fixture_dir"' EXIT
 printf 'services:\n  x:\n    command: >-\n      -ngl 99 -ot blk\\.1\\.ffn_gate_exps\\.weight=CUDA0 -sm layer\n' > "$tmp"
 is_cpu_offload_compose "$tmp" && bad "detector fires on a GPU-RESIDENT (=CUDA) -ot rule" \
   || ok "does not fire on =CUDA residency rules (the -ot false-positive trap)"
@@ -119,7 +145,7 @@ declare -F _offload_fit_count >/dev/null 2>&1 && ok "_offload_fit_count defined"
 
 # deterministic VRAM via a stubbed nvidia-smi — the test must not depend on the
 # rig it runs on (or on having GPUs at all)
-stub="$(mktemp -d)"; trap 'rm -f "$tmp"; rm -rf "$stub"' EXIT
+stub="$(mktemp -d)"; trap 'rm -f "$tmp"; rm -rf "$fixture_dir" "$stub"' EXIT
 _mkstub() { printf '#!/usr/bin/env bash\nprintf "%s"\n' "$1" > "$stub/nvidia-smi"; chmod +x "$stub/nvidia-smi"; }
 
 _mkstub '24576\n24576\n'
@@ -242,28 +268,21 @@ m4_hdr="$(compose_meta_get "$M4" cpu-offload-host-ram-gb)"
   && ok "dual-Q8 and multi4-Q8 headers agree ($q8_hdr GB — same quant, same worst case)" \
   || bad "Q8 headers diverge (dual=$q8_hdr multi4=$m4_hdr): residency was pre-baked into one"
 
-# registry host_ram_gb is the NOMINAL display figure and must never exceed the
-# header's worst case (nominal = worst case minus residency, on any topology)
-while IFS='|' read -r slug reg_gb; do
-  case "$slug" in
-    *dual-q8)   f="$Q8" ;;
-    *dual-iq2)  f="$IQ2" ;;
-    *multi4-q8) f="$M4" ;;
-    *) continue ;;
-  esac
-  hdr="$(compose_meta_get "$f" cpu-offload-host-ram-gb)"
-  [[ "$reg_gb" =~ ^[0-9]+$ && "$reg_gb" -le "$hdr" ]] \
-    && ok "$slug: registry nominal ($reg_gb) <= header worst case ($hdr)" \
-    || bad "$slug: registry host_ram_gb=$reg_gb exceeds header worst case $hdr"
-done < <(python3 - <<'PY'
-import sys
-sys.path.insert(0, ".")
+# No production profile currently uses CPU offload. The schema and generic
+# guard remain available for future profiles, but DeepSeek must not reintroduce
+# a hidden host-RAM tier.
+if python3 - <<'PY'
 from scripts.lib.profiles.compose_registry import COMPOSE_REGISTRY
-for slug, e in COMPOSE_REGISTRY.items():
-    if "deepseek-flash" in slug and e.get("host_ram_gb"):
-        print(f"{slug}|{e['host_ram_gb']}")
+raise SystemExit(any(
+    slug.startswith("llamacpp/deepseek-flash") and entry.get("host_ram_gb")
+    for slug, entry in COMPOSE_REGISTRY.items()
+))
 PY
-)
+then
+  ok "DeepSeek registry has no CPU-offload profile"
+else
+  bad "DeepSeek registry unexpectedly reintroduced CPU offload"
+fi
 
 # ---- thread resolution (nproc/2 -- a SAFE limit for rigs whose core count we don't know) ----
 declare -F resolve_offload_threads >/dev/null 2>&1 && ok "resolve_offload_threads defined" \

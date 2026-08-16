@@ -77,7 +77,7 @@ model_label() {
   case "$1" in
     qwen3.6-27b) echo "Qwen 3.6 27B" ;;
     qwen3.6-35b-a3b) echo "Qwen 3.6 35B-A3B" ;;
-    deepseek-v4-flash-0731) echo "DeepSeek-V4-Flash-0731 (284B MoE, CPU offload)" ;;
+    deepseek-v4-flash-0731) echo "DeepSeek-V4-Flash-0731 (Antirez IQ2_XXS fast-prefill, 4× RTX 3090)" ;;
     gemma-4-31b) echo "Gemma 4 31B" ;;
     gemma-4-26b-a4b) echo "Gemma 4 26B-A4B" ;;
     diffusiongemma-26b-a4b) echo "DiffusionGemma 26B-A4B (dLLM)" ;;
@@ -216,14 +216,10 @@ case "${MODEL_NAME}" in
     PRIMARY_WEIGHT_KEY="qwen3.6-35b-a3b:autoround-int4"
     ;;
   deepseek-v4-flash-0731)
-    # Defaults to the IQ2 REACH tier (~85 GB on disk, ~86 GB host RAM) rather than
-    # Q8 (~151 GB / ~146 GB host RAM): the reach tier is the one most rigs can
-    # actually run, and a wrong guess here costs the user a 151 GB download.
-    # Q8 instead:  WEIGHT_KEY=deepseek-v4-flash-0731:unsloth-q8-kxl scripts/setup.sh deepseek-v4-flash-0731
-    PRIMARY_WEIGHT_KEY="deepseek-v4-flash-0731:unsloth-iq2-xxs"
-    # ⚠️ NOT optional: both slugs pass -md and will not boot without the drafter.
-    # The main GGUF has no embedded nextn head, so DSpark is the only spec path.
-    ALWAYS_DRAFT_KEY="deepseek-v4-flash-0731:dspark"
+    # One canonical llama.cpp path: Antirez IQ2_XXS/Q2_K on the separately
+    # pinned ds4-longctx engine. Do not substitute Unsloth IQ1_M: its routed
+    # experts fail the validated MMQ capture path's graph-safety contract.
+    PRIMARY_WEIGHT_KEY="deepseek-v4-flash-0731:antirez-iq2-xxs"
     ;;
   gemma-4-31b)
     PRIMARY_WEIGHT_KEY="gemma-4-31b:autoround-int4"
@@ -952,19 +948,15 @@ case "${MODEL_NAME}" in
   bash scripts/switch.sh vllm/qwen35-preview"
     ;;
   deepseek-v4-flash-0731)
-    # llama.cpp only — there is no vLLM compose for this model, so the generic
-    # "single-card vLLM" line below MUST be overridden or it prints a path that
-    # does not exist. Defaults track the IQ2 reach tier (setup.sh's default
-    # weight key); the Q8 sibling serves on 8030.
-    SAMPLE_CONTAINER="llama-cpp-deepseek-flash-iq2"
-    SAMPLE_COMPOSE_FLAGS_DUAL=""
-    SAMPLE_PORT="8031"
-    SAMPLE_MODEL_NAME="deepseek-v4-flash"
-    SAMPLE_LAUNCH_HINT="  bash scripts/switch.sh --force llamacpp/deepseek-flash-dual-iq2"
-    NEXT_STEPS_NOTE="🐣 incubating — launch needs --force (non-functional by default).
-  Quality tier instead (needs ~146 GB host RAM vs ~86 GB, serves on 8030):
-  bash scripts/switch.sh --force llamacpp/deepseek-flash-dual-q8
-  Expect 8-10 min to load (--no-mmap, and the weights are large)."
+    # llama.cpp only. The public endpoint stays closed until the mandatory
+    # full-context graph warm-up completes.
+    SAMPLE_CONTAINER="llama-cpp-deepseek-v4-fast-prefill"
+    SAMPLE_PORT="8033"
+    SAMPLE_MODEL_NAME="deepseek-v4-flash-0731-q8-fast-prefill"
+    SAMPLE_LAUNCH_HINT="  bash scripts/switch.sh llamacpp/deepseek-flash-multi4-antirez-iq2-fast-prefill"
+    NEXT_STEPS_NOTE="Canonical 4× RTX 3090 profile. The default 430080-token warm-up takes about 26 minutes.
+  For the higher-margin 200K fallback:
+  CTX_SIZE=200000 bash scripts/switch.sh llamacpp/deepseek-flash-multi4-antirez-iq2-fast-prefill"
     ;;
 esac
 
