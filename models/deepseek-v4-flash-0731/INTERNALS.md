@@ -174,6 +174,64 @@ frequent model switching.
 All measurements below came from the same 4× RTX 3090 rig at its unchanged
 230 W/card setting.
 
+### Decode profile and request-aware clocks (2026-08-16)
+
+A fresh single-stream baseline used the canonical Antirez artifact, 430,080
+reserved context, Q8 K/V, three warm-ups, and five measured 512-token runs.
+Client wall throughput was 31.88 tokens/s (CV 0.08%); the corresponding engine
+steps averaged 37.55 decode tokens/s. These are different boundaries: each
+client request also paid about 2.4 seconds of short-prompt work.
+
+Nsight Systems 2026.4.1 captured CUDA graph nodes for one shallow continuation
+and one continuation after a roughly 100K-token prompt. Node-level tracing more
+than doubled request wall time, so the traces are attribution evidence only,
+not benchmark results. Normalized aggregate kernel time rose from about 28.5
+GPU-ms/token shallow to 29.5 GPU-ms/token deep. Quantized Q8_0, IQ2_XXS, and
+Q2_K projections remained the dominant device work. Sparse attention,
+Lightning Indexer, and radix selection grew with context but did not have enough
+causal budget to explain or close the gap to vLLM's approximately 70-token/s
+path. Layer placement was balanced across the four devices; it forms one serial
+per-token GPU chain rather than four independent decode lanes.
+
+The strongest low-cost move was locking each GPU's SM clock at 1995 MHz while a
+request is active. Layer-split decode leaves idle gaps between each GPU's work,
+which lets normal DVFS reduce clocks inside the serial chain. A same-process,
+one-variable A/B at the unchanged 230 W power limit measured:
+
+| Scope | Unlocked | 1995 MHz | Change |
+|---|---:|---:|---:|
+| 512-token client wall throughput, 5 runs | 30.44 tok/s | 33.85 tok/s | +11.2% |
+| 512-token engine decode, 5 runs | 35.63 tok/s | 40.32 tok/s | +13.2% |
+| roughly 100K-context engine decode, 3 runs | 31.55 tok/s | 36.18 tok/s | +14.7% |
+| 25,515-token engine prefill, 3 runs | 1,139.4 tok/s | 1,141.5 tok/s | +0.18% |
+
+Clock transitions took about 0.13 seconds. Keeping the lock active at idle was
+rejected because it held the four cards above their normal low-power state. The
+request-aware controller in `scripts/deepseek-v4-request-clocks.py` watches one
+explicit llama.cpp `/slots` endpoint, locks on busy, and resets after five idle
+seconds. It also resets after bounded endpoint loss, SIGTERM/SIGINT, or normal
+exit. The request-aware arm retained 33.73 of the always-locked 33.85 client
+tokens/s; after reset and driver decay, all cards returned to P8 at 26–30 W.
+The opt-in root unit and install contract are in
+`scripts/systemd/deepseek-v4-request-clocks.service`.
+
+The profile also rejects several tempting shortcuts for this exact build:
+CUDA weight repacking is not available for the dominant GPU tensors; the
+previous 1/2/4/8 MoE rows-per-block sweep was flat; four-way expert parallelism
+improved prefill but reduced decode; row/tensor split cannot reserve the
+DeepSeek V4 grouped-attention graph; and the existing DSpark speculative path
+was net-negative. The remaining code-level opportunity is a wider-load,
+more-rows-in-flight i-quant MMVQ port for IQ2_XXS/Q2_K, estimated from the
+measured kernel share to offer roughly 6–8%, not a route to 70 tokens/s by
+itself.
+
+Raw reports remain on server60 rather than in Git:
+
+- `decode-baseline.nsys-rep`, SHA-256
+  `aab5d74d42aaa0614ecbdaa737dd3e0927e99d478fd82aae4c04a5d913f194a1`;
+- `decode-deep-100k.nsys-rep`, SHA-256
+  `e3d54ba9d4b5e0baf3194b982641bd594c1c07157ea18f649f273ed55d79dcb1`.
+
 ### 430K profile
 
 | Probe | Result |
