@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <cmath>
 #include <vector>
 
 struct shape_run {
@@ -108,8 +109,10 @@ int main(int argc, char ** argv) {
 
         const int reps = 16; // independent nodes per graph: amortize launch/enqueue cost
         ggml_cgraph * graph = ggml_new_graph_custom(ctx, reps + 8, false);
+        ggml_tensor * rep_out[16];
         for (int i = 0; i < reps; i++) {
             ggml_tensor * mm = ggml_mul_mat(ctx, w, x);
+            rep_out[i] = mm;
             ggml_build_forward_expand(graph, mm);
         }
 
@@ -134,7 +137,23 @@ int main(int argc, char ** argv) {
         const double us = dt_ms * 1000.0 / (iters * reps);
         const double gbps = (double)w_bytes / (us * 1e-6) / 1e9;
 
-        printf("%s,%lld,%lld,%.3f,%.2f\n", r.name, (long long)r.ne01, (long long)r.ne00, us, gbps);
+        printf("%s,%lld,%lld,%.3f,%.2f", r.name, (long long)r.ne01, (long long)r.ne00, us, gbps);
+
+        // Deterministic output checksum: same quantized bytes and input on
+        // every binary; variants must agree with the default within fp
+        // accumulation-order tolerance. Detects any VDR mis-indexing.
+        {
+            std::vector<float> out(r.ne01);
+            ggml_backend_tensor_get(rep_out[0], out.data(), 0, ggml_nbytes(rep_out[0]));
+            double sum = 0.0, maxabs = 0.0;
+            for (int64_t i = 0; i < r.ne01; i++) {
+                sum += (double)out[i];
+                const double a = fabs((double)out[i]);
+                if (a > maxabs) maxabs = a;
+            }
+            printf(",%.9e,%.6e", sum, maxabs);
+        }
+        printf("\n");
         fflush(stdout);
 
         ggml_backend_buffer_free(buf2);

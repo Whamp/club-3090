@@ -250,12 +250,53 @@ microbench (three A/B repetitions each, co-resident with the idle service):
 
 A duty-cycle audit during live decode (50 ms sampling, prefill samples
 excluded) measured 23.2/23.9/24.8/24.7% mean per-GPU utilization with 24–26%
-  maxima: each GPU is busy ~6.4 ms per 25.5 ms token — exactly its quarter of
+maxima: each GPU is busy ~6.4 ms per 25.5 ms token — exactly its quarter of
 the tight serial layer-split chain. There is no idle inter-GPU time to
-reclaim; decode wall time equals the sum of per-GPU kernel time. The
-remaining untested arm is A4 (IQ2_XXS instruction-density reduction), with an
-uncertain ceiling of roughly 3% and intrinsic format instruction density as
-the risk.
+reclaim; decode wall time equals the sum of per-GPU kernel time.
+
+### Arm A4: VDR amortization — measured and closed
+
+**Falsifier trap (rejected numbers).** Raising only the
+`VDR_*_Q8_1_MMVQ` macros appeared to give +31…+145% kernel bandwidth. The
+added output checksum exposed it as computing 25–50% of the work: the MMVQ
+kernel strides blocks by `vdr` while the vec_dot implementations are
+hard-coded to their structural per-call unit count. Those numbers are
+invalid; the macros are documentation of the implementation, not knobs.
+
+**Real rewrite.** `vec_dot_iq2_xxs_q8_1` and `vec_dot_q2_K_q8_1` were
+rewritten to genuinely process `VDR` units per call (identical per-unit
+arithmetic, fp accumulation across units; VDR at the structural default
+reproduces the originals bit-for-bit). Validated by checksum across all ten
+bench shapes: untouched types match the stock binary exactly; changed types
+match to fp reassociation tolerance (max-abs identical).
+
+Legal VDRs must divide the per-block unit count (IQ2_XXS qi=4: only VDR 4;
+Q2_K qi=8: VDR 2 or 4; VDR 8 for IQ2_XXS divides by zero in the launch
+mapping and is invalid). Order-swapped A/B on the dominant 6-expert decode
+shape (K=4096, R=12288):
+
+| Variant | K4096/R12288 | K4096/R2048 | K2048/R2048 | K1024/R4096 |
+|---|---:|---:|---:|---:|
+| IQ2_XXS VDR4 | **+16%** (335 GB/s) | −6% | +13% | −32% |
+| IQ2_XXS VDR8 | invalid | invalid | invalid | invalid |
+| Q2_K VDR2 | ~flat | −7% | flat | −7% |
+| Q2_K VDR4 | **+18%** (367 GB/s) | −12% | −6% | −32% |
+
+Q8_0 VDR4 re-measured with correct work: 713 GB/s, exactly flat — the DRAM
+floor conclusion stands.
+
+**End-to-end bound.** The IQ2_XXS and Q2_K MMVQ pools are together roughly
+10% of aggregate kernel time (9.0% + <2% shallow trace; even a generous 20%
+assumption does not change the conclusion). Applying the best legal kernel
+gains to the entire pool bounds the serving decode improvement at **≤2%
+(realistic) to ≤4% (generous)**, before subtracting the measured regressions
+on the smaller shapes that share those kernels. That is far below the 10%
+materiality threshold, and the remaining mechanisms are bounded below it:
+Q8_0 at its DRAM floor, no idle time in the serial chain, no viable
+speculative path (DSpark measured net negative), P2P already flat. A serving
+A/B for the residual ~2% was judged not worth the fork-delta maintenance
+and regression risk; archived here as the measured infeasibility record for
+the 10% threshold.
 
 The profile also rejects several software shortcuts for this build: CUDA weight
 repacking is not available for the dominant GPU tensors; the previous 1/2/4/8
