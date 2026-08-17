@@ -32,11 +32,13 @@ Different trades. vLLM is faster (51-89 TPS depending on config) and has full fe
 
 ### Does CPU offload add 16 or 24 GiB of extra context?
 
-No—not in the service we currently run. `--kv-offloading-size` is a flag from the custom Whamp/vLLM branch we investigated. It is not a llama.cpp setting. Adding it to the current llama.cpp launch cannot create a CPU KV cache.
+We investigated this on the TP=4 vLLM deployment and closed the experiment without a result. Native CPU offload is an extra system-RAM tier for reusable prompt prefixes. It does not increase the GPU memory available to an actively running request.
 
-We also tested the custom vLLM path and stopped before measuring 16 versus 24 GiB. The only quick test forced vLLM to use 200 GPU KV blocks so eviction would happen quickly. That made startup fail: vLLM had only 0.19 GiB available for KV cache but needed 1.11 GiB at the normal 230K context, and 0.35 GiB even after lowering the test to 32K. It reported a maximum context of only 448 tokens. The failure came from the artificial 200-block limit, not from CPU offload itself.
+The quick test tried to force eviction with `--num-gpu-blocks-override 200`. That was the mistake in the test design. vLLM then had only 0.19 GiB available for KV cache but needed 1.11 GiB at the normal 230K context. Lowering the test to 32K still needed 0.35 GiB, so startup failed and reported a maximum context of 448 tokens. This was caused by the artificial 200-block limit, not by `--kv-offloading-size`.
 
-A realistic test would keep all 1,355 GPU blocks and first fill them with roughly ten competing 30K-token prompts. That was too large for the agreed time limit, so no 16 or 24 GiB result exists. Close this direction: do not add the flag to the production service or claim that it improves performance. Keep the current llama.cpp setup for large context. The raw evidence is preserved on `feat/kv-offload-benchmark` at commit `cf0aea29`, under `results/kv-offload-tp4-early-stop-20260815/`.
+A representative test would keep all 1,355 GPU blocks and fill them naturally with roughly ten competing 30K-token prompts. That was too large for the agreed time limit. No 16 or 24 GiB comparison exists, so do not claim a benefit or add a setting based on this experiment. The direction is closed unless a future test can use a realistic workload and a separate time budget.
+
+The raw evidence is preserved on `feat/kv-offload-benchmark` at commit `cf0aea29`, under `results/kv-offload-tp4-early-stop-20260815/`. The later direct command and its error were not present in the recovered project or global session records, so no additional flag-specific cause is recorded.
 
 ### Why not Ollama?
 
