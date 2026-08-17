@@ -1,12 +1,14 @@
 # PLAN: Native GGUF tensor-parallel inference for DeepSeek-V4-Flash on 4× RTX 3090
 
-Status: execution v6. M0/M1 passed. M2 iteration 1 (native BF16 scalar
-IQ2_XXS matvec) passed correctness/graph gates but delivered only 40.9 GB/s;
-aligned layout improved 2.0%, falsifying alignment as the dominant constraint
-for scalar FMA. The final permitted tuning iteration is explicit per-layer
-BF16→Q8_1 quantization plus native DP4A IQ2_XXS matvec; conversion cost is
-measured separately/shared across gate+up experts and never hidden. Earlier
-plan changes: two changes from v4: (1) **the "wrap llama.cpp kernels"
+Status: execution v7. M0/M1 passed. M2 IQ2 gate/up fragment passed: native
+Q8_1+DP4A indexed top-6 gate/up at the corrected TP4 shape K4096→N512/rank
+measured 27.309 µs for captured quantize+compute and 247.35 GB/s over five
+exclusive trials (0.343% kernel CV); 15/15 SM86 correctness/graph tests pass.
+Aligned IQ2 is rejected (slower at N512); raw GGUF blocks are selected. Pinned
+source corrected the loader contract: all 256 experts exist on each rank with
+the intermediate dimension /4 (w13 N512; w2 K512), not 64 whole experts/rank.
+Proceed to M3 Q2_K down, then return for dense/wo_a and the M2 layer-slice
+completion gate. Earlier plan changes: two changes from v4: (1) **the "wrap llama.cpp kernels"
 route is cut entirely** — Will's original direction stands as the only route:
 rewrite the expert kernels from scratch, vLLM-native, reading GGUF bytes
 directly, with testing to verify accuracy. The wrap route entered via review
@@ -146,17 +148,13 @@ tokenizer/chat path **subject to §4.4**.
    vLLM module mapping via the §4.7 tensor-level table, per-rank packed
    views, checksum fail-closed against the M1 inventory. IQ2_XXS/Q2_K/
    F16/F32/I32 bytes are never re-encoded by the loader.
-2. **Aligned-SoA load-time repack for the routed experts (from DwarfStar,
-   adapted):** a derived, checksum-gated artifact produced at load time —
-   per `proto_iq2_aligned.cu`'s hypothesis, separate `d[]` halves and
-   64-byte-aligned `qs[]` per block, at **identical byte count and identical
-   decoded values** (this is a layout transform, not a requantization).
-   The rewrite kernels read the aligned layout with full-width loads.
-   Producers are gated by a DwarfStar-style content hash over the repacked
-   artifact (`ds4_repack.cu:1-6` contract: every byte-movement stays
-   bit-identical between producers; "the FNV repack-hash lines are the
-   gate"). The original GGUF is never mutated. Q2_K aligned variant follows
-   the same pattern (`proto_m2_q2k.cu` reference).
+2. **Aligned-SoA is evidence-gated, not mandatory.** DwarfStar's layout and
+   checksum discipline remain the tested comparison. IQ2 results reject it
+   for production: aligned DP4A at exact TP4 N512 was slower than raw (9.90 vs
+   8.89 µs single-matrix), while indexed raw reaches 247.35 GB/s. Therefore
+   IQ2 loads raw GGUF blocks directly. M3 independently A/Bs Q2_K against
+   `proto_m2_q2k.cu`; only a measured Q2 winner may create a derived,
+   checksum-gated repack. The original GGUF is never mutated.
 3. **Q8_0 → int8 group-32 repack (documented lossy-in-last-bits):** exact
    int8 codes; fp16 block scale → CT scale (fp16 where the kernel allows,
    else bf16-rounded), Marlin tile-packing, uint8b128 offset. Tolerance

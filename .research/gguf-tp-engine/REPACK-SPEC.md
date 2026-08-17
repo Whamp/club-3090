@@ -1,4 +1,4 @@
-# REPACK-SPEC.md — aligned-SoA load-time repack for routed experts (M1 spec)
+# REPACK-SPEC.md — aligned-SoA experiment contract (M1 spec; IQ2 rejected)
 
 Source of the hypothesis: antirez/ds4 `84cc882`
 `cuda/mmq/test/proto_iq2_aligned.cu:1-22` (MIT; attribution retained per
@@ -13,7 +13,13 @@ serving-shape MMVQ ceiling (346–358 GB/s vs 713 GB/s Q8_0 on one 1650 MHz
 3090) is consistent with DwarfStar's ~142-of-~200 GB/s alignment
 diagnosis on their silicon. **Re-measured on SM86 at M2 — not assumed.**
 
-## Layout (IQ2_XXS)
+## IQ2_XXS decision (M2)
+
+Rejected for the production DP4A path: exact TP4 N512 single-matrix aligned
+was 9.90 µs vs raw 8.89 µs; indexed raw reaches 247.35 GB/s without a derived
+artifact. The layout below remains reproducible reference evidence only.
+
+## Layout (IQ2_XXS reference)
 
 For a tensor region of `nb` blocks (a whole expert matrix row-block span
 per rank), raw = `nb × 66 B` interleaved. Repacked = three parallel

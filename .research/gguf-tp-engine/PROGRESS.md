@@ -135,3 +135,21 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
 - `M2-ITERATION1.md` + `evidence/m2-iq2-iteration1/`. Final permitted tuning
   iteration: explicit shared BF16→Q8_1 quantization + native DP4A raw/aligned
   kernels, conversion timed separately. Miss → M2 kill criterion.
+
+## 2026-08-17 — M2 IQ2 fragment PASS; interference audit clean
+
+- Corrected TP contract from pinned source: all 256 experts per rank;
+  `intermediate_size_per_partition=2048/4=512` (w13 N512, w2 K512). Updated
+  TP-MAPPING loader coordinates; capacity bytes unchanged.
+- Native Q8_1 quantizer + DP4A + indexed top-6 gate/up: 15/15 RTX 3090
+  correctness/graph tests pass.
+- Exclusive five-trial exact-shape result (5K warm/10K measured): indexed
+  gate+up 26.231 µs mean, 247.35 GB/s, 0.343% CV; captured quantize+compute
+  27.309 µs, 0.541% CV. 248 process samples show ≤1 process, GPU0 only;
+  max clock 1650; canonical final zero-swap.
+- Host journal confirms the earlier provisional run also had no overlapping
+  container/SSH GPU work; its 256.9 GB/s was ~3.7% optimistic from short
+  timing, not another agent. Five-trial result supersedes it.
+- IQ2 aligned repack rejected for production (slower than raw at exact N512).
+  `M2-ITERATION2.md` + `evidence/m2-iq2-iteration2/`. Proceed to M3 Q2_K;
+  dense/wo_a + graph-layer slice still required to close full M2.

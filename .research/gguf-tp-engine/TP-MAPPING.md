@@ -22,9 +22,9 @@ bytes; the Q8_0→int8-g32 repack is size-neutral by construction (34 B/32 w →
 | `blk.l.indexer.attn_q_b.weight` | [1024,8192] | `indexer.wq_b` | **ReplicatedLinear** (attention.py:949-955) | **replicated** |
 | `blk.l.indexer.proj.weight` | [4096,64] | `indexer.weights_proj` | **ReplicatedLinear** (attention.py:956+) | **replicated** |
 | `blk.l.indexer_compressor_*` | as compressor ×coff 128 | `indexer.compressor.*` | same compressor constructors | **replicated** |
-| `blk.l.ffn_gate_exps.weight` | [4096,2048,256] IQ2_XXS | routed expert w13 gate slot | FusedMoEFactory + expert_mapping (model.py:687+) | **expert-shard ÷4** (64 experts/rank, whole matrices) |
-| `blk.l.ffn_up_exps.weight` | [4096,2048,256] IQ2_XXS | routed expert w13 up slot | same | expert-shard ÷4 |
-| `blk.l.ffn_down_exps.weight` | [2048,4096,256] Q2_K (**K/N swapped vs gate/up**) | routed expert w2 | same | expert-shard ÷4 |
+| `blk.l.ffn_gate_exps.weight` | [4096,2048,256] IQ2_XXS | routed expert w13 gate slot | FusedMoEConfig computes `intermediate_size_per_partition = intermediate_size / tp_size` (fused_moe/config.py:1333); WNA16 shape uses it for every expert (compressed_tensors_moe_wna16.py:173-238) | **all 256 experts; N-shard 2048/4=512 rows/rank** |
+| `blk.l.ffn_up_exps.weight` | [4096,2048,256] IQ2_XXS | routed expert w13 up slot | same | all experts; N=512/rank |
+| `blk.l.ffn_down_exps.weight` | [2048,4096,256] Q2_K (**K/N swapped vs gate/up**) | routed expert w2 | same | **all experts; K-shard 2048/4=512/rank**, partial N4096 outputs reduced across TP |
 | `blk.l.ffn_gate_shexp/up_shexp.weight` | [4096,2048] | `shared_experts.gate_up_proj` | MergedColumnParallelLinear (model.py:119) | shard ÷4 |
 | `blk.l.ffn_down_shexp.weight` | [2048,4096] | `shared_experts.down_proj` | RowParallelLinear (model.py:127) | shard ÷4 |
 | `blk.l.ffn_gate_inp.weight` | [4096,256] F16 | `moe.gate` (fp32 out) | GateLinear `out_dtype=float32` (model.py:564-571) | **replicated** (cast policy §4.5: keep fp16/fp32 math) |
@@ -44,7 +44,7 @@ contract; nothing to load.
 
 | Family | Total GiB | Rule | Per-rank GiB |
 |---|---:|---|---:|
-| routed experts | 72.5625 | ÷4 expert | 18.1406 |
+| routed experts | 72.5625 | ÷4 intermediate dimension (all experts present) | 18.1406 |
 | attention sharded (wq_b, wo_a, wo_b) | 4.2832 | ÷4 | 1.0708 |
 | attention replicated (fused_wqa_wkv) | 0.2677 | ×1 | 0.2677 |
 | shared experts | 1.0708 | ÷4 | 0.2677 |
@@ -78,9 +78,12 @@ Replicated per rank: 1.3326 GiB. Sharded per rank: 19.8567 GiB.
 - Fused-slot order is load-order significant: `fused_wqa_wkv` = [wq_a ‖ wkv]
   columns; `compressor.fused_wkv_wgate` = [wkv ‖ wgate] — the class-A2
   coordinate oracle must sample across each slot boundary.
-- Expert shard = whole matrices per expert (64 experts/rank) — byte ranges
-  per (layer, expert, tensor) are directly computable from inventory
-  offsets; no within-matrix slicing for the routed family.
+- Routed experts use **within-expert TP**, not 64 whole experts/rank. Gate/up:
+  every rank loads a contiguous 512-row N slice for every expert (GGUF ne0=K,
+  so each rank slice is contiguous inside one expert). Down: every rank loads
+  a K slice of 512 values inside every N=4096 row (two Q2_K blocks/row), so
+  loader extraction is strided across output rows and must be class-A2 checked
+  at first/last block for every rank.
 - Vocab shards: token_embd/output are [4096, 129280] with ne0=4096 — the
   vocab axis is the SLOW axis; a rank's vocab slice is a contiguous range of
   32,320 rows. tid2eid [6, 129280] replicates whole.
