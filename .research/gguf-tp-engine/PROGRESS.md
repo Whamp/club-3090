@@ -121,3 +121,17 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
   zero serving swap; GPU safety re-verified 800 samples, max 1650 MHz, none
   over. Watchdog cancelled after verification.
 - **M0 PASS:** worktree/pins + fresh trace both complete. Proceed to M2.
+
+## 2026-08-17 — M2 IQ2 iteration 1 correct/graph-safe, performance rejected
+
+- Native stable-ABI raw/aligned IQ2_XXS matvec implemented off-server in
+  Whamp/vllm `incubate/gguf-tp-sm86` (no ggml linkage; DwarfStar table
+  attribution). SM86 extension built and cuobjdump-confirmed.
+- Guarded RTX 3090 test: 7/7 numerical+CUDA-graph cases pass; canonical service
+  restored healthy and zero-swap after every attempt.
+- K4096×N2048 benchmark: aligned M1 52.86 µs / 40.91 GB/s vs raw 53.95 µs;
+  only +2.0%, far below llama.cpp MMVQ 346–358 GB/s. Scalar BF16 loop rejected;
+  alignment not the primary limiter in this path.
+- `M2-ITERATION1.md` + `evidence/m2-iq2-iteration1/`. Final permitted tuning
+  iteration: explicit shared BF16→Q8_1 quantization + native DP4A raw/aligned
+  kernels, conversion timed separately. Miss → M2 kill criterion.

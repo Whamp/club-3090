@@ -1,6 +1,12 @@
 # PLAN: Native GGUF tensor-parallel inference for DeepSeek-V4-Flash on 4× RTX 3090
 
-Status: draft v5. Two changes from v4: (1) **the "wrap llama.cpp kernels"
+Status: execution v6. M0/M1 passed. M2 iteration 1 (native BF16 scalar
+IQ2_XXS matvec) passed correctness/graph gates but delivered only 40.9 GB/s;
+aligned layout improved 2.0%, falsifying alignment as the dominant constraint
+for scalar FMA. The final permitted tuning iteration is explicit per-layer
+BF16→Q8_1 quantization plus native DP4A IQ2_XXS matvec; conversion cost is
+measured separately/shared across gate+up experts and never hidden. Earlier
+plan changes: two changes from v4: (1) **the "wrap llama.cpp kernels"
 route is cut entirely** — Will's original direction stands as the only route:
 rewrite the expert kernels from scratch, vLLM-native, reading GGUF bytes
 directly, with testing to verify accuracy. The wrap route entered via review
@@ -167,8 +173,11 @@ tokenizer/chat path **subject to §4.4**.
    vLLM-native.** `FusedMoEExperts`-style `torch.ops` operations, registered
    capture-safe from day one (current-stream argument, caller-owned
    workspaces, no internal pools — the wrap-era ABI lessons are design
-   requirements now), consuming bf16 activations directly and unpacking
-   GGUF/aligned-SoA codes in-mainloop. Correctness reference: llama.cpp CPU
+   requirements now). The public input contract is bf16. M2 evidence permits
+   one explicit internal representation change: quantize that layer input once
+   to Q8_1 and share it across gate/up experts, then run native DP4A against
+   GGUF/aligned-SoA codes. Quantization is separately timed/class-B-gated and
+   is never hidden. Correctness reference: llama.cpp CPU
    `dequantize_row_*` + reference GEMM (class A/B oracles). Kernel-by-kernel
    with DwarfStar's vendored kernel tree as permissively-licensed
    reference for grid/LUT/dp4a math and tiling (`cuda/mmq/vecdotq.cuh`,
@@ -272,12 +281,12 @@ replication) is the deliberate inversion of these negatives.
   dense runs 30% slower, ~0.9 ms of budget is gone before experts spend
   anything. Realistic expert tolerance to hold 58 tok/s: **~2.2–2.6×
   slower than W2 Humming**, contingent on dense-path near-parity.
-- **The aligned-SoA repack is the named lever for the IQ2_XXS decode
-  deficit.** Our measured 346–358 GB/s (vs 713 Q8_0) on a 1650 MHz 3090 is
-  consistent with DwarfStar's alignment diagnosis; their ~+25% aligned-tier
-  claim is proven-adjacent on different silicon and **must be re-measured
-  on SM86 at exact serving shapes** (M2). If alignment recovers even half
-  the gap on SM86, the expert budget loosens materially.
+- **Aligned-SoA is conditional, not assumed.** Iteration 1 measured only
+  +2.0% for scalar BF16 FMA (52.86 µs, 40.9 GB/s at K4096×N2048), proving
+  execution/lookup — not raw alignment — dominated that kernel. Iteration 2
+  repeats raw/aligned under Q8_1 DP4A, the path to which DwarfStar's ~+25%
+  adjacent evidence actually applies. If DP4A does not move the mediator
+  enough, the two-iteration kill criterion triggers.
 - **M2 measured components (all on a 3090):** fresh-trace mix; rewritten
   expert-op time at decode shapes (raw-layout and aligned-SoA variants
   A/B'd per the proto protocol); dense Q8_0-g32 Marlin GEMV; `wo_a`
