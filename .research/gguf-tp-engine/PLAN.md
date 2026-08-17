@@ -1,28 +1,19 @@
 # PLAN: Native GGUF tensor-parallel inference for DeepSeek-V4-Flash on 4× RTX 3090
 
-Status: draft v4 — revised after three independent adversarial reviews (Grok
-4.6 xhigh; Claude Fable 5 medium under a one-time user override; GPT-5.6 Sol
-xhigh via pi one-shot — all 2026-08-17, archived under `reviews/`). The third
-review returned **STOP**, and its findings are incorporated here; M0 stays
-blocked until Will approves this revision. All three reviewers were
-instructed not to read prior reviews.
+Status: draft v5. Two changes from v4: (1) **the "wrap llama.cpp kernels"
+route is cut entirely** — Will's original direction stands as the only route:
+rewrite the expert kernels from scratch, vLLM-native, reading GGUF bytes
+directly, with testing to verify accuracy. The wrap route entered via review
+suggestions, never matched the requirement, and was demolished by the third
+review. (2) **DwarfStar (antirez/ds4) absorbed as source material** with
+exact code pointers (§4.6) — primarily its aligned-SoA weight repack, which
+attacks the exact IQ2_XXS bandwidth deficit we measured on our own 3090s.
 
-v3→v4 changes: Route A rewritten as an honest unfused decode operation
-sequence with its mandatory bf16→F32→Q8_1 activation pipeline (Sol F1/F2 —
-v3 claimed a fused MoE MMVQ path that does not exist for clamped SwiGLU
-decode); capture-safe ABI made an M2a gate (F3 — static launcher,
-ctx.stream() binding, pool-miss allocation all break naive wrapping); linear
-projection demoted to screening bound with a TP=4 graph-captured
-decoder-layer slice as the real go/no-go (F4); a minimal `wo_a` serving
-prototype and Q8 repacker moved into M2 with a causal-matrix kill logic (F5);
-family-level TP rules replaced by a tensor-level mapping table (F6 —
-`fused_wqa_wkv` is `disable_tp=True` replicated, token_embd vocab-shards);
-class-A2 coordinate-aware mapping oracle added because byte checksums cannot
-catch transposed/mis-fused loads (F7 — routed down is `{N,K,E}` vs gate/up
-`{K,N,E}`); tokenizer bootstrap pinned to `tokenizer_mode="deepseek_v4"` with
-text-level golden tests (F8); DeepSWE paired protocol made executable and
-costed (F9). Sol independently confirmed the v3 capacity arithmetic (5.832
-KiB/token/rank; 17,559 tokens per 100 MiB/rank; ~139.1K point estimate).
+Review lineage: Grok 4.6 xhigh, Claude Fable 5 medium, GPT-5.6 Sol xhigh (all
+2026-08-17, archived under `reviews/`). Findings that survive the route cut —
+tensor-level TP mapping, coordinate-aware load oracles, tokenizer bootstrap
+pin, wo_a kill-gating, executable DeepSWE statistic, capacity-from-table —
+are retained.
 
 ## 1. Objective and decision frame
 
@@ -33,19 +24,25 @@ server60's four RTX 3090s. No requantization, no lossy conversion of the
 routed experts. This is an inference-engine ASIC: one model, one artifact
 family, one hardware target, zero backward compatibility.
 
-**Why this is worth doing:** the model is the most intelligent thing that fits
-our VRAM; the GGUF encoding is the only quantization of it that has held up
-under our hardest gate — the post-DSML-fix final 12-task DeepSWE comparison
-measured GGUF-via-llama.cpp at 6 strict solves / 96.57% partial reward versus
-WNA16 requant at 0 solves / 80.62% (the earlier "bad quant" *degeneration*
-attribution was withdrawn — that collapse was the DSML parser bug — but the
-post-fix solve-rate gap stands); llama.cpp cannot tensor-parallel it (audited:
-CUDA-TP doesn't fit 24 GiB cards, row-split breaks grouped-attention graphs);
-vLLM reached 74.98 decode tok/s on inferior weights while llama.cpp is
-structurally capped at ~38–39 engine (measured). Same-architecture weight
-updates load through the same pinned contract (a new inventory pass, not a
-rewrite). And "GGUF in tensor parallelism" is a standing community ask nobody
-has shipped.
+**Why this is worth doing:** the model is the most intelligent thing that
+fits our VRAM; the GGUF encoding is the only quantization of it that has
+held up under our hardest gate — the post-DSML-fix final 12-task DeepSWE
+comparison measured GGUF-via-llama.cpp at 6 strict solves / 96.57% partial
+reward versus WNA16 requant at 0 solves / 80.62%; llama.cpp cannot
+tensor-parallel it (audited: CUDA-TP doesn't fit 24 GiB cards, row-split
+breaks grouped-attention graphs); vLLM reached 74.98 decode tok/s on
+inferior weights while llama.cpp is structurally capped at ~38–39 engine
+(measured). Same-architecture weight updates load through the same pinned
+contract (a new inventory pass, not a rewrite). And "GGUF in tensor
+parallelism" is a standing community ask nobody has shipped.
+
+**Precedent that this class of engine works:** DwarfStar (antirez/ds4) is a
+from-scratch one-model-family engine that consumes the same GGUF family
+natively — not a GGML derivative — and ships its own IQ2_XXS/Q2_K/Q8_0 CUDA
+kernel tree, a load-time aligned-repack pipeline, and CUDA tensor
+parallelism. Its exact topology fails on our 24 GiB cards (§4.6 negatives),
+but its existence and its kernel/repack designs are directly usable
+reference material.
 
 **Decision thresholds** (decode = engine tokens/s; client-wall ~12% lower,
 reported alongside):
@@ -78,21 +75,21 @@ feasibility, not performance), **unmeasured** (assumption to retire).
 
 | Component | Grade | Evidence |
 |---|---|---|
-| IQ2_XXS/Q2_K dequant semantics **in the pinned source** | proven-here (source); plan transcription gated by the L0 oracle | pinned Whamp/llama.cpp `0379cf4bf`; v2's prose was wrong (Fable F1), v3's Route A framing was wrong (Sol F1) — the contract is generated from source and gated by oracle, never trusted from prose |
-| These formats sustaining GEMM-class throughput | proven-adjacent | llama.cpp fused MMQ prefill 1,056 tok/s |
-| **MoE-indexed MMVQ/MMQ machinery in the pinned fork** | proven-here for existence and llama.cpp integration; **vLLM integrability unmeasured** | device-side id compaction (`mmid.cu`, MMQ path), `mul_mat_vec_q_moe_launch` (unfused; multi-token branch), `DSV4_MMVQ_SMALLK`; decode uses unfused ops for clamped SwiGLU (`ggml-cuda.cu:4331+`) |
-| F32↔Q8_1 activation pipeline cost | **unmeasured** | kernels assert F32 in/out and internally quantize Q8_1 via pool scratch (`mmvq.cu:1070-1135`, `mmq.cu:108-248`) — measured at M2 |
+| IQ2_XXS/Q2_K dequant semantics **in the pinned llama.cpp source** | proven-here (source); plan transcription gated by the L0 oracle | pinned Whamp/llama.cpp `0379cf4bf`; the contract is generated from source and gated by oracle, never trusted from prose |
+| IQ2_XXS decode matvec leaving bandwidth on the table | proven-here | our exact-shape MMVQ microbench on a 1650 MHz 3090: IQ2_XXS 346–358 GB/s, Q2_K 307 GB/s, vs Q8_0 713 GB/s; Nsight Compute: IQ2_XXS 64% SM throughput / 36.2% occupancy |
+| **Root cause of that deficit = 2-byte alignment + split loads** | proven-adjacent (his hardware) — hypothesis for ours | DwarfStar `cuda/mmq/test/proto_iq2_aligned.cu:1-22`: block_iq2_xxs is 66 bytes → code stream 2-byte aligned → every 32-bit weight word costs two 16-bit loads (`get_int_b2`); his measured ~142 GB/s vs ~200 ceiling |
+| **Aligned-SoA repack recovers it** | proven-adjacent | DwarfStar `ds4_cuda.cu` MMQ-tier comment (~line 1081): aligned-SoA/D2R/producer-quantized tiers worth "a further ~25% on top of the ~2.5x this tier gives"; repack pipeline is production code (`cuda/mmq/ds4_repack.cu`) |
+| Batched (n_tok ≥ 2) IQ2_XXS/Q2_K/Q8_0 MoE + dense kernels in production | proven-adjacent | DwarfStar `ds4_cuda.cu:~1075-1088` ported Entrpi/ds4 MMQ tier: dense Q8_0 GEMMs + IQ2_XXS gate/up + Q2_K down routed-MoE for prefill/batched-verify, validated against official continuation vectors |
 | TP-sharded indexed grouped-MoE with in-mainloop unpack | proven-here for int-unpack W2/W4 | Humming extensions `e5a8452c7`, `dd2d1fd6`; 7-case SM86 oracle |
 | Whole non-MoE stack at speed on FP8 weights | proven-here | 74.98 tok/s composite |
 | Same stack on Q8_0 weights (dense + `wo_a`) | **unmeasured — largest unmeasured kernel share** | measured at M2 |
-| Correctness-oracle methodology | proven-here | WNA16 oracle ladder |
+| Correctness-oracle methodology | proven-here | WNA16 oracle ladder; DwarfStar's continuation-vector regression is a convergent independent precedent |
 | KV-offload tier inertness | proven-here as an unused reservation | eviction-pressure behavior unmeasured |
-| GGUF container parsing precedent | weak | out-of-tree/experimental; our loader is new code |
 
 **Scope reduction:** only IQ2_XXS and Q2_K need codebook paths. Q8_0 becomes
-int8 group-32 via a last-bits-lossy repack (§4). F16/F32/I32 control tensors
-pass through **subject to per-kernel dtype contracts** (§4.5) and the
-tensor-level TP mapping (§4.7).
+int8 group-32 via a last-bits-lossy repack (§4.3). F16/F32/I32 control
+tensors pass through **subject to per-kernel dtype contracts** (§4.5) and
+the tensor-level TP mapping (§4.7).
 
 ## 3. The artifact contract (pinned; M1 verifies byte-level)
 
@@ -122,7 +119,7 @@ Q2_K = fp16 `d`+`dmin`, 16 sub-blocks of 4-bit scale/min + 2-bit quants.
 Q8_0 = fp16 `d` + 32×int8. CPU `dequantize_row_*` is the golden oracle;
 integer-truncation semantics are why class A covers **dequantized values in
 fp32** while fused outputs live in class B. M1 also pins the tokenizer/config
-contract (§4.6).
+contract (§4.4).
 
 ## 4. Architecture: keep / adapt / new
 
@@ -135,97 +132,156 @@ plans.
 **Keep (proven on the pinned base):** vLLM scheduler + continuous batching;
 TP=4 launcher; FlashMLA sparse decode; hierarchical all-reduce; DSML parser
 fix; SwiGLU semantics; fp8_ds_mla KV + offload tier; CUDA-graph capture path;
-tokenizer/chat path **subject to §4.6**.
+tokenizer/chat path **subject to §4.4**.
 
 **Adapt / new:**
+
 1. **GGUF-native loader**: mmap, verify blob SHA-256, GGUF tensor-name →
    vLLM module mapping via the §4.7 tensor-level table, per-rank packed
    views, checksum fail-closed against the M1 inventory. IQ2_XXS/Q2_K/
-   F16/F32/I32 bytes are never re-encoded.
-2. **Q8_0 → int8 group-32 repack (documented lossy-in-last-bits):** exact
+   F16/F32/I32 bytes are never re-encoded by the loader.
+2. **Aligned-SoA load-time repack for the routed experts (from DwarfStar,
+   adapted):** a derived, checksum-gated artifact produced at load time —
+   per `proto_iq2_aligned.cu`'s hypothesis, separate `d[]` halves and
+   64-byte-aligned `qs[]` per block, at **identical byte count and identical
+   decoded values** (this is a layout transform, not a requantization).
+   The rewrite kernels read the aligned layout with full-width loads.
+   Producers are gated by a DwarfStar-style content hash over the repacked
+   artifact (`ds4_repack.cu:1-6` contract: every byte-movement stays
+   bit-identical between producers; "the FNV repack-hash lines are the
+   gate"). The original GGUF is never mutated. Q2_K aligned variant follows
+   the same pattern (`proto_m2_q2k.cu` reference).
+3. **Q8_0 → int8 group-32 repack (documented lossy-in-last-bits):** exact
    int8 codes; fp16 block scale → CT scale (fp16 where the kernel allows,
    else bf16-rounded), Marlin tile-packing, uint8b128 offset. Tolerance
    oracle vs Q8_0 dequant+GEMM; excluded from the bit-exact ladder. Dense
    GEMV/GEMM perf measured at M2. **A minimal repacker + `wo_a`
-   serving-shape prototype moves into M2** (Sol F5) so the go/no-go uses
+   serving-shape prototype is measured in M2** so the go/no-go uses
    measured numbers, not sketches.
-3. **`wo_a` Q8_0 output projection:** FP8 Marlin-diagonal doesn't apply to
+4. **`wo_a` Q8_0 output projection:** FP8 Marlin-diagonal doesn't apply to
    Q8_0; no-cache fallback measured 34.01 tok/s (fatal); BF16 cache 688
    MiB/rank. M1 scopes a Q8 grouped-Marlin (or equivalent) diagonal path
-   with VRAM delta; **M2 measures a real serving-shape prototype.** Kill: if
-   the only working options are BF16 cache or ~34 tok/s dequant, stop.
-4. **Routed experts — two routes, measured order:**
-   - **Route A (M2a): wrap the pinned fork's MoE-indexed MMVQ/MMQ machinery
-     as a vLLM `FusedMoEExperts`-style operation.** Honest composition
-     (Sol F1/F2): decode = routing-id prep → **bf16→F32 view → shared
-     Q8_1 activation quantization for up/gate** → two IQ2_XXS MoE-indexed
-     MMVQ launches (unfused — clamped SwiGLU has no vec-kernel epilogue) →
-     clamp+SwiGLU → per-expert Q8_1 quantization of routed activations →
-     Q2_K down → top-k weighted combine → F32→bf16. Prefill (batch > 8)
-     may use the fused MMQ up/gate path. All F32/Q8_1 scratch is
-     caller-owned.
-   - **Capture-safe ABI is part of M2a, not an afterthought (Sol F3):**
-     export a real `torch.ops` wrapper that accepts the current CUDA
-     stream (not `ctx.stream()`), takes caller-owned output/Q8_1/compaction
-     workspaces, pre-grows every allocation before capture, then
-     capture-and-replay M=1–4 on TP=4 and test multiple graph sizes for
-     pointer aliasing. The pinned launcher is `static` and its pool can
-     `cudaMalloc` on miss during capture — naive wrapping is invalid.
-   - **Route B (escalation, M2b): Humming indexed-expert fragments** for
-     IQ2_XXS/Q2_K fused at fragment-load, required only if Route A misses
-     the measured bar; carries codebook-into-MMA and smem-LUT risk.
-5. **Per-kernel dtype contracts for replicated families:** M1 inventories
+   with VRAM delta; **M2 measures a real serving-shape prototype.** Kill:
+   if the only working options are BF16 cache or ~34 tok/s dequant, stop.
+5. **Routed-expert kernels — single route: rewrite from scratch,
+   vLLM-native.** `FusedMoEExperts`-style `torch.ops` operations, registered
+   capture-safe from day one (current-stream argument, caller-owned
+   workspaces, no internal pools — the wrap-era ABI lessons are design
+   requirements now), consuming bf16 activations directly and unpacking
+   GGUF/aligned-SoA codes in-mainloop. Correctness reference: llama.cpp CPU
+   `dequantize_row_*` + reference GEMM (class A/B oracles). Kernel-by-kernel
+   with DwarfStar's vendored kernel tree as permissively-licensed
+   reference for grid/LUT/dp4a math and tiling (`cuda/mmq/vecdotq.cuh`,
+   `mmq.cuh`, `mmvq.cuh`, `mmid.cu`, `quantize.cuh`, `iq2_host_tables.h`).
+   Separate decode (M=1–4, warp-per-row matvec style) and prefill/batched
+   (n_tok ≥ 2, MMA path) kernels, mirroring DwarfStar's split.
+6. **Per-kernel dtype contracts for replicated families:** M1 inventories
    the dtype/layout contract of every kernel consuming each family
    (compressor fp32 assert; indexer fused-quant; merged-GEMM fp32 hand-off;
    activation dtype bf16). Any transform or cast becomes a documented
    conversion with a class-B window and a capacity-table line. The
    **router** cast policy is explicit (F16 → bf16 is lossy where top-6
    tie-breaks live; prefer fp32/fp16-native if the kernel accepts it).
-6. **Tokenizer/config source of truth (Sol F8):** the pinned stack
-   auto-selects `tokenizer_mode="deepseek_v4"` from the architecture and
-   that tokenizer overrides `apply_chat_template` with custom
-   `encode_messages` (DSML, tools, thinking) — **the GGUF bootstrap must
-   pin this mode explicitly before module/tokenizer construction**, and M1
-   adds text/API→token-ID golden tests for ordinary chat, high/max
-   reasoning, tool calls, and post-tool continuation. Token-ID-pinned
-   probes remain for kernel isolation only, never as tokenizer evidence.
-   M1 also diffs GGUF KV metadata vs HF config (RoPE theta/YaRN, compress
-   ratios, SWA window) and names the authoritative source.
-7. **Tensor-level TP mapping table (Sol F6) — replaces family rules:** M1
-   produces, per GGUF tensor: logical shape and axis order, destination
-   parameter (incl. fused slots such as `fused_wqa_wkv` = GGUF `wq_a` +
-   `attn_kv` stacked in fixed order), TP axis (e.g. token_embd
-   vocab-sharded; `fused_wqa_wkv` `disable_tp=True` replicated; wq_b/wo_a/
-   wo_b distinct column/row rules), rank slice, quant-block row axis,
-   runtime dtype, post-load storage. Capacity is derived from this table.
+7. **Tensor-level TP mapping table (replaces family rules):** M1 produces,
+   per GGUF tensor: logical shape and axis order, destination parameter
+   (incl. fused slots such as `fused_wqa_wkv` = GGUF `wq_a` + `attn_kv`
+   stacked in fixed order), TP axis (e.g. token_embd vocab-sharded;
+   `fused_wqa_wkv` `disable_tp=True` replicated; wq_b/wo_a/wo_b distinct
+   column/row rules), rank slice, quant-block row axis, runtime dtype,
+   post-load storage. Capacity is derived from this table.
 
-**Quant-method config**: `gguf_dsv4` expressing experts = GGUF-native, dense
-Q8_0 = CT int8-g32, control = per-kernel-contract passthrough.
+**Quant-method config**: `gguf_dsv4` expressing experts = GGUF-native,
+dense Q8_0 = CT int8-g32, control = per-kernel-contract passthrough.
 
 **Retained:** the compressed-tensors expert path stays for the same-tree
 WNA16 A/B that attributes misses to the new route rather than to
 FlashMLA/graphs/AR regressions.
 
+### 4.4 Tokenizer/config source of truth
+
+The pinned stack auto-selects `tokenizer_mode="deepseek_v4"` from the
+architecture and that tokenizer overrides `apply_chat_template` with custom
+`encode_messages` (DSML, tools, thinking) — **the GGUF bootstrap must pin
+this mode explicitly before module/tokenizer construction**, and M1 adds
+text/API→token-ID golden tests for ordinary chat, high/max reasoning, tool
+calls, and post-tool continuation. Token-ID-pinned probes remain for kernel
+isolation only, never as tokenizer evidence. M1 also diffs GGUF KV metadata
+vs HF config (RoPE theta/YaRN, compress ratios, SWA window) and names the
+authoritative source.
+
+### 4.5 Router cast policy
+
+F16 → bf16 loses tie-break precision in top-6 routing; the default is to
+keep router math in fp16/fp32 where the consuming kernel accepts it, and
+any cast is a documented class-B window, not an accident.
+
+### 4.6 DwarfStar borrowings — exact pointers and negatives
+
+Pinned at antirez/ds4 commit `84cc882` (current main at time of study; our
+Aug 13 audit pinned the same commit). MIT license with retained GGML
+copyright notice — any adapted kernel carries comment-level attribution to
+both ds4 and llama.cpp/GGML.
+
+**Borrow (with pointer — what we take):**
+
+| Pointer | What it is | What we take |
+|---|---|---|
+| `cuda/mmq/test/proto_iq2_aligned.cu:1-22` | The alignment hypothesis: 66-byte IQ2_XXS blocks → 2-byte-aligned code stream → two 16-bit loads per 32-bit word (`get_int_b2`) → ~142 of ~200 GB/s; aligned SoA (d[] halves separate, qs[] 64B-aligned per block) restores full-width loads at identical byte count; A/B protocol at the exact production decode shape; correctness = integer math identical, float accumulation-order tolerance | The hypothesis, the A/B microbench protocol, and the correctness framing for our §6 class A/B split |
+| `cuda/mmq/ds4_repack.cu` + `ds4_repack.h` | Production aligned-artifact layout library (extracted from a weight-server); contract: producers must stay bit-identical, FNV repack-hash lines are the gate | The load-time-repack design and its hash-gate discipline for our §4.2; we produce ours in-process at model load |
+| `ds4_cuda.cu:~1075-1088` | Production MMQ tier (ported from Entrpi/ds4 commits `39d3877c`, `a56e07a5`, `944482d5`): dense Q8_0 GEMMs + IQ2_XXS gate/up + Q2_K down routed-MoE for n_tok ≥ 2; decode untouched; FP32 reduction-order drift validated against official continuation vectors; `DS4_CUDA_MMQ=0` escape | Precedent that batched IQ2_XXS/Q2_K MoE kernels are production-viable; the continuation-vector drift-validation method; env-escape pattern |
+| `ds4_cuda.cu:~1081` | "aligned-SoA / D2R / producer-quantized tiers … a further ~25% on top of the ~2.5x this tier gives" | Sized expectation for the aligned tier — proven-adjacent, must be re-measured on SM86 |
+| `cuda/mmq/` tree (`vecdotq.cuh`, `mmq.cuh`, `mmvq.cuh/.cu`, `mmid.cu/.cuh`, `quantize.cu/.cuh`, `common.cuh`, `mma.cuh`, `ggml-common.h`, `test/iq2_host_tables.h`, `test/test_mmq_parity.cu`, `test/proto_m2_q2k.cu`, `test/proto_q8_aligned.cu`, `test/proto_q8_warp8.cu`) | Vendored, adapted, MIT-licensed kernel implementations of exactly our three formats, with parity tests | Reference implementations for grid/LUT/dp4a math, tiling, activation quantization, and parity-test structure; adapted, not linked |
+| `tests/test-vectors/` + `QA_BEFORE_RELEASES.md` | Official-model continuation vectors as regression checks | Method reinforcement for our class-B full-model forward windows |
+| `ds4-server` micro-batching (README "CUDA multi-GPU" section) | Grouped decode across resident sessions for aggregate throughput | Deferred: informs the later parallel-2/4 aggregate work, out of scope for single-stream milestones |
+
+**Avoid (design negatives, established by our 2026-08-13 audit at the same
+commit — off-box source audit, never run on our hardware):**
+
+- **DP=2 × TP=2 topology:** two pipeline stages, each a GPU pair; routed
+  experts split 50/50 within the pair, but attention/router/shared-expert
+  weights **replicated to both GPUs of each pair** → 87.446 GiB aggregate
+  weight residency vs 80.759 GiB payload (+6.686 GiB duplication) on cards
+  that already barely hold a quarter-share each.
+- **Hard 2 GiB per-GPU slab reserve** (`ds4_cuda.cu:~26002` reserve =
+  max(2 GiB, 5% free)) → projected slabs 22.09–22.13 GiB exceed a 24 GiB
+  board before any context is chosen. Documented four-card Q2 endpoint is
+  48 GB cards, not ours.
+- **F32 compressed-KV rows on CUDA** (`ds4.c:14945-14958`,
+  `DS4_GPU_ATTN_COMP_CACHE_F16` is Apple-only) → ~4× our Q8 KV footprint;
+  long context on discrete CUDA needs smaller chunks.
+- **Q2 grouped routed shapes use an exact-but-slow fallback** in current
+  ds4 (native grouped kernels exist for Q4_K) — consistent with our plan
+  writing native Q2_K kernels rather than accepting fallbacks.
+
+Our TP-by-quarters design (all weight families sharded, no pair
+replication) is the deliberate inversion of these negatives.
+
 ## 5. Performance reasoning
 
-- **Linear time-mix projection is a screening bound only (Sol F4).** The
-  replacement swaps expert *and* dense kernels simultaneously inside
-  stream-parallel, graph-captured, NCCL-overlapped decode; the base stack's
-  own benchmark history shows M-regime transfer errors up to 5.6×. The real
-  go/no-go is a **TP=4 graph-captured decoder-layer slice** containing the
-  Q8 dense kernels, the full Route A expert operation, and the real
-  all-reduce. For prefill, benchmark the **observed M distribution** from
-  the fresh trace, not one nominal M≈256 point.
-- Screening bound arithmetic (to be re-anchored on a fresh nsys trace of the
-  running 74.98 stack at M0): experts ~15–18% of kernel time (~2.0–2.4 ms of
-  13.3 ms/token), dense Q8_0 replacement ~23% share unmeasured — if dense
-  runs 30% slower, ~0.9 ms of budget is gone before experts spend anything.
-  Realistic expert tolerance to hold 58 tok/s: **~2.2–2.6× slower than W2
-  Humming**, contingent on dense-path near-parity. The activation
-  bf16→F32→Q8_1 pipeline (Route A) is included in the expert-op budget.
-- **M2 measured components (all on a 3090):** fresh-trace mix; Route A full
-  operation-sequence time at decode shapes; dense Q8_0-g32 Marlin GEMV;
-  `wo_a` prototype time; Route B fragment time only if Route A misses.
+- **Linear time-mix projection is a screening bound only.** The replacement
+  swaps expert *and* dense kernels simultaneously inside stream-parallel,
+  graph-captured, NCCL-overlapped decode; the base stack's own benchmark
+  history shows M-regime transfer errors up to 5.6×. The real go/no-go is a
+  **TP=4 graph-captured decoder-layer slice** containing the Q8 dense
+  kernels, the rewritten expert operation, and the real all-reduce. For
+  prefill, benchmark the **observed M distribution** from the fresh trace,
+  not one nominal M≈256 point.
+- Screening bound arithmetic (re-anchored on a fresh nsys trace of the
+  running 74.98 stack at M0): experts ~15–18% of kernel time (~2.0–2.4 ms
+  of 13.3 ms/token), dense Q8_0 replacement ~23% share unmeasured — if
+  dense runs 30% slower, ~0.9 ms of budget is gone before experts spend
+  anything. Realistic expert tolerance to hold 58 tok/s: **~2.2–2.6×
+  slower than W2 Humming**, contingent on dense-path near-parity.
+- **The aligned-SoA repack is the named lever for the IQ2_XXS decode
+  deficit.** Our measured 346–358 GB/s (vs 713 Q8_0) on a 1650 MHz 3090 is
+  consistent with DwarfStar's alignment diagnosis; their ~+25% aligned-tier
+  claim is proven-adjacent on different silicon and **must be re-measured
+  on SM86 at exact serving shapes** (M2). If alignment recovers even half
+  the gap on SM86, the expert budget loosens materially.
+- **M2 measured components (all on a 3090):** fresh-trace mix; rewritten
+  expert-op time at decode shapes (raw-layout and aligned-SoA variants
+  A/B'd per the proto protocol); dense Q8_0-g32 Marlin GEMV; `wo_a`
+  prototype time.
 - **Prefill falsifier:** dense Q8_0 GEMM across the observed M distribution;
   projection < 550 tok/s is a named failure before bring-up.
 - Overall decode estimate band: **55–75 tok/s**, estimate until M7.
@@ -235,26 +291,29 @@ FlashMLA/graphs/AR regressions.
 - **A. Bit-exact (no tolerance):** IQ2_XXS/Q2_K **dequantized weight values
   in fp32** vs llama.cpp CPU `dequantize_row_*`, random + adversarial
   corpora (sign patterns, extreme scales, LUT boundary indices, sub-scale
-  extremes). Fused outputs are class B by construction.
-- **A2. Coordinate-aware mapping oracle (Sol F7):** byte checksums cannot
-  catch a transposed or mis-fused load (routed down `{N,K,E}` vs gate/up
-  `{K,N,E}`; `fused_wqa_wkv` slot order). For every tensor family and TP
-  boundary, sample `(expert, output row, input column)` coordinates, derive
-  the GGUF byte offset independently, decode, and compare the destination's
-  logical value — covering first/last block, first/last rank, fused-slot
+  extremes). The aligned-SoA repack joins this class: **repacked artifact
+  must decode to identical fp32 values** as the raw layout (same integer
+  math, layout transform only), gated by the repack content hash.
+  Fused outputs are class B by construction.
+- **A2. Coordinate-aware mapping oracle:** byte checksums cannot catch a
+  transposed or mis-fused load (routed down `{N,K,E}` vs gate/up `{K,N,E}`;
+  `fused_wqa_wkv` slot order). For every tensor family and TP boundary,
+  sample `(expert, output row, input column)` coordinates, derive the GGUF
+  byte offset independently, decode, and compare the destination's logical
+  value — covering first/last block, first/last rank, fused-slot
   boundaries, and hash-table (`tid2eid`) rows.
 - **B. Known-delta (pre-registered windows):** Q8_0-repack GEMM vs dequant+
-  GEMM; **Route A end-to-end expert op** (incl. activation quantization and
-  F32→bf16 conversion) vs reference GEMM; full-model forward vs llama.cpp
-  on fixed prompt sets (KL bound stated before first run); fp8_ds_mla KV /
-  FlashMLA / hier-AR / replicated-family casts each with their own window.
+  GEMM; rewritten expert op vs reference GEMM; full-model forward vs
+  llama.cpp on fixed prompt sets (KL bound stated before first run;
+  continuation-vector style regression as a second anchor, per DwarfStar
+  `ds4_cuda.cu:~1086`); fp8_ds_mla KV / FlashMLA / hier-AR /
+  replicated-family casts each with their own window.
 - **C. Determinism:** CUDA-graph replay vs eager equality; AR rank-order
-  consistency; **graph-size sweep for pointer aliasing** (Route A
-  workspaces).
+  consistency; graph-size sweep for pointer aliasing.
 - **D. End-to-end:** deterministic canaries; tool round-trip and post-tool
   continuation; NIAH exact recall at achieved on-GPU context; **DeepSWE
-  paired protocol, executable spec (Sol F9):** unit of analysis = task
-  (seeds clustered within task); task-cluster bootstrap or hierarchical
+  paired protocol, executable spec:** unit of analysis = task (seeds
+  clustered within task); task-cluster bootstrap or hierarchical
   permutation (task, then seed) over ≥3 seeds per engine on the 12-task
   set (≥72 cells minimum); pre-registered combination rule — e.g.
   non-inferiority margin on mean partial reward AND strict-solve count not
@@ -281,18 +340,17 @@ planned.**
 | # | Deliverable | Gate | Kill / pivot | Est. |
 |---|---|---|---|---|
 | M0 | Worktrees, base pin `b7766cfe`, fresh nsys trace of the 74.98 stack, baseline re-anchor | pins + trace recorded | — | 1 d |
-| M1 | `FORMAT-CONTRACT.md` from source; per-tensor inventory; **§4.7 tensor-level TP table**; per-kernel dtype contracts; tokenizer bootstrap pin + text-level golden tests; `wo_a` design + VRAM delta; capacity table with every delta sized in MiB → tokens | L0 class-A oracle 100%; A2 mapping oracle design; inventory matches blob; capacity table shows ≥140K or levers whose summed size closes the gap | inventory mismatch → re-scope; `wo_a` no viable design → **stop**; capacity gap unclosable → re-decide scope with Will | 2–4 d |
-| M2a | Route A wrapper with **capture-safe ABI** (torch.ops, current-stream, caller-owned workspaces, pre-grown allocations); capture/replay M=1–4 TP=4 + aliasing sweep; full-op microbench at decode shapes; **minimal Q8 repacker + dense GEMV + `wo_a` prototype measured**; prefill M-distribution bench; **TP=4 graph-captured decoder-layer slice** as the real projection | screening projection ≥ 58 decode and ≥ 550 prefill from the layer slice, dense and `wo_a` components measured | causal matrix (Sol F5): expert-op miss → escalate M2b; dense/`wo_a` miss → dense redesign or **stop**; one-metric-only miss → explicit decision with Will | 1–2 wk |
-| M2b | Humming IQ2_XXS fragment (escalation only) | beats Route A's measured bar; graph-capturable | misses after 2 tuning iterations → take Route A if ≥ floor, else stop | 1–2 wk |
-| M3 | Q2_K on the winning route | same | same | 1 wk |
-| M4 | Production GGUF loader + Q8_0 repack + `gguf_dsv4` config + `wo_a` path; CPU tests; checksum fail-closed; **calendar kill: 10 working days** | full-tensor mapping test incl. A2 boundaries; byte-identity assert on packed IQ2_XXS/Q2_K views | calendar breach → descope review | 1–2 wk |
+| M1 | `FORMAT-CONTRACT.md` from source; per-tensor inventory; §4.7 tensor-level TP table; per-kernel dtype contracts; tokenizer bootstrap pin + text-level golden tests; `wo_a` design + VRAM delta; aligned-SoA repack spec (layout + hash gate); capacity table with every delta sized in MiB → tokens | L0 class-A oracle 100%; A2 mapping-oracle design; inventory matches blob; capacity table shows ≥140K or levers whose summed size closes the gap | inventory mismatch → re-scope; `wo_a` no viable design → **stop**; capacity gap unclosable → re-decide scope with Will | 2–4 d |
+| M2 | Rewritten expert kernels (IQ2_XXS first, decode + batched), **raw-layout vs aligned-SoA A/B** at exact serving shapes; capture-safe `torch.ops` registration, capture/replay M=1–4 TP=4 + aliasing sweep; minimal Q8 repacker + dense GEMV + `wo_a` prototype measured; prefill M-distribution bench; **TP=4 graph-captured decoder-layer slice** as the real projection | screening projection ≥ 58 decode and ≥ 550 prefill from the layer slice, dense and `wo_a` components measured | causal matrix: expert-kernel miss after **2 tuning iterations** (incl. aligned-SoA variant) → **stop**; dense/`wo_a` miss → dense redesign or **stop**; one-metric-only miss → explicit decision with Will | 1–2 wk |
+| M3 | Q2_K kernels on the same skeleton + aligned variant; productionize the repack artifact path | same gates as M2 per kernel | same | 1 wk |
+| M4 | Production GGUF loader + repack + Q8_0 repack + `gguf_dsv4` config + `wo_a` path; CPU tests; checksum fail-closed; **calendar kill: 10 working days** | full-tensor mapping test incl. A2 boundaries; byte-identity assert on packed IQ2_XXS/Q2_K views; repack hash gate | calendar breach → descope review | 1–2 wk |
 | M5 | server60 TP=4 bring-up (authorized window; validated rollback) | class-A/B full-path oracle on-GPU; NCU dispatch; readiness | repeated OOM/instability → capacity re-plan | 0.5–1 wk |
 | M6 | Per-layer vs llama.cpp (class B); canaries + NIAH at achieved context | pre-registered windows pass | unexplained divergence → bisect | 3–5 d |
 | M7 | Matched perf campaign; same-tree WNA16 A/B attribution | ≥58 engine decode, ≥550 prefill, ≥140K on-GPU, zero swap | miss → keep llama.cpp canonical; publish | 3–5 d |
 | M8 | Quality: quick pack + **paired multi-seed DeepSWE** (pilot-priced full grid) | §6 executable paired statistic passes its pre-registered rule | divergence → component bisect | 1–3 wk (pilot-priced) |
 | M9 | Promotion package; open-source decision | Will's approval; healthy final service | — | 2–3 d |
 
-Effort envelope: **7–10 weeks if gates pass first-try**; M2b/M3 iterations,
+Effort envelope: **7–10 weeks if gates pass first-try**; M2/M3 iterations,
 M6/M8 bisects, `wo_a` redesign, and the DeepSWE grid cost are the
 contingency sources — kills bound the downside, not the calendar.
 
@@ -301,17 +359,18 @@ contingency sources — kills bound the downside, not the calendar.
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | `wo_a` Q8_0 path slow or fat | medium-high | fatal if unsolved | M1 design + M2 prototype; kill |
-| Dense Q8_0 path slower than FP8 Marlin | medium | eats the 58 budget | measured at M2a; feeds go/no-go |
-| Route A activation pipeline (bf16→F32→Q8_1, F32→bf16) too costly at decode | medium | misses 58 | measured inside the M2a full-op budget; shared up/gate Q8_1 buffer |
-| Capture-safe ABI breaks on graph sizes / aliasing | medium | eager fallback ≈ 5.5 tok/s | ABI is an M2a gate with replay + sweep |
-| Expert route too slow at decode M≤8 | medium | misses 58 | Route A measured first; Route B escalation; ~2.2–2.6× tolerance |
-| Linear projection misleads route selection | medium | wrong route chosen | screening only; layer-slice + M-distribution are the gates |
+| Dense Q8_0 path slower than FP8 Marlin | medium | eats the 58 budget | measured at M2; feeds go/no-go |
+| Aligned-SoA gains don't transfer from his silicon to SM86 | medium | expert budget stays tight | raw-vs-aligned A/B is an M2 gate, not an assumption |
+| Expert kernels too slow at decode M≤8 even aligned | medium | misses 58 | 2-iteration tuning cap then stop; ~2.2–2.6× tolerance vs W2 Humming |
+| Rewrite bugs corrupt weights silently | medium | quality damage | class-A/A2 oracles; DwarfStar-style continuation-vector regression as second anchor |
+| Capture-unsafe patterns slip in | low-medium | eager fallback ≈ 5.5 tok/s | capture/replay + aliasing sweep is an M2 gate |
+| Linear projection misleads the go/no-go | medium | wrong decision | screening only; layer-slice + M-distribution are the gates |
 | Capacity: 140K point estimate; ~17.6K context per 100 MiB/rank unmodeled | certain (sensitivity) | context floor | M1 sizes every delta from the §4.7 table |
 | Byte-valid but logically wrong load (transpose/fused-slot/rank offset) | medium | silent quality damage | class-A2 coordinate oracle |
-| Tokenizer bootstrap falls back to generic HF mode | medium | contaminated comparisons | §4.6 explicit pin + text-level golden tests |
+| Tokenizer bootstrap falls back to generic HF mode | medium | contaminated comparisons | §4.4 explicit pin + text-level golden tests |
 | Router cast degrades top-6 tie-breaks | medium | silent quality damage | §4.5 explicit policy; class-B window |
 | DeepSWE grid cost/noise | medium | false pass/fail or overrun | executable paired statistic; pilot prices the grid |
-| Effort overrun | medium | opportunity cost | M1/M2a/M4 kills; calendar caps |
+| Effort overrun | medium | opportunity cost | M1/M2/M4 kills; calendar caps |
 
 ## 10. Capacity plan
 
@@ -324,10 +383,11 @@ available KV; KV density ≈ 5.832 KiB/token/rank (independently recomputed by
 the third review) → **~17.6K context per 100 MiB/rank**. The sharded GGUF tax
 (~0.5 GiB/rank) gives ~139.1K — a point estimate with the replicated-family
 delta at zero; precedent (indexer 191→767 MiB/rank after transforms) says it
-must be measured, not assumed small. The M1 gate requires the completed table
-to show ≥140K or levers whose summed MiB close the gap explicitly. The 16 GiB
-host tier ships as prefix-reuse only, gated by its hit-rate line. 430K active
-stays llama.cpp's exclusive advantage.
+must be measured, not assumed small. The aligned-SoA repack is byte-count
+neutral by construction (§4.2) and must stay so in the capacity table. The
+M1 gate requires the completed table to show ≥140K or levers whose summed MiB
+close the gap explicitly. The 16 GiB host tier ships as prefix-reuse only,
+gated by its hit-rate line. 430K active stays llama.cpp's exclusive advantage.
 
 ## 11. What "done" means
 
@@ -343,10 +403,11 @@ llama.cpp service remains canonical until M8 passes.
 1. M0: worktrees, base pin `b7766cfe`, fresh nsys trace of the 74.98 stack,
    baseline re-anchor.
 2. M1: FORMAT-CONTRACT + L0/A2 oracle design + inventory + §4.7 TP table +
-   dtype contracts + tokenizer pin + `wo_a` design + capacity table.
-3. M2a: Route A wrapper with capture-safe ABI + full-op microbench + dense/
-   `wo_a` prototypes + decoder-layer slice — the first hard end-to-end
-   number.
+   dtype contracts + tokenizer pin + `wo_a` design + aligned-SoA repack
+   spec + capacity table.
+3. M2: IQ2_XXS kernel rewrite with raw-vs-aligned A/B, capture-safe
+   registration, dense/`wo_a` prototypes, decoder-layer slice — the first
+   hard end-to-end number.
 4. Standing question for Will at M1 exit: accept the measured on-GPU context
    floor as this service's contract (llama.cpp retained for 430K-class
    needs), or require named-and-sized levers first?
