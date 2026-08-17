@@ -45,7 +45,8 @@ image. Do not promote a small gain within run-to-run noise.
 | `flashmla-hier` | compose the independently proven FlashMLA and hierarchical changes | lower sparse-MLA and collective decode time | both numerical gates pass, both dispatches are present, and gains compose without release-gate regression |
 | `indexer96` | sparse-indexer logits workspace 64 MiB to 96 MiB | fewer query-dimension splits | prefill or decode rises with negligible KV loss |
 | `batched320` | `max_num_batched_tokens=256` to `320` | larger prefill chunks | prefill rises while decode and KV capacity remain acceptable |
-| `trace-baseline` | observational trace with `KV_OFFLOADING_SIZE=0.001` | attributes warmed decode time without an unused 16 GiB host tier competing with Nsight | evidence only; never use trace throughput as benchmark data |
+| `trace-baseline` | observational trace with `KV_OFFLOADING_SIZE=0.001` | attributes warmed plain-stack decode time without an unused 16 GiB host tier competing with Nsight | evidence only; never use trace throughput as benchmark data |
+| `trace-flashmla-hier` | observational trace of the proven combined arm, also with the minimal KV-offload tier | re-anchors sparse-MLA, collective, MoE, and host-gap shares after FlashMLA + hierarchical all-reduce | both numerical gates pass; evidence only, never benchmarked |
 
 The upstream narrow-eager-region change is excluded. Its current V1 PIECEWISE
 configuration has a documented correctness failure. Query-blocked sparse decode
@@ -56,7 +57,8 @@ is also excluded because the pinned implementation reports it slower at 200K.
 1. Preserve the current production container and image identity.
 2. Build the experiment image with
    `patches/deepseek-v4-sm86-speed-experiments/build-flash-mla-decode-image.sh`.
-3. Build the Nsight image only for `trace-baseline`.
+3. Build the Nsight image only for `trace-baseline` or
+   `trace-flashmla-hier`.
 4. Set the model snapshot, Hub blobs, runtime-cache, speed-image, and production
    image identity explicitly.
 5. Run `--dry-run` first. Record its `plan_sha256`.
@@ -91,7 +93,11 @@ models/deepseek-v4-flash-0731/vllm/experiments/sm86-speed/run-speed-arm-with-rol
 ```
 
 After reviewing the manifest, rerun the same command without `--dry-run` and
-set `SERVER60_SPEED_PLAN_SHA256` to the printed hash.
+set `SERVER60_SPEED_PLAN_SHA256` to the printed hash. When rollback targets a
+production service whose warmup exceeds the default 15 minutes, set
+`PRODUCTION_HEALTH_WAIT_ATTEMPTS` before **both** dry-run and execution (checks
+are 5 seconds each; 480 allows 40 minutes). The value is bound into the plan
+hash.
 
 The normalization wrapper checks that available RAM exceeds used swap by at
 least 8 GiB, resets host swap with passwordless `sudo`, verifies zero swap for
@@ -125,6 +131,10 @@ capacity, and the predicted mediator before keeping an arm.
 5. Proceed only if all-reduce consumes at least 10% of the reviewed critical
    path.
 6. Run `run-hier-all-reduce-sm86-gate.sh` before the serving arm.
+7. After the combined arm wins, use `trace-flashmla-hier` to re-anchor the
+   post-optimization critical-path mix. It runs both numerical gates, selects
+   the Nsight image, requires the reviewed hierarchical trace gate, and enables
+   both runtime dispatches while retaining the trace-only 0.001 GiB host tier.
 
 The hierarchical gate uses islands `[[0,1],[2,3]]`, compares BF16 output with
 NCCL, and records latency for 4,096 through 262,144 elements. The A800-derived

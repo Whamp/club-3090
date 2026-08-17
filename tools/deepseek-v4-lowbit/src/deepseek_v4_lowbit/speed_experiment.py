@@ -92,6 +92,32 @@ EXPERIMENT_ARMS: dict[str, ExperimentArm] = {
         lose_condition="Trace misses CUDA graphs/NCCL or changes request behavior.",
         observational=True,
     ),
+    "trace-flashmla-hier": ExperimentArm(
+        name="trace-flashmla-hier",
+        outcome=(
+            "Attribute one FlashMLA plus hierarchical all-reduce decode interval "
+            "with Nsight Systems."
+        ),
+        precondition=(
+            "Both numerical gates pass, the unprofiled combined arm wins, and "
+            "profiling is not benchmarked."
+        ),
+        changed_values={
+            "KV_OFFLOADING_SIZE": "0.001",
+            "VLLM_DSV4_FLASH_MLA_DECODE": "1",
+            "VLLM_HIER_ALL_REDUCE": "0,1;2,3",
+        },
+        predicted_mediator=(
+            "Reports the post-optimization sparse MLA, collective, MoE, and "
+            "host-gap time shares."
+        ),
+        lose_condition=(
+            "Either dispatch is absent, the trace misses CUDA graphs/NCCL, or "
+            "profiling changes request behavior."
+        ),
+        observational=True,
+        composite=True,
+    ),
     "prefill-block2": ExperimentArm(
         name="prefill-block2",
         outcome="Increase cache-busted prefill throughput without persistent memory.",

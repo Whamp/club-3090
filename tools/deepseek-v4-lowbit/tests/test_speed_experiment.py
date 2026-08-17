@@ -24,6 +24,7 @@ def test_speed_experiment_arms_change_one_variable() -> None:
     assert set(EXPERIMENT_ARMS) == {
         "baseline",
         "trace-baseline",
+        "trace-flashmla-hier",
         "flashmla-hier",
         *EXPECTED_CHANGES,
     }
@@ -54,6 +55,14 @@ def test_speed_experiment_trace_arm_disables_unused_host_kv_tier() -> None:
         "KV_OFFLOADING_SIZE": "0.001",
     }
     assert BASELINE_PROFILE["KV_OFFLOADING_SIZE"] == "16"
+
+
+def test_trace_flashmla_hier_profile_is_observational_and_combined() -> None:
+    arm = EXPERIMENT_ARMS["trace-flashmla-hier"]
+    assert arm.observational is True
+    assert arm.full_profile()["KV_OFFLOADING_SIZE"] == "0.001"
+    assert arm.full_profile()["VLLM_DSV4_FLASH_MLA_DECODE"] == "1"
+    assert arm.full_profile()["VLLM_HIER_ALL_REDUCE"] == "0,1;2,3"
 
 
 def test_combined_speed_arm_records_both_proven_winners() -> None:

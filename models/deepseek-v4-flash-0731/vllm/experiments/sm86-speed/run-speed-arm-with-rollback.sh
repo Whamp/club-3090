@@ -18,22 +18,24 @@ usage() {
     cat >&2 <<'EOF'
 usage: run-speed-arm-with-rollback.sh [--dry-run] ARM RESULT_DIRECTORY [-- COMMAND ...]
 
-ARM is one of baseline, prefill-block2, flashmla-decode, hier-allreduce,
-flashmla-hier, indexer96, or batched320. Dry-run never calls Docker or contacts
+ARM is one of baseline, trace-baseline, trace-flashmla-hier, prefill-block2,
+flashmla-decode, hier-allreduce, flashmla-hier, indexer96, or batched320.
+Dry-run never calls Docker or contacts
 server60.
 Actual execution requires these identity-bound variables:
 
   APPROVED_PRODUCTION_IMAGE_ID=sha256:...
   SPEED_IMAGE=repository:tag-or-id
   SPEED_IMAGE_ID=sha256:...
-  NSIGHT_IMAGE=repository:tag-or-id       # trace-baseline only
-  NSIGHT_IMAGE_ID=sha256:...              # trace-baseline only
+  NSIGHT_IMAGE=repository:tag-or-id       # trace arms only
+  NSIGHT_IMAGE_ID=sha256:...              # trace arms only
   MODEL_SNAPSHOT=/immutable/snapshot
   MODEL_BLOBS=/huggingface/blobs
   RUNTIME_CACHE_ROOT=/runtime/cache
   BIND_HOST=server-address
   HEALTH_URL=http://server-address:8034
   SERVER60_SPEED_PLAN_SHA256=<hash printed by --dry-run with the same inputs>
+  PRODUCTION_HEALTH_WAIT_ATTEMPTS=<5-second checks; default 180>
 EOF
     exit 2
 }
@@ -53,7 +55,7 @@ fi
 COMMAND=("$@")
 
 case "$ARM" in
-    baseline | trace-baseline | prefill-block2 | flashmla-decode | hier-allreduce | flashmla-hier | indexer96 | batched320) ;;
+    baseline | trace-baseline | trace-flashmla-hier | prefill-block2 | flashmla-decode | hier-allreduce | flashmla-hier | indexer96 | batched320) ;;
     *) echo "Unknown DeepSeek V4 speed arm: $ARM" >&2; exit 2 ;;
 esac
 
@@ -62,19 +64,27 @@ readonly SPEED_IMAGE="${SPEED_IMAGE:-UNSET}"
 readonly SPEED_IMAGE_ID="${SPEED_IMAGE_ID:-UNSET}"
 readonly NSIGHT_IMAGE="${NSIGHT_IMAGE:-UNSET}"
 readonly NSIGHT_IMAGE_ID="${NSIGHT_IMAGE_ID:-UNSET}"
-if [[ "$ARM" == trace-baseline ]]; then
+case "$ARM" in
+trace-baseline | trace-flashmla-hier)
     readonly EXPERIMENT_IMAGE="$NSIGHT_IMAGE"
     readonly EXPERIMENT_IMAGE_ID="$NSIGHT_IMAGE_ID"
-else
+    ;;
+*)
     readonly EXPERIMENT_IMAGE="$SPEED_IMAGE"
     readonly EXPERIMENT_IMAGE_ID="$SPEED_IMAGE_ID"
-fi
+    ;;
+esac
 readonly MODEL_SNAPSHOT="${MODEL_SNAPSHOT:-UNSET}"
 readonly MODEL_BLOBS="${MODEL_BLOBS:-UNSET}"
 readonly RUNTIME_CACHE_ROOT="${RUNTIME_CACHE_ROOT:-UNSET}"
 readonly BIND_HOST="${BIND_HOST:-UNSET}"
 readonly PORT="${PORT:-8034}"
 readonly HEALTH_URL="${HEALTH_URL:-UNSET}"
+readonly PRODUCTION_HEALTH_WAIT_ATTEMPTS="${PRODUCTION_HEALTH_WAIT_ATTEMPTS:-180}"
+[[ "$PRODUCTION_HEALTH_WAIT_ATTEMPTS" =~ ^[1-9][0-9]*$ ]] || {
+    echo "PRODUCTION_HEALTH_WAIT_ATTEMPTS must be a positive integer" >&2
+    exit 2
+}
 readonly NSYS_OUTPUT_DIRECTORY="${NSYS_OUTPUT_DIRECTORY:-UNSET}"
 readonly NSYS_REPORT_BASENAME="${NSYS_REPORT_BASENAME:-deepseek-v4-decode}"
 readonly HIER_TRACE_GATE_JSON="${HIER_TRACE_GATE_JSON:-UNSET}"
@@ -101,7 +111,7 @@ arm_manifest="$(
     uv run --python 3.12 deepseek-v4-speed-experiment "$ARM"
 )"
 trace_gate_summary='{}'
-if [[ "$ARM" == hier-allreduce || "$ARM" == flashmla-hier ]]; then
+if [[ "$ARM" == hier-allreduce || "$ARM" == flashmla-hier || "$ARM" == trace-flashmla-hier ]]; then
     [[ "$HIER_TRACE_GATE_JSON" != UNSET ]] || {
         echo "hier-allreduce requires HIER_TRACE_GATE_JSON" >&2
         exit 2
@@ -126,6 +136,7 @@ plan_json="$(
     PLAN_RUNTIME_CACHE_ROOT="$RUNTIME_CACHE_ROOT" \
     PLAN_BIND_HOST="$BIND_HOST" PLAN_PORT="$PORT" \
     PLAN_HEALTH_URL="$HEALTH_URL" \
+    PLAN_PRODUCTION_HEALTH_WAIT_ATTEMPTS="$PRODUCTION_HEALTH_WAIT_ATTEMPTS" \
     PLAN_NSYS_OUTPUT_DIRECTORY="$NSYS_OUTPUT_DIRECTORY" \
     PLAN_NSYS_REPORT_BASENAME="$NSYS_REPORT_BASENAME" \
     PLAN_EXPECTED_SPEED_COMMIT="$EXPECTED_SPEED_COMMIT" \
@@ -153,6 +164,9 @@ manifest["runtime_cache_root"] = os.environ["PLAN_RUNTIME_CACHE_ROOT"]
 manifest["bind_host"] = os.environ["PLAN_BIND_HOST"]
 manifest["port"] = os.environ["PLAN_PORT"]
 manifest["health_url"] = os.environ["PLAN_HEALTH_URL"]
+manifest["production_health_wait_attempts"] = int(
+    os.environ["PLAN_PRODUCTION_HEALTH_WAIT_ATTEMPTS"]
+)
 manifest["nsys_output_directory"] = os.environ["PLAN_NSYS_OUTPUT_DIRECTORY"]
 manifest["nsys_report_basename"] = os.environ["PLAN_NSYS_REPORT_BASENAME"]
 manifest["expected_speed_commit"] = os.environ["PLAN_EXPECTED_SPEED_COMMIT"]
@@ -203,19 +217,19 @@ sudo -n true || {
     echo "DeepSeek V4 speed cleanup requires passwordless sudo" >&2
     exit 2
 }
-if [[ "$ARM" == trace-baseline ]]; then
+if [[ "$ARM" == trace-baseline || "$ARM" == trace-flashmla-hier ]]; then
     [[ "$NSYS_OUTPUT_DIRECTORY" != UNSET ]] || {
-        echo "trace-baseline requires NSYS_OUTPUT_DIRECTORY" >&2
+        echo "trace arm requires NSYS_OUTPUT_DIRECTORY" >&2
         exit 2
     }
     [[ "$NSIGHT_IMAGE" != UNSET && "$NSIGHT_IMAGE_ID" != UNSET ]] || {
-        echo "trace-baseline requires NSIGHT_IMAGE and NSIGHT_IMAGE_ID" >&2
+        echo "trace arm requires NSIGHT_IMAGE and NSIGHT_IMAGE_ID" >&2
         exit 2
     }
     mkdir -p "$NSYS_OUTPUT_DIRECTORY"
 fi
 COMPOSE_FILES=(--file "$COMPOSE_FILE" --file "$COMPOSE_OVERRIDE")
-if [[ "$ARM" == trace-baseline ]]; then
+if [[ "$ARM" == trace-baseline || "$ARM" == trace-flashmla-hier ]]; then
     COMPOSE_FILES+=(--file "$COMPOSE_NSYS_OVERRIDE")
 fi
 
@@ -245,7 +259,7 @@ actual_speed_image_id="$(docker image inspect "$SPEED_IMAGE" --format '{{.Id}}')
     echo "Speed image source tree mismatch" >&2
     exit 2
 }
-if [[ "$ARM" == trace-baseline ]]; then
+if [[ "$ARM" == trace-baseline || "$ARM" == trace-flashmla-hier ]]; then
     actual_nsight_image_id="$(docker image inspect "$NSIGHT_IMAGE" --format '{{.Id}}')"
     [[ "$actual_nsight_image_id" == "$NSIGHT_IMAGE_ID" ]] || {
         echo "Nsight image identity mismatch: $actual_nsight_image_id" >&2
@@ -328,7 +342,7 @@ restore_production() {
             --remove-orphans >/dev/null 2>&1 || true
         cleanup_stale_kv_offload_files || status=1
         docker start "$PRODUCTION_CONTAINER" >/dev/null
-        for _ in $(seq 1 180); do
+        for _ in $(seq 1 "$PRODUCTION_HEALTH_WAIT_ATTEMPTS"); do
             if [[ "$(docker inspect "$PRODUCTION_CONTAINER" --format '{{.State.Health.Status}}' 2>/dev/null || true)" == healthy ]]; then
                 break
             fi
@@ -352,6 +366,11 @@ export NSYS_OUTPUT_DIRECTORY NSYS_REPORT_BASENAME
 case "$ARM" in
     baseline) ;;
     trace-baseline) export KV_OFFLOADING_SIZE=0.001 ;;
+    trace-flashmla-hier)
+        export KV_OFFLOADING_SIZE=0.001
+        export VLLM_DSV4_FLASH_MLA_DECODE=1
+        export VLLM_HIER_ALL_REDUCE="0,1;2,3"
+        ;;
     prefill-block2) export VLLM_SPARSE_DENSE_QUERY_BLOCK=2 ;;
     flashmla-decode) export VLLM_DSV4_FLASH_MLA_DECODE=1 ;;
     hier-allreduce) export VLLM_HIER_ALL_REDUCE="0,1;2,3" ;;
@@ -369,11 +388,11 @@ rollback_started=1
 docker stop --time 180 "$PRODUCTION_CONTAINER" >/dev/null
 cleanup_stale_kv_offload_files
 
-if [[ "$ARM" == flashmla-decode || "$ARM" == flashmla-hier ]]; then
+if [[ "$ARM" == flashmla-decode || "$ARM" == flashmla-hier || "$ARM" == trace-flashmla-hier ]]; then
     "$SCRIPT_DIRECTORY/run-flash-mla-sm86-gate.sh" \
         "$SPEED_IMAGE" "$RESULT_DIRECTORY/flash-mla-gate"
 fi
-if [[ "$ARM" == hier-allreduce || "$ARM" == flashmla-hier ]]; then
+if [[ "$ARM" == hier-allreduce || "$ARM" == flashmla-hier || "$ARM" == trace-flashmla-hier ]]; then
     "$SCRIPT_DIRECTORY/run-hier-all-reduce-sm86-gate.sh" \
         "$SPEED_IMAGE" "$RESULT_DIRECTORY/hier-all-reduce-gate"
 fi

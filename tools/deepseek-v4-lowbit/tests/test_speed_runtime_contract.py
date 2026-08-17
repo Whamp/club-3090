@@ -30,6 +30,18 @@ def test_production_default_reserves_host_kv_eviction_tier() -> None:
     ) in compose
 
 
+def test_combined_trace_arm_uses_nsight_and_both_runtime_dispatches() -> None:
+    runner = (EXPERIMENT_DIRECTORY / "run-speed-arm-with-rollback.sh").read_text()
+    assert "trace-baseline | trace-flashmla-hier)" in runner
+    trace_case = runner.split("    trace-flashmla-hier)", 1)[1].split("        ;;", 1)[
+        0
+    ]
+    assert "KV_OFFLOADING_SIZE=0.001" in trace_case
+    assert "VLLM_DSV4_FLASH_MLA_DECODE=1" in trace_case
+    assert 'VLLM_HIER_ALL_REDUCE="0,1;2,3"' in trace_case
+    assert "PRODUCTION_HEALTH_WAIT_ATTEMPTS:-180" in runner
+
+
 def test_combined_arm_requires_both_runtime_dispatches() -> None:
     measurement = (EXPERIMENT_DIRECTORY / "measure-speed-arm.sh").read_text()
     assert '"flashmla-hier": {' in measurement
@@ -142,10 +154,12 @@ def test_every_speed_arm_renders_without_runtime_side_effects(tmp_path: Path) ->
         "MODEL_BLOBS": "/nonexistent/blobs",
         "RUNTIME_CACHE_ROOT": "/nonexistent/cache",
         "HIER_TRACE_GATE_JSON": str(trace_gate),
+        "PRODUCTION_HEALTH_WAIT_ATTEMPTS": "480",
     }
     for arm in (
         "baseline",
         "trace-baseline",
+        "trace-flashmla-hier",
         "prefill-block2",
         "flashmla-decode",
         "hier-allreduce",
@@ -178,7 +192,8 @@ def test_every_speed_arm_renders_without_runtime_side_effects(tmp_path: Path) ->
         assert len(manifest["harness_tree"]) == 40
         assert len(manifest["harness_sha256"]) == 64
         assert "plan_sha256=" in completed.stdout
-        if arm == "trace-baseline":
+        assert manifest["production_health_wait_attempts"] == 480
+        if arm in ("trace-baseline", "trace-flashmla-hier"):
             assert manifest["experiment_image"] == "example.invalid/nsight:test"
             assert manifest["experiment_image_id"] == "sha256:" + "3" * 64
         else:
@@ -254,6 +269,7 @@ printf '%s' '{"data":[{"id":"deepseek-v4-flash-0731-wna16-quality-12035985"}]}'
         "RUNTIME_CACHE_ROOT": str(cache),
         "BIND_HOST": "127.0.0.1",
         "HEALTH_URL": "http://127.0.0.1:8034",
+        "PRODUCTION_HEALTH_WAIT_ATTEMPTS": "480",
     }
     dry_run = subprocess.run(
         [str(runner), "--dry-run", "baseline", str(output_directory), "--", "true"],
