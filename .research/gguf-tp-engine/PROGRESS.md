@@ -153,3 +153,9 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
 - IQ2 aligned repack rejected for production (slower than raw at exact N512).
   `M2-ITERATION2.md` + `evidence/m2-iq2-iteration2/`. Proceed to M3 Q2_K;
   dense/wo_a + graph-layer slice still required to close full M2.
+
+## 2026-08-17 — M3 Q2_K fragment PASS; pause point
+
+- Native indexed Q2_K down K512→N4096/rank: 5/5 SM86 numerical/graph tests.
+- Exclusive 5-trial: 13.752 µs, 300.23 GB/s, 0.270% CV; captured quantize+down 14.898 µs. No interference; max clock 1650; canonical zero-swap.
+- Combined expert estimate: IQ2 gate+up 27.309 + Q2 down 14.898 = 42.207 µs/layer, competitive with ~50 µs Humming anchor. M3 pass; next is dense Q8/wo_a then graph layer slice.
