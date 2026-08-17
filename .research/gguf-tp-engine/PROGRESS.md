@@ -25,3 +25,19 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
   per-tensor inventory via read-only server60 GGUF headers;
   §4.7 TP mapping table; per-kernel dtype contracts; tokenizer pin tests;
   wo_a design; capacity table.
+
+## 2026-08-17 — M1 L0 oracle PASS (class-A gate)
+
+- `oracle/ref_a.c`: verbatim extraction of dequantize_row_q8_0 / q2_K / iq2_xxs
+  + fp16→fp32 + tables from Whamp/llama.cpp@0379cf4bf; compiled standalone.
+- `oracle/l0_oracle.py`: independent NumPy-float32 decoders written from
+  FORMAT-CONTRACT.md; 10,000 random blocks/format (seed 20260817, finite-scale
+  masking), adversarial corpora (LUT boundaries, sub-scale extremes, chunk
+  boundaries, scale-nibble extremes, ±max/subnormal d), NaN/Inf probe with
+  NaN-aware compare.
+- Result: **bitwise pass 100%** for q8_0, q2_K, iq2_xxs (random + adversarial
+  + nonfinite). Evidence: `evidence/l0-report.json` (struct sizes 34/84/66,
+  qs offsets 2/16/2, table SHA-256s).
+- Red→green discrimination: first run failed q2_K from weight 32 on — the
+  independent decoder wrote chunk-1 outputs at weights 32..159 instead of
+  128..255 (`32*chunk` vs `128*chunk`). Fixed; contract text unchanged.
