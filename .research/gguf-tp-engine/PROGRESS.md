@@ -41,3 +41,28 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
 - Red→green discrimination: first run failed q2_K from weight 32 on — the
   independent decoder wrote chunk-1 outputs at weights 32..159 instead of
   128..255 (`32*chunk` vs `128*chunk`). Fixed; contract text unchanged.
+
+## 2026-08-17 — M1 per-tensor inventory complete (read-only server60)
+
+- `oracle/gguf_inventory.py` (bounded 16 MiB header read, fail-closed on
+  unknown types) run against the pinned blob on server60; SHA-256 re-verified
+  `ca22ae2f…b1c0`. Full directory: `evidence/gguf-inventory.json`; family
+  summary: `evidence/gguf-family-summary.txt`.
+- Consistency proofs: 1,328 tensors; offsets monotonic, zero overlaps; last
+  tensor ends exactly at file_size − data_start (data_start 5,333,824);
+  Σ(nbytes) + Σalignment-gaps (86×20B + 16B + 28B) = capacity exactly.
+- Family bytes (total 80.7594 GiB, matches 2026-08-13 audit): routed-experts
+  72.5625 (IQ2_XXS gate/up [4096,2048,256]=528 MiB each ×86, Q2_K down
+  [2048,4096,256]=672 MiB each ×43 — down K/N swap confirmed), attention
+  4.5509 (5 Q8_0 tensors/layer), shared-experts 1.0708, token_embd 0.9863
+  F16 [4096,129280], indexer-compressor 0.9075, output 0.5240 Q8_0
+  [4096,129280], router 0.0927 (incl. 3× tid2eid I32 [6,129280]),
+  hyperconnection 0.0631, norms 0.0016.
+- Config parity anchors captured (yarn 16×/orig 65,536/freq 10,000,
+  compressor rope 160,000, SWA 128, indexer 64×128 top-512, q/out lora 1024,
+  output groups 8, expert scale 1.5, clamp 10.0, HC count 4, hash layers 3,
+  nextn=1 metadata only — no MTP tensors in this file, consistent with the
+  separate-MTP-file contract).
+- Next (M1 remainder): §4.7 tensor-level TP mapping from pinned vLLM model
+  source; per-kernel dtype contracts; tokenizer bootstrap pin + golden tests;
+  wo_a Q8 design + VRAM delta; aligned-SoA repack spec; capacity table.
