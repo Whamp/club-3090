@@ -30,6 +30,14 @@ WSL2: yes, both engines. Make sure GPU passthrough is set up (`nvidia-smi` works
 
 Different trades. vLLM is faster (51-89 TPS depending on config) and has full feature support (vision · tools · MTP spec-decode · streaming · reasoning). As of 2026-04-30 PM **Cliff 1 (25K tool prefills) is closed**, and as of 2026-05-02 PM **Cliff 2 (single prompts up to 60K) is also closed on single-card** via Genesis v7.69 (PN32 GDN chunked-prefill + P103 worker self-install) plus a local backport of vllm#35975 — `long-text.yml` (180K balanced) handles 60K cleanly, `long-text-no-mtp.yml` (200K, no MTP) reaches 60K with more KV pool. Both top out at the 60K hardware-physical wall on 24 GB single-card. For >60K single-prompt or full-262K cold context, llama.cpp single (~21 TPS, no cliffs at 262K) and vLLM dual TP=2 (88-127 TPS, 262K verified at 237K) remain the right answer. See the launch frame: [vLLM dual = max throughput, llama.cpp single = max robustness](../README.md#tldr--what-this-is).
 
+### Does CPU offload add 16 or 24 GiB of extra context?
+
+No—not in the service we currently run. `--kv-offloading-size` is a flag from the custom Whamp/vLLM branch we investigated. It is not a llama.cpp setting. Adding it to the current llama.cpp launch cannot create a CPU KV cache.
+
+We also tested the custom vLLM path and stopped before measuring 16 versus 24 GiB. The only quick test forced vLLM to use 200 GPU KV blocks so eviction would happen quickly. That made startup fail: vLLM had only 0.19 GiB available for KV cache but needed 1.11 GiB at the normal 230K context, and 0.35 GiB even after lowering the test to 32K. It reported a maximum context of only 448 tokens. The failure came from the artificial 200-block limit, not from CPU offload itself.
+
+A realistic test would keep all 1,355 GPU blocks and first fill them with roughly ten competing 30K-token prompts. That was too large for the agreed time limit, so no 16 or 24 GiB result exists. Close this direction: do not add the flag to the production service or claim that it improves performance. Keep the current llama.cpp setup for large context. The raw evidence is preserved on `feat/kv-offload-benchmark` at commit `cf0aea29`, under `results/kv-offload-tp4-early-stop-20260815/`.
+
 ### Why not Ollama?
 
 Ollama wraps llama.cpp with a different model registry and slightly easier UX. It's fine for chat. Two reasons we don't ship it:
