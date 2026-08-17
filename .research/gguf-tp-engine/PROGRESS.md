@@ -81,3 +81,27 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
 - Fused-slot boundaries and per-(layer,expert,tensor) byte ranges recorded
   as class-A2 oracle requirements; all Q8_0 ne0 divisible by 32 (no partial
   blocks) verified from inventory.
+
+## 2026-08-17 — M1 remaining gates complete; M1 PASS (narrow capacity)
+
+- `DTYPE-CONTRACTS.md`: every family storage→runtime cast pinned. Hard facts:
+  compressor state/scratch fp32; merged indexer/compressor fast path requires
+  bf16 weights; HC F16→fp32 lossless; router/indexer/embedding F16→bf16 casts
+  are lossy and class-B-gated (broad fp32 fallbacks exceed capacity).
+- `TOKENIZER-PIN.md` + `evidence/tokenizer-parity.json`: PASS — GGUF and HF
+  tokenizer alphabets identical by id (129,280 tokens, zero mismatches),
+  127,741 merges identical in order, control ids 0/1/1. Explicit
+  `tokenizer_mode=deepseek_v4`; runtime text/API golden tests specified.
+- `WOA-DESIGN.md`: mandatory int8-g32 Marlin-diagonal path, no BF16 cache;
+  naive 688 MiB/rank cache costs ~100–120K context (fatal). M2 kill gate set.
+- `REPACK-SPEC.md`: byte-neutral aligned-SoA streams, content hash and class-A
+  decode-identity gate, DwarfStar attribution.
+- `CAPACITY.md`: exact weights + measured fixed-state anchors → 140–142K
+  point estimate; M1 capacity gate **passes narrowly** but expected physical
+  headroom (~0.52 GiB at 140K) is below the normal 1 GiB release guard. M5
+  falsifier: fixed/runtime >22.78 GiB/rank before KV → stop or return with a
+  named reclaim lever; no CPU weight-offload concealment.
+- **M1 PASS mapping:** L0 class-A 100%; A2 oracle design recorded; inventory
+  exact; TP table exact; dtype/tokenizer/wo_a/repack contracts recorded;
+  capacity ≥140K narrowly supported. M0 fresh speed-stack trace remains the
+  only deferred pre-M2 evidence item (requires a server60 GPU window).

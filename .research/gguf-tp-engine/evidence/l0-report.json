@@ -41,9 +41,9 @@
         "scales=0xF0",
         "qs+scale-max",
         "d=+max",
-        "dmin=+max",
         "d=subnorm",
         "d=-max",
+        "dmin=+max",
         "distinct-scales",
         "chunk-boundary"
       ],
