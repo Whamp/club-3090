@@ -105,3 +105,19 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
   exact; TP table exact; dtype/tokenizer/wo_a/repack contracts recorded;
   capacity ≥140K narrowly supported. M0 fresh speed-stack trace remains the
   only deferred pre-M2 evidence item (requires a server60 GPU window).
+
+## 2026-08-17 — M0 fresh post-optimization trace complete; M0 PASS
+
+- Added/pushed tested speed-harness arm in Whamp/club-3090 `bfb1f9c4`:
+  `trace-flashmla-hier` selects Nsight, minimal 0.001 GiB host tier, both
+  proven dispatches/gates, and plan-bound rollback wait (480×5s for canonical
+  26-minute warmup). Package validation: 135 tests, 26 skips, 19 subtests;
+  shell/Ruff/ty/CodeGraph/aislop green.
+- server60 plan SHA `b13ce445…`; FlashMLA 17/17 + sm86 cubins; hierarchical
+  oracle 75.98–85.32% of NCCL; raw trace 62,024,647 B SHA `92ee80ff…`.
+- M2 screening mix: Marlin dense 26.63%, Humming experts 16.33%, collectives
+  19.74%, FlashMLA sparse decode 4.41%, indexer 6.04%, HC 6.69%.
+- Canonical Antirez service restored healthy on image `a96bd947…`, restart 0,
+  zero serving swap; GPU safety re-verified 800 samples, max 1650 MHz, none
+  over. Watchdog cancelled after verification.
+- **M0 PASS:** worktree/pins + fresh trace both complete. Proceed to M2.
