@@ -66,3 +66,18 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
 - Next (M1 remainder): §4.7 tensor-level TP mapping from pinned vLLM model
   source; per-kernel dtype contracts; tokenizer bootstrap pin + golden tests;
   wo_a Q8 design + VRAM delta; aligned-SoA repack spec; capacity table.
+
+## 2026-08-17 — M1 §4.7 tensor-level TP mapping complete
+
+- `TP-MAPPING.md`: every GGUF family → vLLM destination with constructor
+  file:line citations from pinned tree 6354125a. Key rules: fused_wqa_wkv
+  and both compressors are `disable_tp=True` replicated; indexer wq_b and
+  weights_proj are ReplicatedLinear; wq_b/wo_a column-shard, wo_b row-shard;
+  routed experts expert-shard whole-matrix (64/rank); token_embd/output
+  vocab-shard; router/HC/norms/tid2eid replicated.
+- Per-rank weights: **21.1893 GiB** (replicated 1.3326 + sharded 19.8567);
+  +0.50 GiB/rank over WNA16-quality anchor → ≈141.9K KV token projection,
+  consistent with PLAN §10 (139.1K with graph-pool delta).
+- Fused-slot boundaries and per-(layer,expert,tensor) byte ranges recorded
+  as class-A2 oracle requirements; all Q8_0 ne0 divisible by 32 (no partial
+  blocks) verified from inventory.
