@@ -53,6 +53,10 @@ margin.
 | aligned-SoA routed repack | 0 | 0 | hard byte-neutral contract |
 | 1 GiB physical headroom | reserves extra ~0.48 over base residual | max context only ~50–60K by linear model | not compatible with 140K unless fixed/runtime state shrinks |
 
+## Will's M1 capacity decision
+
+Will accepted the measured **140–142K on-GPU context floor with approximately 0.52 GiB projected physical headroom** as this service's initial contract on 2026-08-17. This resolves PLAN §12.4 and permits M5 bring-up at that floor. The acceptance does not convert the estimate into a measurement or waive M5's residency falsifier; larger-context work remains a separate follow-up if the engine passes promotion gates.
+
 ## M1 conclusion
 
 - **Capacity gate outcome:** ≥140K is plausible but tight on exact weight

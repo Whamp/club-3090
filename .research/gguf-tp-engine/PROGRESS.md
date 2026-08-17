@@ -159,3 +159,12 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
 - Native indexed Q2_K down K512→N4096/rank: 5/5 SM86 numerical/graph tests.
 - Exclusive 5-trial: 13.752 µs, 300.23 GB/s, 0.270% CV; captured quantize+down 14.898 µs. No interference; max clock 1650; canonical zero-swap.
 - Combined expert estimate: IQ2 gate+up 27.309 + Q2 down 14.898 = 42.207 µs/layer, competitive with ~50 µs Humming anchor. M3 pass; next is dense Q8/wo_a then graph layer slice.
+
+## 2026-08-17 — independent audit incorporated; M1 capacity floor accepted
+
+- Read-only second-agent audit found M0/M1/IQ2/Q2 evidence on track and no correctness concern. Protocol adjustments below are now explicit rather than implicit.
+- Q2 aligned-SoA A/B is deliberately declined: raw is 300.23 GB/s versus pinned llama.cpp's 307 GB/s, and even an optimistic 25% Q2-pipeline reduction changes the 13.3 ms/token screen by only ~1.2%. `M3-Q2.md` records the deviation; raw GGUF Q2_K remains the contract.
+- **M2 completion checklist:** (1) dense Q8_0 GEMV/GEMM; (2) exact-shape grouped `wo_a`; (3) batched/prefill IQ2_XXS and Q2_K MMA paths across the observed M distribution; (4) TP=4 graph-captured decoder-layer slice with real collective. Exclusive microbenchmarks are ceilings, not serving projections.
+- **Pre-registered Q8_1 class-B window:** llama.cpp MMVQ itself quantizes activations to Q8_1, so this matches baseline representation semantics. Against the unquantized BF16-reference GEMM on the same inputs: normalized RMSE ≤1.0%, normalized mean absolute error ≤1.0%, max-absolute error / max-absolute reference ≤2.5%, cosine similarity ≥0.9999. Kernel arithmetic still must match dequantized Q8_1 inputs under its tighter independent oracle; full-model logits/tasks remain later gates.
+- **Pre-registered Q8_0→Marlin class-B window:** after exact signed-code preservation and FP16→BF16 scale conversion, output normalized RMSE ≤1.0%, normalized mean absolute error ≤1.0%, and max-absolute error / max-absolute reference ≤2.5% versus original Q8_0 dequant+GEMM. Compare separately against the BF16-rounded transformed-weight reference to distinguish repack/kernel errors from the documented scale-rounding loss.
+- Will accepts the estimated 140–142K on-GPU context floor with ~0.52 GiB projected headroom. This permits M5 at that floor but does not waive measured residency or the 22.78 GiB/rank falsifier.

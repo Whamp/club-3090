@@ -415,6 +415,7 @@ llama.cpp service remains canonical until M8 passes.
 3. M2: IQ2_XXS kernel rewrite with raw-vs-aligned A/B, capture-safe
    registration, dense/`wo_a` prototypes, decoder-layer slice — the first
    hard end-to-end number.
-4. Standing question for Will at M1 exit: accept the measured on-GPU context
-   floor as this service's contract (llama.cpp retained for 430K-class
-   needs), or require named-and-sized levers first?
+4. **Resolved 2026-08-17:** Will accepts the measured 140–142K on-GPU context
+   floor with approximately 0.52 GiB projected headroom as this service's
+   initial contract. M5 must still measure residency and obey its falsifier;
+   expanding context is a separate follow-up if promotion succeeds.
