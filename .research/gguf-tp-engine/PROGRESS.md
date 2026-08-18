@@ -188,3 +188,12 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
 - M0 was decode-only, so the prefill screen uses the inherited M≤256 scheduler domain at M={16,32,64,128,256}; final gating still needs scheduler-observed chunk evidence.
 - Full 256-expert/top-6 exact-shape five-trial baseline: uniform M256 expert-only cost 0.04008 ms/token/layer = 1.723 ms/token across 43 layers (580 tok/s ceiling); concentrated best boundary 1.483 ms/token (674 ceiling). Both leave impossibly little of the 1.818 ms/token 550-tok/s budget for non-expert work.
 - Gate result: indexed kernels remain M≤4 decode/fallback; grouped token compaction plus SM86 MMA/DP4A weight reuse is mandatory for prefill. `M2-PREFILL-BASELINE.md` + evidence bundle.
+
+## 2026-08-17 — M2 grouped SM86 expert prefill component PASS
+
+- Causal tuning matrix: shared WMMA N16 uniform-M256 gate/up 7.973 ms (reject); shared MMA N8 6.406 ms (parity/reject); raw decode-to-register N8 3.931 ms + 0.064 ms alignment versus indexed 6.242 ms (1.56× net; keep).
+- Added grouped Q2_K down with scale nibbles folded into INT8 MMA codes and per-16 min correction outside MMA. Full uniform M256: gate/up 3.932 + down 2.082 + one alignment 0.065 = 6.079 ms versus indexed 10.219 ms (1.68×).
+- Grouped expert cost is 1.021 ms/token across 43 layers, leaving 0.797 ms/token of the 550-tok/s budget for all non-expert work. Component gate passes; full prefill remains unproven.
+- Final GPU tests 22/22; Compute Sanitizer grouped memcheck 0 errors and racecheck 0 hazards. Named IQ2/Q2 SM86 cubins contain IMMA.16832.S8.S8 with hashes in `M2-GROUPED-PREFILL.md`.
+- Dispatch contract: grouped loses below ~M128 under uniform routing; indexed remains M≤4/fallback. Exact crossover is an empirical runtime policy.
+- User authorized a batched GPU work window to avoid 26-minute llama warmups. Canonical llama.cpp is intentionally offline; GPUs 1–3 remain unused; an 8-hour restore watchdog is armed. Restore/health/zero-swap verification remains mandatory before a stopping checkpoint.
