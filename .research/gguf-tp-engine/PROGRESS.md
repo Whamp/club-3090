@@ -238,3 +238,12 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
 - TP4 CPU/meta verifier passes all ranks: 1,328 sources = 1,180 plans = 1,180 actual parameters, exact name and element counts. It caught/fixed routed_experts path and ParallelLMHead method defects before GPU load.
 - No aligned low-bit artifact survives M2/M3; immutable GGUF SHA remains the expert-byte gate. Q8's required representation change is covered by byte-neutral storage, numerical, graph, and RTX 3090 lifecycle evidence.
 - M4 focused CPU suite 11 tests; final GPU Q8 file 11 tests; canonical rollback healthy/zero-swap. M4 report: `M4-LOADER.md`. Proceed to guarded M5 full TP4 load; mapping does not yet prove residency/readiness.
+
+## 2026-08-18 — M5/M6 functional/M7 performance floors PASS; M8 approval gate
+
+- M5 attempt 1 failed post-load only: LM-head Q8 whole-tensor INT64 repack requested 1,010 MiB with ~902 MiB free. Chunked INT32 repack commit 3ec20cebe fixed peak temporary memory.
+- Attempt 2 reached readiness at 140K: load 271.90 s, 21.53 GiB model/rank, 22.01 GiB weights+non-Torch, 0.27 GiB activation, 0.06 GiB graphs, 0.81 GiB KV / 154,519 tokens / 1.10× context concurrency, zero swap.
+- Functional gates: deterministic generation, automatic tool, post-tool continuation, exact NIAH at 119,730 prompt tokens, zero residual KV/requests. Quick quality 27/30 pass@1 and pass@3.
+- M7: decode 76.697 tok/s (3 warm + 5 measured, 0.033% CV; floor58/target70 pass); cache-busted prefill 551.89 tok/s (3 runs; floor550 narrowly passes, target700 misses); concurrency2 61.1 each / 121.86 aggregate, zero swap.
+- Physical headroom is only 71–73 MiB after long-context JIT: measured ceiling, not release-safe. Report/evidence: `M5-M7-RUNTIME.md`, `evidence/m5-m7-runtime/`.
+- M8 config release `baseline-vllm-deepseek-v4-flash-0731-gguf-tp@1.0.0` is committed/pushed in Whamp/deep-swe-bench e0a97db; lock sha256:8b553e2d…. Exact one-seed SuperJSON pilot plan sha256:7ac3e4c4… compiled with no warnings and awaits Will's explicit approval before any benchmark call.

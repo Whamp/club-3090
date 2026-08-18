@@ -1,0 +1,79 @@
+[quality-test] localhost URL detected — auto-set BENCHLOCAL_HERMES_RESOLVE_LOCALHOST=1 for hermes sandbox endpoint rewrite
+[quality-test] mode=--quick  endpoint=http://127.0.0.1:8034  model=deepseek-v4-flash-0731-gguf-tp  timeout=pack-default (60s deterministic / 300s cli-40+hermes / 1800s aider)
+[quality-test] results JSON → /home/will/inference/serving/club-3090/results/quality/quality-2026-08-18T10-48-30.json
+
+[runner] timeout scaling active: measured_decode_tps=74.8, reference_tps=100.0, scale=1.34
+  [1/15] TC-01 ✓ passed pass@1 (3.3s)
+  [2/15] TC-02 ✓ passed pass@1 (1.2s)
+  [3/15] TC-03 ✓ passed pass@1 (1.3s)
+  [4/15] TC-04 ✓ passed pass@1 (1.2s)
+  [5/15] TC-05 ✗ verifier_fail fail (1.8s)
+  [6/15] TC-06 ✗ wrong_answer fail (1.9s)
+  [7/15] TC-07 ✗ verifier_fail fail (2.0s)
+  [8/15] TC-08 ✓ passed pass@1 (1.4s)
+  [9/15] TC-09 ✓ passed pass@1 (1.9s)
+  [10/15] TC-10 ✓ passed pass@1 (2.0s)
+  [11/15] TC-11 ✓ passed pass@1 (0.7s)
+  [12/15] TC-12 ✓ passed pass@1 (3.3s)
+  [13/15] TC-13 ✓ passed pass@1 (1.0s)
+  [14/15] TC-14 ✓ passed pass@1 (1.2s)
+  [15/15] TC-15 ✓ passed pass@1 (1.1s)
+toolcall-15 (v1.0.1) | pass@1 12 / 15 (80%) | pass@3 12 / 15 (80%) | 1.35s | ok
+  [1/15] IF-01 ✓ passed pass@1 (5.2s)
+  [2/15] IF-02 ✓ passed pass@1 (1.1s)
+  [3/15] IF-03 ✓ passed pass@1 (6.5s)
+  [4/15] IF-04 ✓ passed pass@1 (3.2s)
+  [5/15] IF-05 ✓ passed pass@1 (8.2s)
+  [6/15] IF-06 ✓ passed pass@1 (2.7s)
+  [7/15] IF-07 ✓ passed pass@1 (9.1s)
+  [8/15] IF-08 ✓ passed pass@1 (6.3s)
+  [9/15] IF-09 ✓ passed pass@1 (12.1s)
+  [10/15] IF-10 ✓ passed pass@1 (25.3s)
+  [11/15] IF-11 ✓ passed pass@1 (12.9s)
+  [12/15] IF-12 ✓ passed pass@1 (1.6s)
+  [13/15] IF-13 ✓ passed pass@1 (1.9s)
+  [14/15] IF-14 ✓ passed pass@1 (5.1s)
+  [15/15] IF-15 ✓ passed pass@1 (7.2s)
+instructfollow-15 (v1.0.0) | pass@1 15 / 15 (100%) | pass@3 15 / 15 (100%) | 6.29s | ok
+=== benchlocal-cli --quick  (endpoint: http://127.0.0.1:8034, model: deepseek-v4-flash-0731-gguf-tp, thinking=mixed(pack-defaults), 2026-08-18T10:48:30.776160Z) ===
+
+Pack | Pass@1 | Pass@3 | Flaky | p50 latency | p95 latency | Status
+---|---:|---:|---:|---:|---:|---
+toolcall-15 (v1.0.1) | 12 / 15 (80%) | 12 / 15 (80%) | 0 | 1.35s | 3.26s | ok
+instructfollow-15 (v1.0.0) | 15 / 15 (100%) | 15 / 15 (100%) | 0 | 6.29s | 12.87s | ok
+
+TOTAL | 27 / 30 (90%) | 27 / 30 (90%) | 0 |  |  |
+
+Inline retry classification (clean pass@1 rows omitted):
+
+Scenario | Label | Attempts | Pass@k credit
+---|---|---:|---
+toolcall-15/TC-05 | fail | 3 | no
+toolcall-15/TC-06 | fail | 3 | no
+toolcall-15/TC-07 | fail | 3 | no
+
+Completion and extraction diagnostics:
+
+Pack | finish_reason=length | extraction_method | extraction_issue | response_field_used
+---|---:|---|---|---
+toolcall-15 | 0 / 21 (0.0%) | — | — | message.content=18
+instructfollow-15 | 0 / 15 (0.0%) | — | — | message.content=15
+
+Failure breakdown:
+- toolcall-15 TC-05: verifier_fail [fail] (expected first tool create_calendar_event, got ['get_contacts'])
+- toolcall-15 TC-06: wrong_answer [fail] (response did not include tool_calls)
+- toolcall-15 TC-07: verifier_fail [fail] (expected tool-chain prefix of ['search_files', 'read_file', 'get_contacts', 'send_email'], got ['search_files', 'get_contacts'])
+
+Warnings:
+- timeout scaling active: measured_decode_tps=74.8, reference_tps=100.0, scale=1.34, token-budget-multiplier=16384/1024=16.00
+
+==========================================================================
+Quality: line for compose schema field (paste into compose YAML header):
+==========================================================================
+Quality:   toolcall-15 12/15 (80%) · instructfollow-15 15/15 (100%) (--quick, 2026-08-18)
+
+Failure reasons: see the 'Failure breakdown:' above (failure_mode + detail per failed scenario).
+Dig deeper — full trace / older run / filter / diff:
+  benchlocal-cli inspect /home/will/inference/serving/club-3090/results/quality/quality-2026-08-18T10-48-30.json --failed                 # all failures + reason
+  benchlocal-cli inspect /home/will/inference/serving/club-3090/results/quality/quality-2026-08-18T10-48-30.json --scenario <ID> --full   # full prompt/response/verifier trace
+  benchlocal-cli inspect /home/will/inference/serving/club-3090/results/quality/quality-2026-08-18T10-48-30.json --mode timeout           # filter by failure type
