@@ -4,6 +4,7 @@
 import argparse
 import hashlib
 import json
+import os
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -44,6 +45,9 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--init-port", type=int, default=29677)
     args = parser.parse_args()
+    world_size = int(os.environ.get("WORLD_SIZE", "1"))
+    rank = int(os.environ.get("RANK", "0"))
+    local_rank = int(os.environ.get("LOCAL_RANK", str(rank)))
 
     model_config = ModelConfig(
         model=str(args.model_config_dir),
@@ -55,7 +59,7 @@ def main() -> None:
         trust_remote_code=True,
     )
     parallel_config = ParallelConfig(
-        tensor_parallel_size=1, pipeline_parallel_size=1
+        tensor_parallel_size=world_size, pipeline_parallel_size=1
     )
     vllm_config = VllmConfig(
         model_config=model_config,
@@ -70,17 +74,17 @@ def main() -> None:
     object.__setattr__(parallel_config, "enable_dbo", True)
     with set_current_vllm_config(vllm_config):
         init_distributed_environment(
-            world_size=1,
-            rank=0,
-            local_rank=0,
-            distributed_init_method=f"tcp://127.0.0.1:{args.init_port}",
+            world_size=world_size,
+            rank=rank,
+            local_rank=local_rank,
+            distributed_init_method=(
+                "env://" if world_size > 1 else f"tcp://127.0.0.1:{args.init_port}"
+            ),
             backend="gloo",
         )
-        ensure_model_parallel_initialized(1, 1)
+        ensure_model_parallel_initialized(world_size, 1)
         torch.cuda.Stream = lambda *unused_args, **unused_kwargs: None
-        model_module._select_dsv4_attn_cls = lambda unused: (
-            DeepseekV4AmpereMLAAttention
-        )
+        model_module._select_dsv4_attn_cls = lambda unused: DeepseekV4AmpereMLAAttention
         current_platform.device_type = "meta"
         with torch.device("meta"):
             model = model_module.DeepseekV4ForCausalLM(vllm_config=vllm_config)
@@ -96,7 +100,7 @@ def main() -> None:
         )
         for tensor in inventory["tensors"]
     )
-    plan = build_gguf_dsv4_load_plan(entries, tp_rank=0, tp_size=1)
+    plan = build_gguf_dsv4_load_plan(entries, tp_rank=rank, tp_size=world_size)
     parameters = dict(model.named_parameters())
     planned_targets = {item.target_name for item in plan}
     parameter_targets = set(parameters)
@@ -132,6 +136,8 @@ def main() -> None:
 
     report = {
         "schema_version": 1,
+        "rank": rank,
+        "tp_size": world_size,
         "model_config_sha256": _sha256(args.model_config_dir / "config.json"),
         "inventory_sha256": _sha256(args.inventory),
         "inventory_tensors": len(entries),
@@ -140,17 +146,32 @@ def main() -> None:
         "name_sets_equal": True,
         "element_counts_equal": True,
         "parameter_dtypes": dict(
-            sorted(Counter(str(parameter.dtype) for parameter in parameters.values()).items())
+            sorted(
+                Counter(
+                    str(parameter.dtype) for parameter in parameters.values()
+                ).items()
+            )
         ),
         "source_type_sets": dict(
             sorted(
-                Counter("+".join(sorted(types)) for types in source_types.values()).items()
+                Counter(
+                    "+".join(sorted(types)) for types in source_types.values()
+                ).items()
             )
         ),
     }
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(report, indent=2) + "\n")
-    print(json.dumps(report, indent=2))
+    reports = [None for _ in range(world_size)]
+    dist.all_gather_object(reports, report)
+    if rank == 0:
+        aggregate = {
+            "schema_version": 1,
+            "tp_size": world_size,
+            "ranks": reports,
+        }
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(aggregate, indent=2) + "\n")
+        print(json.dumps(aggregate, indent=2))
+    dist.barrier()
     dist.destroy_process_group()
 
 

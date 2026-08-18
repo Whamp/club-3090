@@ -231,3 +231,10 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
 - 11 focused CPU tests pass (parser/planner/IO/loader/allocation), plus pre-commit and real typing/lint gates. New-module complexity findings resolved by split/refactor.
 - Supplemental limitations: CodeGraph boundary reports the pre-existing engine/arg_utils→config/load edge because its load-format docs changed; no new import was added. aislop dependency-manifest checks falsely flag established Torch/NumPy/Pydantic/regex imports and surfaces pre-existing large-model warnings; no new-module slop warning remains.
 - Full meta-model target-name/shape check remains open and is required before M4 completion/M5.
+
+## 2026-08-18 — M4 PASS; proceed to M5
+
+- Whamp/vLLM through 741b3abfb delivers registered gguf_dsv4 loader/config, exact identity, bounded parser/pread IO, raw Q8/experts, Marlin lifecycle, indexed/grouped dispatch, fused weighted SwiGLU/Q8, LM-head quantization, and hash caching.
+- TP4 CPU/meta verifier passes all ranks: 1,328 sources = 1,180 plans = 1,180 actual parameters, exact name and element counts. It caught/fixed routed_experts path and ParallelLMHead method defects before GPU load.
+- No aligned low-bit artifact survives M2/M3; immutable GGUF SHA remains the expert-byte gate. Q8's required representation change is covered by byte-neutral storage, numerical, graph, and RTX 3090 lifecycle evidence.
+- M4 focused CPU suite 11 tests; final GPU Q8 file 11 tests; canonical rollback healthy/zero-swap. M4 report: `M4-LOADER.md`. Proceed to guarded M5 full TP4 load; mapping does not yet prove residency/readiness.
