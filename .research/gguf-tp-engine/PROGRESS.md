@@ -223,3 +223,11 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
 - First full-inventory run exposed and fixed an O(rows) planner design (~45M down-row span objects). Counted strided spans now keep planning O(tensors).
 - Verified inventory SHA 1cadb51c… on ranks 0–3: 1,328 tensor plans → 1,180 runtime targets → 1,328 descriptors → exactly 22,751,844,636 bytes / 21.1893065 GiB per rank, with no target overlap. Matches M1 independently.
 - vLLM commit 9b9ef3948 pushed; 4 parser/planner tests + pre-commit/CodeGraph/aislop green. Next: raw parameter allocation and direct span execution with dtype/cast contracts.
+
+## 2026-08-18 — M4 native parameter ownership + streaming loader pushed
+
+- vLLM 6afc16ac2 registers `gguf_dsv4` load/quant formats, requires exact path/SHA-256/file-size/tensor-count identity, hashes once on rank 0, streams bounded contiguous/strided pread chunks, and casts ordinary tensors while preserving quant bytes.
+- Q8 linears allocate raw row bytes then repack byte-neutrally to Marlin after load; routed method allocates all 256 gate/up/down experts with TP-sharded intermediate dimensions and dispatches indexed M<128 / grouped M>=128. LM head now receives quant_config.
+- 11 focused CPU tests pass (parser/planner/IO/loader/allocation), plus pre-commit and real typing/lint gates. New-module complexity findings resolved by split/refactor.
+- Supplemental limitations: CodeGraph boundary reports the pre-existing engine/arg_utils→config/load edge because its load-format docs changed; no new import was added. aislop dependency-manifest checks falsely flag established Torch/NumPy/Pydantic/regex imports and surfaces pre-existing large-model warnings; no new-module slop warning remains.
+- Full meta-model target-name/shape check remains open and is required before M4 completion/M5.
