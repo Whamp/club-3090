@@ -1,0 +1,111 @@
+INFO 08-18 06:51:52 [scheduler.py:242] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 08-18 06:51:52 [scheduler.py:242] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 08-18 06:51:52 [kernel.py:306] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+INFO 08-18 06:51:52 [kernel.py:306] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+INFO 08-18 06:51:52 [scheduler.py:242] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 08-18 06:51:52 [parallel_state.py:1640] world_size=4 rank=1 local_rank=1 distributed_init_method=env:// backend=nccl
+INFO 08-18 06:51:52 [parallel_state.py:1640] world_size=4 rank=2 local_rank=2 distributed_init_method=env:// backend=nccl
+INFO 08-18 06:51:52 [scheduler.py:242] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 08-18 06:51:52 [kernel.py:306] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+INFO 08-18 06:51:52 [parallel_state.py:1640] world_size=4 rank=0 local_rank=0 distributed_init_method=env:// backend=nccl
+INFO 08-18 06:51:52 [kernel.py:306] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+INFO 08-18 06:51:52 [parallel_state.py:1640] world_size=4 rank=3 local_rank=3 distributed_init_method=env:// backend=nccl
+INFO 08-18 06:51:57 [pynccl.py:113] vLLM is using nccl==2.29.7
+WARNING 08-18 06:51:57 [symm_mem.py:67] SymmMemCommunicator: Device capability 8.6 not supported, communicator is not available.
+WARNING 08-18 06:51:57 [symm_mem.py:67] SymmMemCommunicator: Device capability 8.6 not supported, communicator is not available.
+WARNING 08-18 06:51:57 [symm_mem.py:67] SymmMemCommunicator: Device capability 8.6 not supported, communicator is not available.
+WARNING 08-18 06:51:57 [symm_mem.py:67] SymmMemCommunicator: Device capability 8.6 not supported, communicator is not available.
+WARNING 08-18 06:51:57 [custom_all_reduce.py:181] Custom allreduce is disabled because it's not supported on more than two PCIe-only GPUs. To silence this warning, specify disable_custom_all_reduce=True explicitly.
+WARNING 08-18 06:51:57 [custom_all_reduce.py:181] Custom allreduce is disabled because it's not supported on more than two PCIe-only GPUs. To silence this warning, specify disable_custom_all_reduce=True explicitly.
+WARNING 08-18 06:51:57 [custom_all_reduce.py:181] Custom allreduce is disabled because it's not supported on more than two PCIe-only GPUs. To silence this warning, specify disable_custom_all_reduce=True explicitly.
+WARNING 08-18 06:51:57 [custom_all_reduce.py:181] Custom allreduce is disabled because it's not supported on more than two PCIe-only GPUs. To silence this warning, specify disable_custom_all_reduce=True explicitly.
+INFO 08-18 06:51:57 [cuda_communicator.py:297] Using ['HIERARCHICAL', 'PYNCCL'] all-reduce backends (in dispatch order) for group 'tp:0' out of potential backends: ['NCCL_SYMM_MEM', 'QUICK_REDUCE', 'FLASHINFER', 'AITER_CUSTOM', 'HIERARCHICAL', 'CUSTOM', 'SYMM_MEM', 'PYNCCL'].
+INFO 08-18 06:51:57 [cuda_communicator.py:297] Using ['HIERARCHICAL', 'PYNCCL'] all-reduce backends (in dispatch order) for group 'ep:0' out of potential backends: ['NCCL_SYMM_MEM', 'QUICK_REDUCE', 'FLASHINFER', 'AITER_CUSTOM', 'HIERARCHICAL', 'CUSTOM', 'SYMM_MEM', 'PYNCCL'].
+INFO 08-18 06:51:57 [parallel_state.py:1977] rank 0 in world size 4 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+INFO 08-18 06:52:01 [marlin_utils.py:625] Marlin kernel can achieve better performance for small size_n with experimental use_atomic_add feature. You can consider set environment variable VLLM_MARLIN_USE_ATOMIC_ADD to 1 if possible.
+/opt/venv/lib/python3.12/site-packages/torch/distributed/c10d_logger.py:83: UserWarning: barrier(): using the device under current context. You can specify `device_id` in `init_process_group` to mute this warning.
+  return func(*args, **kwargs)
+[rank0]:[W818 06:52:03.297806505 ProcessGroupNCCL.cpp:5276] Guessing device ID based on global rank. This can cause a hang if rank to GPU mapping is heterogeneous. You can specify device_id in init_process_group()
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/workspace/vllm/benchmarks/kernels/benchmark_gguf_tp_layer_slice.py", line 374, in <module>
+[rank0]:     main()
+[rank0]:   File "/workspace/vllm/benchmarks/kernels/benchmark_gguf_tp_layer_slice.py", line 337, in main
+[rank0]:     raise RuntimeError("GGUF TP4 layer slice produced non-finite output")
+[rank0]: RuntimeError: GGUF TP4 layer slice produced non-finite output
+[rank1]: Traceback (most recent call last):
+[rank1]:   File "/workspace/vllm/benchmarks/kernels/benchmark_gguf_tp_layer_slice.py", line 374, in <module>
+[rank1]:     main()
+[rank1]:   File "/workspace/vllm/benchmarks/kernels/benchmark_gguf_tp_layer_slice.py", line 337, in main
+[rank1]:     raise RuntimeError("GGUF TP4 layer slice produced non-finite output")
+[rank1]: RuntimeError: GGUF TP4 layer slice produced non-finite output
+[rank3]: Traceback (most recent call last):
+[rank3]:   File "/workspace/vllm/benchmarks/kernels/benchmark_gguf_tp_layer_slice.py", line 374, in <module>
+[rank3]:     main()
+[rank3]:   File "/workspace/vllm/benchmarks/kernels/benchmark_gguf_tp_layer_slice.py", line 337, in main
+[rank3]:     raise RuntimeError("GGUF TP4 layer slice produced non-finite output")
+[rank3]: RuntimeError: GGUF TP4 layer slice produced non-finite output
+[rank2]: Traceback (most recent call last):
+[rank2]:   File "/workspace/vllm/benchmarks/kernels/benchmark_gguf_tp_layer_slice.py", line 374, in <module>
+[rank2]:     main()
+[rank2]:   File "/workspace/vllm/benchmarks/kernels/benchmark_gguf_tp_layer_slice.py", line 337, in main
+[rank2]:     raise RuntimeError("GGUF TP4 layer slice produced non-finite output")
+[rank2]: RuntimeError: GGUF TP4 layer slice produced non-finite output
+[rank0]:[W818 06:52:04.596478692 ProcessGroupNCCL.cpp:1624] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+/usr/lib/python3.12/multiprocessing/resource_tracker.py:254: UserWarning: resource_tracker: There appear to be 1 leaked shared_memory objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
+W0818 06:52:06.171000 1 torch/distributed/elastic/multiprocessing/api.py:1028] Sending process 78 closing signal SIGTERM
+W0818 06:52:06.173000 1 torch/distributed/elastic/multiprocessing/api.py:1028] Sending process 79 closing signal SIGTERM
+W0818 06:52:06.173000 1 torch/distributed/elastic/multiprocessing/api.py:1028] Sending process 80 closing signal SIGTERM
+E0818 06:52:06.387000 1 torch/distributed/elastic/multiprocessing/api.py:1002] failed (exitcode: 1) local_rank: 0 (pid: 77) of binary: /opt/venv/bin/python
+Traceback (most recent call last):
+  File "/opt/venv/bin/torchrun", line 10, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 367, in wrapper
+    return f(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/torch/distributed/run.py", line 1028, in main
+    run(args)
+  File "/opt/venv/lib/python3.12/site-packages/torch/distributed/run.py", line 1019, in run
+    elastic_launch(
+  File "/opt/venv/lib/python3.12/site-packages/torch/distributed/launcher/api.py", line 194, in __call__
+    return launch_agent(
+           ^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/torch/distributed/launcher/api.py", line 383, in launch_agent
+    raise ChildFailedError(
+torch.distributed.elastic.multiprocessing.errors.ChildFailedError:
+============================================================
+benchmarks/kernels/benchmark_gguf_tp_layer_slice.py FAILED
+------------------------------------------------------------
+Failures:
+[1]:
+  time      : 2026-08-18_06:52:06
+  host      : c3b7216ac3e2
+  rank      : 1 (local_rank: 1)
+  exitcode  : 1 (pid: 78)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+[2]:
+  time      : 2026-08-18_06:52:06
+  host      : c3b7216ac3e2
+  rank      : 2 (local_rank: 2)
+  exitcode  : 1 (pid: 79)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+[3]:
+  time      : 2026-08-18_06:52:06
+  host      : c3b7216ac3e2
+  rank      : 3 (local_rank: 3)
+  exitcode  : 1 (pid: 80)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+------------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2026-08-18_06:52:06
+  host      : c3b7216ac3e2
+  rank      : 0 (local_rank: 0)
+  exitcode  : 1 (pid: 77)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+============================================================

@@ -204,3 +204,13 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
 - Five-trial M256 changed-component budget: ordinary Q8 dense ×43 = 0.06494 ms/token; grouped-diagonal wo_a ×43 = 0.03179; lm_head = 0.00664; grouped experts ×43 = 1.02105; total = **1.12442 ms/token**.
 - 550 floor leaves 0.69376 ms/token for inherited work; proceed. 700 target leaves 0.30415 and remains uncertain. Sustained M128 is a lose-condition (~1.664 ms/token changed work) but only tail work in the bound single-request gate.
 - Remaining M2 gate: TP4 graph-captured decoder/prefill layer slice with real gate/up→SwiGLU→down flow and real all-reduce.
+
+## 2026-08-18 — M2 TP4 layer-slice PASS; M2 complete
+
+- TP4 exact-shape captured slice runs Q8 attention chain + first all-reduce, routed IQ2→fused weighted SwiGLU/Q8→Q2, shared Q8 expert, and final all-reduce. M1 dispatches HIERARCHICAL; M256 correctly falls back to PYNCCL above HIER's 512 KiB cap.
+- Final five independent launches / 20 rank samples: decode 0.193402 ms/layer (0.126% CV), prefill M256 10.176502 ms/layer batch (0.107% CV), zero residual GPU processes.
+- M0-pool decode projection = **74.13 tok/s** (floor 58, target 70). Prefill slice projection = **582.76 tok/s** (floor 550, target 700); optimistic due omitted inherited attention/indexer/norm work, so prefill remains M5/M7 risk.
+- Fused weighted SwiGLU→Q8 improves slice 3.9% decode / 1.2% prefill and avoids BF16 down intermediate/post-down weighting.
+- Q8_1 NMAE window transparently revised 1.0%→1.25%: adversarial fused path measured 1.0527%, better than existing BF16→Q8_1 at 1.0688%; all other bounds and task-quality gates unchanged.
+- Final GPU suite 34/34; grouped/fused memcheck 0 errors, racecheck 0 hazards. **M2 gate passes.** M3 Q2_K kernels are already complete; aligned Q2 repack was deliberately declined on causal-budget grounds, so no derived repack artifact is productionized. Next: M4 production GGUF loader/config/coordinate mapping, 10-working-day kill.
+- M2 server checkpoint closed: canonical Antirez llama.cpp restored on exact image a96bd947, healthy, restart count 0, all four GPU contexts, zero serving-process swap after RAM-gated normalization, batch watchdog inactive.

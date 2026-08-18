@@ -1,0 +1,97 @@
+INFO 08-18 07:02:17 [scheduler.py:242] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 08-18 07:02:17 [scheduler.py:242] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 08-18 07:02:17 [scheduler.py:242] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 08-18 07:02:17 [kernel.py:306] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+INFO 08-18 07:02:17 [kernel.py:306] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+INFO 08-18 07:02:17 [parallel_state.py:1640] world_size=4 rank=2 local_rank=2 distributed_init_method=env:// backend=nccl
+INFO 08-18 07:02:17 [parallel_state.py:1640] world_size=4 rank=3 local_rank=3 distributed_init_method=env:// backend=nccl
+INFO 08-18 07:02:17 [kernel.py:306] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+INFO 08-18 07:02:17 [parallel_state.py:1640] world_size=4 rank=0 local_rank=0 distributed_init_method=env:// backend=nccl
+INFO 08-18 07:02:17 [scheduler.py:242] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 08-18 07:02:17 [kernel.py:306] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+INFO 08-18 07:02:17 [parallel_state.py:1640] world_size=4 rank=1 local_rank=1 distributed_init_method=env:// backend=nccl
+INFO 08-18 07:02:21 [pynccl.py:113] vLLM is using nccl==2.29.7
+WARNING 08-18 07:02:22 [symm_mem.py:67] SymmMemCommunicator: Device capability 8.6 not supported, communicator is not available.
+WARNING 08-18 07:02:22 [symm_mem.py:67] SymmMemCommunicator: Device capability 8.6 not supported, communicator is not available.
+WARNING 08-18 07:02:22 [symm_mem.py:67] SymmMemCommunicator: Device capability 8.6 not supported, communicator is not available.
+WARNING 08-18 07:02:22 [symm_mem.py:67] SymmMemCommunicator: Device capability 8.6 not supported, communicator is not available.
+WARNING 08-18 07:02:22 [custom_all_reduce.py:181] Custom allreduce is disabled because it's not supported on more than two PCIe-only GPUs. To silence this warning, specify disable_custom_all_reduce=True explicitly.
+WARNING 08-18 07:02:22 [custom_all_reduce.py:181] Custom allreduce is disabled because it's not supported on more than two PCIe-only GPUs. To silence this warning, specify disable_custom_all_reduce=True explicitly.
+WARNING 08-18 07:02:22 [custom_all_reduce.py:181] Custom allreduce is disabled because it's not supported on more than two PCIe-only GPUs. To silence this warning, specify disable_custom_all_reduce=True explicitly.
+WARNING 08-18 07:02:22 [custom_all_reduce.py:181] Custom allreduce is disabled because it's not supported on more than two PCIe-only GPUs. To silence this warning, specify disable_custom_all_reduce=True explicitly.
+INFO 08-18 07:02:22 [cuda_communicator.py:297] Using ['HIERARCHICAL', 'PYNCCL'] all-reduce backends (in dispatch order) for group 'tp:0' out of potential backends: ['NCCL_SYMM_MEM', 'QUICK_REDUCE', 'FLASHINFER', 'AITER_CUSTOM', 'HIERARCHICAL', 'CUSTOM', 'SYMM_MEM', 'PYNCCL'].
+INFO 08-18 07:02:22 [cuda_communicator.py:297] Using ['HIERARCHICAL', 'PYNCCL'] all-reduce backends (in dispatch order) for group 'ep:0' out of potential backends: ['NCCL_SYMM_MEM', 'QUICK_REDUCE', 'FLASHINFER', 'AITER_CUSTOM', 'HIERARCHICAL', 'CUSTOM', 'SYMM_MEM', 'PYNCCL'].
+INFO 08-18 07:02:22 [parallel_state.py:1977] rank 0 in world size 4 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+INFO 08-18 07:02:24 [marlin_utils.py:625] Marlin kernel can achieve better performance for small size_n with experimental use_atomic_add feature. You can consider set environment variable VLLM_MARLIN_USE_ATOMIC_ADD to 1 if possible.
+/opt/venv/lib/python3.12/site-packages/torch/distributed/c10d_logger.py:83: UserWarning: barrier(): using the device under current context. You can specify `device_id` in `init_process_group` to mute this warning.
+  return func(*args, **kwargs)
+[rank0]:[W818 07:02:26.434052325 ProcessGroupNCCL.cpp:5276] Guessing device ID based on global rank. This can cause a hang if rank to GPU mapping is heterogeneous. You can specify device_id in init_process_group()
+[
+  [
+    {
+      "tokens": 1,
+      "expert_path": "indexed",
+      "graph_ms": 0.19315097045898438,
+      "iterations": 1000,
+      "hierarchical_should_use": true
+    },
+    {
+      "tokens": 256,
+      "expert_path": "grouped",
+      "graph_ms": 10.174843139648438,
+      "iterations": 100,
+      "hierarchical_should_use": false
+    }
+  ],
+  [
+    {
+      "tokens": 1,
+      "expert_path": "indexed",
+      "graph_ms": 0.19314892578125,
+      "iterations": 1000,
+      "hierarchical_should_use": true
+    },
+    {
+      "tokens": 256,
+      "expert_path": "grouped",
+      "graph_ms": 10.173788452148438,
+      "iterations": 100,
+      "hierarchical_should_use": false
+    }
+  ],
+  [
+    {
+      "tokens": 1,
+      "expert_path": "indexed",
+      "graph_ms": 0.19314994812011718,
+      "iterations": 1000,
+      "hierarchical_should_use": true
+    },
+    {
+      "tokens": 256,
+      "expert_path": "grouped",
+      "graph_ms": 10.173532104492187,
+      "iterations": 100,
+      "hierarchical_should_use": false
+    }
+  ],
+  [
+    {
+      "tokens": 1,
+      "expert_path": "indexed",
+      "graph_ms": 0.19314892578125,
+      "iterations": 1000,
+      "hierarchical_should_use": true
+    },
+    {
+      "tokens": 256,
+      "expert_path": "grouped",
+      "graph_ms": 10.17260009765625,
+      "iterations": 100,
+      "hierarchical_should_use": false
+    }
+  ]
+]
+[rank0]:[W818 07:02:28.022242284 ProcessGroupNCCL.cpp:1624] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+/usr/lib/python3.12/multiprocessing/resource_tracker.py:254: UserWarning: resource_tracker: There appear to be 1 leaked shared_memory objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
