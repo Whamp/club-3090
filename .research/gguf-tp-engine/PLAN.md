@@ -61,7 +61,7 @@ reported alongside):
 | Cache-busted prefill | ≥ 550 tok/s | 700 tok/s | 887 tok/s (inherited-stack parity) |
 | **On-GPU unique-request context** | ≥ 140K *point estimate subject to §10 sensitivity* | 155K | 170K+ via levers |
 | Prefix-reuse offload tier | present, measured hit-rate ≥ 60% on repeated-prefix workload | — | — |
-| Quality | **paired** DeepSWE protocol §6: pre-registered executable statistic | quick-pack within noise of GGUF baseline | full 8-pack parity |
+| Quality | **one-cell DeepSWE pilot** §6 / `M8-DEEPSWE.md`: Will judgment vs reused llama.cpp baseline | quick-pack within noise of GGUF baseline | historical 12-task 6/12 anchor (reference only) |
 | Correctness | class-A/A2 dequant+mapping oracles; known-delta paths within pre-registered windows | deterministic canaries | NIAH exact recall at achieved on-GPU context |
 
 **Context, stated honestly:** the 16 GiB host tier is an eviction/prefix-
@@ -319,15 +319,12 @@ replication) is the deliberate inversion of these negatives.
   consistency; graph-size sweep for pointer aliasing.
 - **D. End-to-end:** deterministic canaries; tool round-trip and post-tool
   continuation; NIAH exact recall at achieved on-GPU context; **DeepSWE
-  paired protocol, executable spec:** unit of analysis = task (seeds
-  clustered within task); task-cluster bootstrap or hierarchical
-  permutation (task, then seed) over ≥3 seeds per engine on the 12-task
-  set (≥72 cells minimum); pre-registered combination rule — e.g.
-  non-inferiority margin on mean partial reward AND strict-solve count not
-  lower than baseline − 1 by the permutation null; explicit tie/missing-cell
-  policy; **one paired-seed pilot first** to measure wall time and failure
-  rate before committing to the full grid. A single SuperJSON run is a
-  smoke signal only.
+  one-cell pilot** (`M8-DEEPSWE.md`): GGUF-TP runs **one task, one seed
+  (rep0)** on the locked SuperJSON harness; compare against **reused**
+  llama.cpp results for the same task. Pass = Will judges closeness adequate
+  given single-run variance. The **≥72-cell multi-seed grid is cancelled**
+  (Will 2026-08-18); do not run or schedule it. A single SuperJSON run is
+  the M8 quality gate for this project, not smoke-only.
 
 Ladder L0→L6, adversarial review loops (1 implementer + 2 reviewers on diff +
 format contract), checksums on every tensor view, oracle failures batched as
@@ -354,12 +351,13 @@ planned.**
 | M5 | server60 TP=4 bring-up (authorized window; validated rollback) | class-A/B full-path oracle on-GPU; NCU dispatch; readiness | repeated OOM/instability → capacity re-plan | 0.5–1 wk |
 | M6 | Per-layer vs llama.cpp (class B); canaries + NIAH at achieved context | pre-registered windows pass | unexplained divergence → bisect | 3–5 d |
 | M7 | Matched perf campaign; same-tree WNA16 A/B attribution | ≥58 engine decode, ≥550 prefill, ≥140K on-GPU, zero swap | miss → keep llama.cpp canonical; publish | 3–5 d |
-| M8 | Quality: quick pack + **paired multi-seed DeepSWE** (pilot-priced full grid) | §6 executable paired statistic passes its pre-registered rule | divergence → component bisect | 1–3 wk (pilot-priced) |
+| M8 | Quality: quick pack + **one-cell DeepSWE pilot** (`M8-DEEPSWE.md`) | Will judges GGUF-TP close enough vs reused llama.cpp baseline on pilot task | divergence → component bisect; **do not run cancelled 72-cell grid** | pilot run only |
 | M9 | Promotion package; open-source decision | Will's approval; healthy final service | — | 2–3 d |
 
 Effort envelope: **7–10 weeks if gates pass first-try**; M2/M3 iterations,
-M6/M8 bisects, `wo_a` redesign, and the DeepSWE grid cost are the
-contingency sources — kills bound the downside, not the calendar.
+M6 bisects, `wo_a` redesign are the contingency sources — kills bound the
+downside, not the calendar. (DeepSWE 72-cell grid cost removed per Will
+2026-08-18.)
 
 ## 9. Risk register
 
@@ -376,7 +374,7 @@ contingency sources — kills bound the downside, not the calendar.
 | Byte-valid but logically wrong load (transpose/fused-slot/rank offset) | medium | silent quality damage | class-A2 coordinate oracle |
 | Tokenizer bootstrap falls back to generic HF mode | medium | contaminated comparisons | §4.4 explicit pin + text-level golden tests |
 | Router cast degrades top-6 tie-breaks | medium | silent quality damage | §4.5 explicit policy; class-B window |
-| DeepSWE grid cost/noise | medium | false pass/fail or overrun | executable paired statistic; pilot prices the grid |
+| DeepSWE single-run variance | certain | false pass/fail on one cell | **72-cell grid cancelled**; Will judgment gate; bisect on material regression only |
 | Effort overrun | medium | opportunity cost | M1/M2/M4 kills; calendar caps |
 
 ## 10. Capacity plan
@@ -400,10 +398,10 @@ gated by its hit-rate line. 430K active stays llama.cpp's exclusive advantage.
 
 server60 serves `deepseek-v4-flash-0731-gguf-tp` from the pinned GGUF blob at
 ≥58/70 engine decode, ≥550/700 prefill, ≥140K on-GPU unique context (per the
-M1 capacity table), zero swap, safety policy intact, paired-protocol DeepSWE
-quality within its pre-registered window, validated rollback, everything
-committed and pushed, evidence bundled, upstreaming decision recorded. The
-llama.cpp service remains canonical until M8 passes.
+M1 capacity table), zero swap, safety policy intact, M8 one-cell DeepSWE
+pilot with Will's closeness judgment per `M8-DEEPSWE.md`, validated rollback,
+everything committed and pushed, evidence bundled, upstreaming decision
+recorded. The llama.cpp service remains canonical until M8 passes.
 
 ## 12. Immediate next actions (on approval)
 
@@ -426,3 +424,8 @@ llama.cpp service remains canonical until M8 passes.
    is zero swap + verify-stress-class boundary tests at the operating context.
    Reopen condition: any OOM at or below operating context. Full text:
    `CAPACITY.md` → "Will's headroom decision (2026-08-18)".
+6. **Resolved 2026-08-18:** M8 DeepSWE = **one-cell pilot only**; the ≥72-cell
+   multi-seed grid is **cancelled**. Will **approves executing** the locked
+   GGUF-TP pilot (`M8-DEEPSWE.md`, plan `sha256:7ac3e4c4…`). Pass = Will's
+   closeness judgment vs reused llama.cpp baseline on the pilot task. M6 must
+   still pass before M8 counts toward promotion.

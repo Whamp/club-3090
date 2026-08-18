@@ -1,6 +1,6 @@
 # M5–M7 — full runtime acceptance
 
-Decision: **M5, M6 functional canaries/NIAH, and M7 performance floors pass.** M6's explicit class-B layer comparison and M8 paired DeepSWE remain required before promotion. The profile is a measured capacity ceiling; its low idle headroom is accepted by Will as normal for a packed TP profile (see `CAPACITY.md` → "Will's headroom decision (2026-08-18)").
+Decision: **M5, M6 functional canaries/NIAH, and M7 performance floors pass.** M6's explicit class-B layer comparison and M8 one-cell DeepSWE pilot (`M8-DEEPSWE.md`) remain required before promotion. The profile is a measured capacity ceiling; its low idle headroom is accepted by Will as normal for a packed TP profile (see `CAPACITY.md` → "Will's headroom decision (2026-08-18)").
 
 ## Bring-up
 
@@ -77,6 +77,6 @@ Idle physical headroom was 101–102 MiB after readiness and 71–73 MiB after l
 
 M6 first requires the pre-registered class-B decoder-layer and final-logit comparison in `M6-LAYER-ORACLE-SPEC.md`. The diagnostic implementations are prepared but have not run on GPU.
 
-The exact one-seed SuperJSON DeepSWE pilot plans are compiled and await explicit plan-hash approval. After M6 passes, M8 requires at least three seeds per engine on all 12 tasks (≥72 cells), task-clustered analysis, mean-partial-reward non-inferiority, and strict solves no lower than Antirez llama.cpp baseline minus one.
+M8 is the **one-cell DeepSWE pilot only** per `M8-DEEPSWE.md` (Will 2026-08-18): **approved to execute** GGUF-TP on `superjson-error-stack-serialization` rep0 under plan `sha256:7ac3e4c4…`; compare to reused llama.cpp baseline; pass = Will's closeness judgment. The ≥72-cell multi-seed grid is **cancelled — do not run**. M6 must pass before M8 counts toward promotion.
 
 Evidence: `evidence/m5-m7-runtime/`.

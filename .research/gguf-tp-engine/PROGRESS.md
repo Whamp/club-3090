@@ -262,3 +262,11 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
 - The 1 GiB physical-headroom release guard is scoped to dynamically sized profiles and **does not gate this engine's M9 promotion**. Release evidence for this engine: zero serving-process swap + verify-stress-class boundary tests (incl. tool-prefill spikes) at the operating context + stable long-context runs.
 - Reopen condition: any OOM at or below the operating context. The measured profile remains a capacity ceiling — do not raise operating context without remeasuring.
 - Recorded in `CAPACITY.md` ("Will's headroom decision (2026-08-18)"), `M5-M7-RUNTIME.md` (warning section replaced with the accepted-decision text), and PLAN §12.5. Decision recorded on Will's behalf by his review agent at his direction (this entry).
+
+## 2026-08-18 — Will's M8 DeepSWE decision: one-cell pilot approved, 72-cell grid cancelled
+
+- Will **cancels** the ≥72-cell multi-seed DeepSWE grid (12 tasks × ≥3 seeds × 2 engines) as too expensive on local compute. Agents must not run or schedule it.
+- M8 quality gate = **one cell only:** GGUF-TP runs `superjson-error-stack-serialization` rep0 on locked pilot plan `sha256:7ac3e4c4…` / config `baseline-vllm-deepseek-v4-flash-0731-gguf-tp@1.0.0`. **Execution approved.**
+- Baseline: reuse existing llama.cpp result for the same task; do not re-run llama.cpp unless the artifact is incompatible with the locked task revision.
+- Pass criterion: Will's judgment that GGUF-TP is close enough to llama.cpp on strict solve + partial reward, acknowledging single-run variance — **not** a pre-registered statistical gate.
+- M6 must still pass before M8 counts toward promotion. Full spec: `M8-DEEPSWE.md`; PLAN §6/§8/§11/§12.6 updated.
