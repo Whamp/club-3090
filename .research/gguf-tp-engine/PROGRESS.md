@@ -197,3 +197,10 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
 - Final GPU tests 22/22; Compute Sanitizer grouped memcheck 0 errors and racecheck 0 hazards. Named IQ2/Q2 SM86 cubins contain IMMA.16832.S8.S8 with hashes in `M2-GROUPED-PREFILL.md`.
 - Dispatch contract: grouped loses below ~M128 under uniform routing; indexed remains M≤4/fallback. Exact crossover is an empirical runtime policy.
 - User authorized a batched GPU work window to avoid 26-minute llama warmups. Canonical llama.cpp is intentionally offline; GPUs 1–3 remain unused; an 8-hour restore watchdog is armed. Restore/health/zero-swap verification remains mandatory before a stopping checkpoint.
+
+## 2026-08-17 — M2 Q8 dense prefill component PASS
+
+- Bound the representative prefill shape to the actual gate workload: 8,984 tokens with max_num_batched_tokens=256 = 35×M256 + one M24 tail; 99.7% of prompt tokens are M256.
+- Five-trial M256 changed-component budget: ordinary Q8 dense ×43 = 0.06494 ms/token; grouped-diagonal wo_a ×43 = 0.03179; lm_head = 0.00664; grouped experts ×43 = 1.02105; total = **1.12442 ms/token**.
+- 550 floor leaves 0.69376 ms/token for inherited work; proceed. 700 target leaves 0.30415 and remains uncertain. Sustained M128 is a lose-condition (~1.664 ms/token changed work) but only tail work in the bound single-request gate.
+- Remaining M2 gate: TP4 graph-captured decoder/prefill layer slice with real gate/up→SwiGLU→down flow and real all-reduce.
