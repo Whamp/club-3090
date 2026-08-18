@@ -270,3 +270,27 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
 - Baseline: reuse existing llama.cpp result for the same task; do not re-run llama.cpp unless the artifact is incompatible with the locked task revision.
 - Pass criterion: Will's judgment that GGUF-TP is close enough to llama.cpp on strict solve + partial reward, acknowledging single-run variance — **not** a pre-registered statistical gate.
 - M6 must still pass before M8 counts toward promotion. Full spec: `M8-DEEPSWE.md`; PLAN §6/§8/§11/§12.6 updated.
+
+## 2026-08-18 — M6 layer oracle executed: layer gate FAILS, final logits pass; bisection rejects all suspected mechanisms
+
+- Paired 366-token layer dumps captured on server60 for both engines (vLLM diagnostic image from `41a672a0`; llama.cpp standalone oracle from `04636336`, CUDA-packaged after `a06581c5` backend-load fix).
+- **Preregistered layer gate fails:** 28/43 layers outside class-B windows; drift grows smoothly from layer 0, peaks near layer 20. Median post-FFN cosine 0.992988 / NRMSE 0.1191 / NMAE 0.1197.
+- **Final logits pass:** cosine 0.9973, top-1 equal, complete top-10 overlap (only ranks 5–6 swapped).
+- Attention-vs-FFN bisect (vLLM `19aaf850`, llama.cpp `66e55dad`) localized the largest incremental drift to FFN phases at layers 7, 9, 15, 20.
+- Route-ID capture (vLLM `0061abfb`; llama.cpp `8a8b049d` after strided-view fix): route sets differ at 9/43 layers by exactly one expert each.
+- One-variable bisect arms, all **rejected** (evidence/m6-bisect/*.json):
+  - FP16 router storage (vLLM `3ae6139b`): median NRMSE 0.1006 — marginal, not sufficient; fixes layers 15/20 route sets only.
+  - FP32 router compute+storage (vLLM `e4dc8219`): 0.1194 — worse; route compute is not the root cause.
+  - Forced indexed experts (vLLM `3fda3c41`, bypasses grouped MMQ at M=366): 0.1188 — grouped-MMQ arithmetic is not the cause.
+- Assessment: no single mechanism explains the drift; it is consistent with accumulation of documented class-B per-op differences (Q8_0→Marlin FP16 scale rounding, DP4A reduction order, FlashMLA-vs-llama attention) across 43 layers. Follow-up analysis and Will's drift-minimizing weight-rounding idea (explicitly a separate project) tracked in todo TODO-175a7261.
+- The M1 single-token phase discriminator was attempted and failed on infrastructure (sample_tokens RPC timeout during warmup-heavy startup), not model error; not retried.
+
+## 2026-08-18 — M8 pilot launched under Will's blanket authorization (plan v2 after harness repair)
+
+- Will authorized launching the one-cell GGUF-TP SuperJSON pilot without further approval once the promotion-candidate service was ready; the 72-cell grid remains cancelled.
+- First launch failed at preflight before any subject call: the DeepSWE tasks repo replaced per-task `pre_artifacts.sh` with `[[verifier.collect]]` task.toml commands (deep-swe `d7a1031`, fast-forwarded locally 2026-08-15 18:34 PDT, after all prior successful runs); the harness copied `pre_artifacts.sh` unconditionally.
+- Harness repair on Whamp/deep-swe-bench eval/gguf-tp-deepswe `d856c630`: parse `[[verifier.collect]]` and synthesize the equivalent capture script; capture semantics unchanged; 522/522 tests pass.
+- Plan v2 `sha256:da894410…` differs from the approved `sha256:7ac3e4c4…` only in `runtime.harnessRevision` (the repair) and the identity-excluded derived statePath. Amendment recorded in the pilot run dir.
+- Promotion-candidate service restored first: gguf-tp-m5 (image sha256:f91e8283…, 140K context) healthy, zero swap, deterministic canary exact; 6h rollback watchdog to canonical llama.cpp armed.
+- Pilot running as systemd unit deep-swe-gguf-tp-pilot-v2; result lands in results/_throughput/deepseek-v4-gguf-tp/max/workers-1/…/superjson-error-stack-serialization/rep0.
+- M6 status for promotion remains as recorded above: layer-gate failure with final-logit parity; Will adjudicates closeness per M8-DEEPSWE.md.
