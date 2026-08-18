@@ -294,3 +294,13 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
 - Promotion-candidate service restored first: gguf-tp-m5 (image sha256:f91e8283…, 140K context) healthy, zero swap, deterministic canary exact; 6h rollback watchdog to canonical llama.cpp armed.
 - Pilot running as systemd unit deep-swe-gguf-tp-pilot-v2; result lands in results/_throughput/deepseek-v4-gguf-tp/max/workers-1/…/superjson-error-stack-serialization/rep0.
 - M6 status for promotion remains as recorded above: layer-gate failure with final-logit parity; Will adjudicates closeness per M8-DEEPSWE.md.
+
+## 2026-08-18 — M8 pilot COMPLETE: GGUF-TP passes the behavioral gate decisively
+
+- One-cell SuperJSON pilot (plan v2 `sha256:da894410…`, config `baseline-vllm-deepseek-v4-flash-0731-gguf-tp@1.0.0`, rep0, max thinking, Pi 0.84.1) completed normally in 2,520 s: agent_exit 0, verifier_exit 0, preflight smoke assertions all satisfied, no degeneration, no timeout.
+- **GGUF-TP: partial reward 0.9949 (F2P 79/80, P2P 116/116), binary 0; 70 turns, 80 tool calls (22 edit/write), 119,557 output tokens, patch 43,680 bytes.**
+- **llama.cpp Antirez control (same task, max, @1.0.0): partial 0.9898 (F2P 78/80, P2P 116/116), binary 0; 118 turns, 124 tool calls, 195,420 output tokens, patch 22,499 bytes, wall 6,678.5 s.**
+- GGUF-TP matches or exceeds the proven-quality llama.cpp control on every measure and is 2.65× faster wall-clock on the cell; vs the WNA16 safetensors runs on the same task (uniform 0.9235, quality 0.8980 partial) the native-GGUF engine is far ahead, consistent with the earlier finding that WNA16 requantization — not the vLLM stack — drove the DeepSWE quality gap.
+- The M6 layer-drift finding (todo TODO-175a7261) therefore does not manifest as behavioral damage on this gate: end-task behavior matches the byte-identical-weights llama.cpp control.
+- Post-run server60 state: gguf-tp-m5 healthy, zero serving swap, no residual requests/KV. Canonical llama.cpp remains canonical until Will adjudicates the pass (M8-DEEPSWE.md criterion) and chooses promotion (M9); 6h rollback watchdog remains armed as backstop.
+- Result: results/_throughput/deepseek-v4-gguf-tp/max/workers-1/deepseek-v4-flash-0731-gguf-tp/max/baseline-vllm-deepseek-v4-flash-0731-gguf-tp@1.0.0/superjson-error-stack-serialization/rep0/.
