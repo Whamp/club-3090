@@ -1,6 +1,6 @@
 # M5–M7 — full runtime acceptance
 
-Decision: **M5, M6 functional gates, and M7 performance floors pass.** M8 paired DeepSWE remains required before promotion. The profile is a measured capacity ceiling with unsafe release headroom.
+Decision: **M5, M6 functional canaries/NIAH, and M7 performance floors pass.** M6's explicit class-B layer comparison and M8 paired DeepSWE remain required before promotion. The profile is a measured capacity ceiling with unsafe release headroom.
 
 ## Bring-up
 
@@ -73,8 +73,10 @@ This covers short requests only, not two 140K contexts.
 
 Idle physical headroom was 101–102 MiB after readiness and 71–73 MiB after long-context JIT. This is below the normal 1 GiB release guard. Will accepted the 140–142K context floor for development, but this measured profile remains a ceiling and must carry the warning into any promotion decision.
 
-## Next gate
+## Next gates
 
-The exact one-seed SuperJSON DeepSWE pilot plan is compiled and awaits explicit plan-hash approval. M8 then requires at least three seeds per engine on all 12 tasks (≥72 cells), task-clustered analysis, mean-partial-reward non-inferiority, and strict solves no lower than Antirez llama.cpp baseline minus one.
+M6 first requires the pre-registered class-B decoder-layer and final-logit comparison in `M6-LAYER-ORACLE-SPEC.md`. The diagnostic implementations are prepared but have not run on GPU.
+
+The exact one-seed SuperJSON DeepSWE pilot plans are compiled and await explicit plan-hash approval. After M6 passes, M8 requires at least three seeds per engine on all 12 tasks (≥72 cells), task-clustered analysis, mean-partial-reward non-inferiority, and strict solves no lower than Antirez llama.cpp baseline minus one.
 
 Evidence: `evidence/m5-m7-runtime/`.

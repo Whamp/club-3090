@@ -247,3 +247,11 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
 - M7: decode 76.697 tok/s (3 warm + 5 measured, 0.033% CV; floor58/target70 pass); cache-busted prefill 551.89 tok/s (3 runs; floor550 narrowly passes, target700 misses); concurrency2 61.1 each / 121.86 aggregate, zero swap.
 - Physical headroom is only 71–73 MiB after long-context JIT: measured ceiling, not release-safe. Report/evidence: `M5-M7-RUNTIME.md`, `evidence/m5-m7-runtime/`.
 - M8 config release `baseline-vllm-deepseek-v4-flash-0731-gguf-tp@1.0.0` is committed/pushed in Whamp/deep-swe-bench e0a97db; lock sha256:8b553e2d…. Exact one-seed SuperJSON pilot plan sha256:7ac3e4c4… compiled with no warnings and awaits Will's explicit approval before any benchmark call.
+
+## 2026-08-18 — M6 class-B gap found; diagnostic prepared before execution
+
+- Completion audit corrected the prior shorthand “M6 functional gates pass”: deterministic/tool/post-tool canaries, exact 119,730-token NIAH, and quick quality pass, but PLAN §8 also requires a per-layer class-B comparison against llama.cpp. M6 remains open and M8 promotion evidence cannot supersede it.
+- Pre-registered fixed 366-token tool-result prompt and numerical windows in `M6-LAYER-ORACLE-SPEC.md` before either engine produced a layer dump.
+- Diagnostic-only implementations are pushed: Whamp/vLLM `41a672a0` from GGUF-TP `3ec20cebe`; Whamp/llama.cpp `04636336` from canonical `0379cf4bf`. Normal serving is inert.
+- vLLM recorder/forward/logit contract: 10 CPU tests pass plus hooks and structural checks. Standalone llama translation unit compiles; CUDA-off full link hits the pinned fork's pre-existing undefined CUDA symbol, so final build must be CUDA. Comparator passed complete synthetic pass and deliberate numerical-failure discrimination.
+- Exact source, render, token, and comparator identities are under `m6-layer-oracle/`. GPU build and paired layer dump remain pending; no DeepSWE call has started.
