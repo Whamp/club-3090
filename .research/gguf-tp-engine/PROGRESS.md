@@ -214,3 +214,12 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
 - Q8_1 NMAE window transparently revised 1.0%→1.25%: adversarial fused path measured 1.0527%, better than existing BF16→Q8_1 at 1.0688%; all other bounds and task-quality gates unchanged.
 - Final GPU suite 34/34; grouped/fused memcheck 0 errors, racecheck 0 hazards. **M2 gate passes.** M3 Q2_K kernels are already complete; aligned Q2 repack was deliberately declined on causal-budget grounds, so no derived repack artifact is productionized. Next: M4 production GGUF loader/config/coordinate mapping, 10-working-day kill.
 - M2 server checkpoint closed: canonical Antirez llama.cpp restored on exact image a96bd947, healthy, restart count 0, all four GPU contexts, zero serving-process swap after RAM-gated normalization, batch watchdog inactive.
+
+## 2026-08-18 — M4 started: bounded GGUF index + coordinate planner
+
+- M4 calendar gate starts today (10 working days before mandatory descope review).
+- Added bounded 16 MiB GGUF-v3 header parser: dynamic file size, metadata/type/name checks, overlap/data-bound checks; no whole-file mmap.
+- Added fail-closed exact 1,328-name classifier and three TP coordinate operations: replicate, output-row shard within each outer matrix, input-block shard within every row; fused-slot target offsets are explicit.
+- First full-inventory run exposed and fixed an O(rows) planner design (~45M down-row span objects). Counted strided spans now keep planning O(tensors).
+- Verified inventory SHA 1cadb51c… on ranks 0–3: 1,328 tensor plans → 1,180 runtime targets → 1,328 descriptors → exactly 22,751,844,636 bytes / 21.1893065 GiB per rank, with no target overlap. Matches M1 independently.
+- vLLM commit 9b9ef3948 pushed; 4 parser/planner tests + pre-commit/CodeGraph/aislop green. Next: raw parameter allocation and direct span execution with dtype/cast contracts.
