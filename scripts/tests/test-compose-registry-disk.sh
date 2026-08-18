@@ -35,17 +35,21 @@ def check(cond, msg):
         failures.append(msg)
 
 check(len(COMPOSE_REGISTRY) == 70, f"registry has 70 entries (got {len(COMPOSE_REGISTRY)})")
-check(len(disk_paths) == 71, f"disk has 71 compose files (got {len(disk_paths)})")
+check(len(disk_paths) == 72, f"disk has 72 compose files (got {len(disk_paths)})")
 check(registry_paths <= disk_paths, "all registry compose_path values exist on disk")
 parked_disk_only = disk_paths - registry_paths
-# Disk-only (non-registry) composes allowed: parked SGLang archives, plus the experimental
-# vLLM-Omni Qwen3-Omni compose (intentionally NOT registry-wired — custom-engine, direct
-# `docker compose`-only deploy; see models/qwen3-omni-30b-a3b/vllm-omni/README.md).
+# Disk-only (non-registry) composes allowed: parked SGLang archives, plus direct-Compose
+# deployments that cannot be represented by the public c3 catalog — the custom-engine
+# Qwen3-Omni vLLM-Omni compose and the GGUF-TP DeepSeek V4 production engine (local
+# custom image, server60-specific mounts; see
+# models/deepseek-v4-flash-0731/vllm/gguf-tp/README.md).
+_DIRECT_COMPOSE_ONLY = {
+    Path("models/qwen3-omni-30b-a3b/vllm-omni/compose/dual/autoround-int4/omni.yml"),
+    Path("models/deepseek-v4-flash-0731/vllm/compose/multi4/gguf-tp/base.yml"),
+}
+
 def _allowed_disk_only(path):
-    return (
-        "/sglang/compose/" in f"/{path.as_posix()}"
-        or path == Path("models/qwen3-omni-30b-a3b/vllm-omni/compose/dual/autoround-int4/omni.yml")
-    )
+    return "/sglang/compose/" in f"/{path.as_posix()}" or path in _DIRECT_COMPOSE_ONLY
 check(
     all(_allowed_disk_only(path) for path in parked_disk_only),
     "only parked SGLang archives + the non-registry vLLM-Omni compose are disk-only",

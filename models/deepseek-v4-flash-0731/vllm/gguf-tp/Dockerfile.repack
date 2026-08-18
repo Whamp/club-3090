@@ -1,0 +1,10 @@
+# Build layer 2 (repack): bound temporary memory for the chunked Q8_0
+# repack-to-Marlin path (commit 3ec20cebe) over the engine-layer image.
+# Build via build-image.sh (fail-closed).
+FROM club-3090/deepseek-v4-gguf-tp:741b3abf
+
+COPY root/vllm/model_executor/layers/quantization/gguf_dsv4/q8_0_marlin.py /workspace/vllm/vllm/model_executor/layers/quantization/gguf_dsv4/q8_0_marlin.py
+
+LABEL org.opencontainers.image.revision="3ec20cebe" \
+      club3090.vllm.tree="82a1def196062cdff17d7b997513e31ae3734abe" \
+      club3090.parent.image="sha256:4ccb214cbc5478f8d90e6f6733830faff977c863143cca86cccef1b44d24a30e"
