@@ -175,3 +175,10 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
 - Red→green caught an import-order cycle and replaced it with one explicit linear-kernel-first loader helper. The first numerical assertion then correctly rejected elementwise FP16-scale comparison near zero; separated transformed-format correctness from the pre-registered original-Q8 normalized class-B window. Final 6/6 RTX 3090 tests pass at M=1/2/4 with CUDA Graph replay.
 - Exact layer storage is byte-neutral at 8,912,896 bytes. Exclusive five-trial graph timing: M1 18.438 µs (0.198% CV), M2 18.415 µs, M4 18.466 µs. M1 ×43 = 0.793 ms/token, below the ~0.9 ms kill threshold. `wo_a` passes; only the full TP4 slice can establish serving effect.
 - Remaining M2 checklist: other dense Q8_0 shapes; batched/prefill IQ2_XXS+Q2_K MMA across observed M distribution; TP4 graph decoder-layer slice.
+
+## 2026-08-17 — M2 dense Q8_0 decode screen PASS
+
+- Extended Q8 adapter numerical coverage across K=256/512/1024/2048/4096; final RTX 3090 file passes 14/14 including grouped `wo_a` graph replay.
+- Exclusive five-trial M1 graph times: fused_wqa_wkv 13.690 µs, wq_b 17.345, wo_b 18.061, shared gate+up 12.228, shared down 8.160, grouped wo_a 18.438; sum 87.922 µs/layer = 3.781 ms/43 layers. Vocabulary head is 199.394 µs once/token. All shapes remain byte-neutral.
+- The 3.980 ms isolated total is near the M0 trace's approximately 3.54 ms Marlin-dense pool, so dense decode does not trigger redesign/stop. This is not a serving projection; layer-slice scheduling/collectives remain decisive.
+- Remaining M2: batched/prefill IQ2_XXS+Q2_K MMA across observed M distribution; TP4 graph-captured decoder-layer slice.
