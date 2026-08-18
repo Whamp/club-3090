@@ -182,3 +182,9 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
 - Exclusive five-trial M1 graph times: fused_wqa_wkv 13.690 µs, wq_b 17.345, wo_b 18.061, shared gate+up 12.228, shared down 8.160, grouped wo_a 18.438; sum 87.922 µs/layer = 3.781 ms/43 layers. Vocabulary head is 199.394 µs once/token. All shapes remain byte-neutral.
 - The 3.980 ms isolated total is near the M0 trace's approximately 3.54 ms Marlin-dense pool, so dense decode does not trigger redesign/stop. This is not a serving projection; layer-slice scheduling/collectives remain decisive.
 - Remaining M2: batched/prefill IQ2_XXS+Q2_K MMA across observed M distribution; TP4 graph-captured decoder-layer slice.
+
+## 2026-08-17 — M2 indexed-expert prefill path falsified; MMA mandatory
+
+- M0 was decode-only, so the prefill screen uses the inherited M≤256 scheduler domain at M={16,32,64,128,256}; final gating still needs scheduler-observed chunk evidence.
+- Full 256-expert/top-6 exact-shape five-trial baseline: uniform M256 expert-only cost 0.04008 ms/token/layer = 1.723 ms/token across 43 layers (580 tok/s ceiling); concentrated best boundary 1.483 ms/token (674 ceiling). Both leave impossibly little of the 1.818 ms/token 550-tok/s budget for non-expert work.
+- Gate result: indexed kernels remain M≤4 decode/fallback; grouped token compaction plus SM86 MMA/DP4A weight reuse is mandatory for prefill. `M2-PREFILL-BASELINE.md` + evidence bundle.
