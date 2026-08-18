@@ -1,6 +1,6 @@
 # M5–M7 — full runtime acceptance
 
-Decision: **M5, M6 functional canaries/NIAH, and M7 performance floors pass.** M6's explicit class-B layer comparison and M8 paired DeepSWE remain required before promotion. The profile is a measured capacity ceiling with unsafe release headroom.
+Decision: **M5, M6 functional canaries/NIAH, and M7 performance floors pass.** M6's explicit class-B layer comparison and M8 paired DeepSWE remain required before promotion. The profile is a measured capacity ceiling; its low idle headroom is accepted by Will as normal for a packed TP profile (see `CAPACITY.md` → "Will's headroom decision (2026-08-18)").
 
 ## Bring-up
 
@@ -69,9 +69,9 @@ Two simultaneous 512-token requests completed normally:
 
 This covers short requests only, not two 140K contexts.
 
-## Capacity warning
+## Capacity headroom
 
-Idle physical headroom was 101–102 MiB after readiness and 71–73 MiB after long-context JIT. This is below the normal 1 GiB release guard. Will accepted the 140–142K context floor for development, but this measured profile remains a ceiling and must carry the warning into any promotion decision.
+Idle physical headroom was 101–102 MiB after readiness and 71–73 MiB after long-context JIT. On 2026-08-18 Will reviewed this and accepted it as **normal for a packed vLLM TP profile and not a promotion blocker** — the KV pool is preallocated by design, so low idle free VRAM is the configured steady state, and the profile survived all late-allocation events (load, repacks, long-context JIT, 119,730-token NIAH) with zero swap. The 1 GiB release guard is scoped to dynamically sized profiles and does not apply here. Full decision text and its reopen condition (any OOM at or below operating context): `CAPACITY.md` → "Will's headroom decision (2026-08-18)". The measured profile remains a capacity ceiling: do not raise the operating context without remeasuring.
 
 ## Next gates
 

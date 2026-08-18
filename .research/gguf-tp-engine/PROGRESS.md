@@ -255,3 +255,10 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
 - Diagnostic-only implementations are pushed: Whamp/vLLM `41a672a0` from GGUF-TP `3ec20cebe`; Whamp/llama.cpp `04636336` from canonical `0379cf4bf`. Normal serving is inert.
 - vLLM recorder/forward/logit contract: 10 CPU tests pass plus hooks and structural checks. Standalone llama translation unit compiles; CUDA-off full link hits the pinned fork's pre-existing undefined CUDA symbol, so final build must be CUDA. Comparator passed complete synthetic pass and deliberate numerical-failure discrimination.
 - Exact source, render, token, and comparator identities are under `m6-layer-oracle/`. GPU build and paired layer dump remain pending; no DeepSWE call has started.
+
+## 2026-08-18 — Will's headroom decision: low idle headroom accepted, not a promotion blocker
+
+- Will reviewed the M5 measured profile (71–73 MiB idle physical headroom after long-context JIT) and accepted it as normal for a packed vLLM TP profile: the KV pool is preallocated by design, so low idle free VRAM is the configured steady state, and the profile survived all late-allocation events with zero swap.
+- The 1 GiB physical-headroom release guard is scoped to dynamically sized profiles and **does not gate this engine's M9 promotion**. Release evidence for this engine: zero serving-process swap + verify-stress-class boundary tests (incl. tool-prefill spikes) at the operating context + stable long-context runs.
+- Reopen condition: any OOM at or below the operating context. The measured profile remains a capacity ceiling — do not raise operating context without remeasuring.
+- Recorded in `CAPACITY.md` ("Will's headroom decision (2026-08-18)"), `M5-M7-RUNTIME.md` (warning section replaced with the accepted-decision text), and PLAN §12.5. Decision recorded on Will's behalf by his review agent at his direction (this entry).

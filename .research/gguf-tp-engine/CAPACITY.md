@@ -57,6 +57,22 @@ margin.
 
 Will accepted the measured **140–142K on-GPU context floor with approximately 0.52 GiB projected physical headroom** as this service's initial contract on 2026-08-17. This resolves PLAN §12.4 and permits M5 bring-up at that floor. The acceptance does not convert the estimate into a measurement or waive M5's residency falsifier; larger-context work remains a separate follow-up if the engine passes promotion gates.
 
+## Will's headroom decision (2026-08-18)
+
+Will accepted the measured M5 profile (71–73 MiB idle physical headroom after
+long-context JIT) as **normal and release-acceptable for this packed TP
+profile**. Rationale: vLLM preallocates the KV pool at startup
+(`gpu-memory-utilization 0.98` by design), so low idle free VRAM is the
+configured steady state, not creeping exhaustion; the profile already survived
+the late-allocation events (full load, Marlin repacks, long-context JIT,
+119,730-token NIAH) with zero swap. The **1 GiB physical-headroom release
+guard does not apply to deliberately packed TP profiles**; it remains in force
+for dynamically sized profiles. Release evidence for this engine is instead:
+zero serving-process swap, verify-stress-class boundary tests (including
+tool-prefill spikes) passing at the operating context, and stable long-context
+runs. **The low-headroom warning is not a promotion blocker at M9.** Any OOM
+at or below the operating context reopens this decision.
+
 ## M1 conclusion
 
 - **Capacity gate outcome:** ≥140K is plausible but tight on exact weight

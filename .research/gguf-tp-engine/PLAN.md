@@ -419,3 +419,10 @@ llama.cpp service remains canonical until M8 passes.
    floor with approximately 0.52 GiB projected headroom as this service's
    initial contract. M5 must still measure residency and obey its falsifier;
    expanding context is a separate follow-up if promotion succeeds.
+5. **Resolved 2026-08-18:** Will accepts the measured M5 idle headroom
+   (71–73 MiB after long-context JIT) as normal for a packed vLLM TP profile.
+   The 1 GiB physical-headroom release guard is scoped to dynamically sized
+   profiles and is **not a promotion gate for this engine**; release evidence
+   is zero swap + verify-stress-class boundary tests at the operating context.
+   Reopen condition: any OOM at or below operating context. Full text:
+   `CAPACITY.md` → "Will's headroom decision (2026-08-18)".
