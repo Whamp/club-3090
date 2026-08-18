@@ -304,3 +304,31 @@ Branch `feat/gguf-tp-engine` (club-3090, plans/evidence) ·
 - The M6 layer-drift finding (todo TODO-175a7261) therefore does not manifest as behavioral damage on this gate: end-task behavior matches the byte-identical-weights llama.cpp control.
 - Post-run server60 state: gguf-tp-m5 healthy, zero serving swap, no residual requests/KV. Canonical llama.cpp remains canonical until Will adjudicates the pass (M8-DEEPSWE.md criterion) and chooses promotion (M9); 6h rollback watchdog remains armed as backstop.
 - Result: results/_throughput/deepseek-v4-gguf-tp/max/workers-1/deepseek-v4-flash-0731-gguf-tp/max/baseline-vllm-deepseek-v4-flash-0731-gguf-tp@1.0.0/superjson-error-stack-serialization/rep0/.
+
+## M9 — Promotion to production (2026-08-18) ✅
+
+Will: "ok set it to seq8 max model len 140k, verify it and if it passes set it
+to the default production setting."
+
+- Concurrency sweep (seq2→4→6→8): aggregate decode 128.1 / ~141.7 / 167.9 /
+  **254.0 tok/s**; single-stream invariant at ~78.4.
+- Two hard engine gates found at seq8@140K and fixed:
+  1. KV-pool gate — max-num-batched-tokens 256 → 192 frees 9,560 pool tokens
+     (141,770 → 151,330); at 256 the engine refuses 140K (est. max 137,216).
+     Cost: prefill 540.7 → 513.6 tok/s (~5%). Will approved 192.
+  2. Pre-flight gate — gpu-memory-utilization 0.985 fails; 0.98 is the ceiling.
+- Verification passed: startup clean (1.08× concurrency for 140K), canary,
+  full-140K recall (139,565 prompt tokens, unique prompt), 8×~40K concurrent
+  probes, zero preemption/OOM/errors, zero swap.
+- Promoted: branch `feat/deepseek-v4-gguf-tp-prod` commit 4275bfe0 —
+  Compose profile `models/deepseek-v4-flash-0731/vllm/compose/multi4/gguf-tp/
+  base.yml` (digest-pinned f91e8283, restart unless-stopped, port 8034),
+  engine build contract (MANIFEST.json, Dockerfile chain, build-image.sh,
+  materialize-model-view.py), INTERNALS.md milestone trail, contract-test
+  updates (registry-disk 72 + direct-Compose allowance). Pushed.
+- Deployed on server60: `dsv4-gguf-tp-prod` healthy, zero swap, VRAM idle
+  headroom 65 MiB/card. Canonical llama.cpp profile demoted to validated
+  rollback. Restore timers retired (compose restart policy supersedes them).
+- VRAM idle headroom 35–41 MiB/card under load at 140K — capacity-ceiling
+  class; reopen condition = OOM at/below operating context (documented in
+  the compose header).
