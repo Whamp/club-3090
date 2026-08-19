@@ -34,18 +34,20 @@ pilot: reward 0.9949 vs llama.cpp 0.9898, 2.65× faster wall-clock.
 
 | knob | value | why |
 |---|---|---|
-| `--max-model-len` | 140000 | full-context capability; hard per-seq cap (beyond → 400) |
-| `--max-num-seqs` | 8 | aggregate decode 254.0 tok/s (vs 128 at 2, 168 at 6) |
-| `--max-num-batched-tokens` | 192 | **required** for 140K at 8 seqs: at 256 the KV pool (141,770) < 140K need and the engine refuses (estimated max 137,216). 192 frees 9,560 pool tokens (151,330). Costs ~5% cache-busted prefill (540.7 → 513.6 tok/s). Do not revert without re-running the capacity gate. |
+| `--max-model-len` | 148000 | full-context capability; hard per-seq cap (beyond → 400). 140,000 → 148,000 on 2026-08-18 (operator direction); fit-gate-confirmed only at the new ceiling |
+| `--max-num-seqs` | 2 | operator-chosen 2026-08-18; aggregate 128.1 tok/s at 2. Raising to 8 gives 254.0 tok/s but forces batched 192 (see below) |
+| `--max-num-batched-tokens` | 256 | default again after seq8→2: restores full cache-busted prefill (540.7 tok/s). **Only drop to 192 if max_num_seqs is raised to 8** (at 256 the pool 141,770 < 140K need; engine refuses, estimated max 137,216) |
 | `--gpu-memory-utilization` | 0.98 | 0.985+ fails the startup pre-flight (free-memory gate) |
 | `--kv-cache-dtype` | fp8_ds_mla | DeepSeek UE8M0-packed MLA cache |
 | env `VLLM_HIER_ALL_REDUCE` | `0,1;2,3` | PCIe islands; no NVLink; custom all-reduce disabled (`--disable-custom-all-reduce`) |
 
-Measured (2026-08-18, 3 warm + 5 measured): decode **78.3** single / **254.0**
-aggregate @ 8 concurrent; cache-busted prefill **513.6** tok/s; full-140K
-recall correct; 0 preemptions/evictions/OOM; zero swap. VRAM idle headroom
-35–41 MiB/card at 140K — capacity-ceiling class; reopen condition = OOM at
-or below operating context.
+Measured (2026-08-18, 3 warm + 5 measured, at 140K): decode **78.6** single /
+**128.1** aggregate @ 2 concurrent; cache-busted prefill **540.7** tok/s;
+full-140K recall correct; 0 preemptions/evictions/OOM; zero swap. seq8@140K
+arm: 254.0 aggregate decode (batched 192, prefill 513.6). Pool at the
+current profile: 156,738 tokens (1.06× at 148K). VRAM idle headroom ~99
+MiB/card; under load at 140K it was 35–41 MiB/card — capacity-ceiling
+class; reopen condition = OOM at or below operating context.
 
 ## Image build contract
 

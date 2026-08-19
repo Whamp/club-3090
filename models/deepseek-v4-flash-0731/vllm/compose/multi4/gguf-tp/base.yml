@@ -8,35 +8,39 @@
 #   Drafter:   none (MTP omitted from artifact)
 #   KV:        fp8_ds_mla, block 256, DEEPSEEK_SPARSE_SWA sparse indexer
 #   Vision:    no
-#   Max ctx:   140,000 tokens; max_num_seqs=8; max_num_batched_tokens=192;
-#              GPU KV pool 151,330 tokens (1.08× max-model-len)
+#   Max ctx:   148,000 tokens; max_num_seqs=2; max_num_batched_tokens=256;
+#              GPU KV pool 156,738 tokens (1.06× max-model-len)
 #   Genesis:   N/A — Genesis is Qwen3-Next-specific
 #   Reasoning: off · low · high · max (native reasoning_parser)
 #   Status:    ✅ Production — DeepSeek V4 serving default on server60
 #              (promoted 2026-08-18; canonical llama.cpp demoted to rollback)
 #   Measured:  server60 4× RTX 3090, 2026-08-18 (3 warm + 5 measured):
-#              decode 78.3 tok/s single · 254.0 tok/s aggregate at 8 concurrent
-#              · cache-busted prefill 513.6 tok/s · full-140K recall correct ·
+#              decode 78.6 tok/s single · 128.1 tok/s aggregate at 2 concurrent
+#              · cache-busted prefill 540.7 tok/s · full-140K recall correct ·
 #              0 preemptions/evictions/OOM across all experiments · zero swap.
+#              (seq8@140K arm: 254.0 aggregate decode; requires batched 192.)
 #              DeepSWE SuperJSON pilot (M8): partial reward 0.9949 vs llama.cpp
 #              0.9898 control, 2.65× faster wall-clock.
 #   Correctness: deterministic canary, auto tool call, post-tool continuation,
 #                NIAH exact recall at 119,730 and 139,565 tokens passed.
 #   Quality:   Quick quality gate 27/30 pass@1 / pass@3 (M5, seq2 config).
-#   Best for:  Concurrent coding-agent workloads; 8 simultaneous sequences
-#              at full 140K context (sparse-SWA degrades gracefully beyond
-#              the nominal KV pool; no preemption observed at 4×140K).
+#   Best for:  Coding-agent workloads; deep single-request context.
+#              (For aggregate concurrency, raise max_num_seqs to 8 — measured
+#              at 140K: 254.0 tok/s; requires batched 192.)
 # Caveats:
 #   - Local custom image, digest-pinned (see vllm/gguf-tp/ for the build
 #     contract + MANIFEST.json). Only runs on server60's rig layout.
-#   - max-num-batched-tokens=192 is deliberate: at max_num_seqs=8 the KV pool
-#     at 256 (141,770 tokens) cannot satisfy max-model-len 140,000 (engine
-#     refuses: estimated max length 137,216). 192 frees 9,560 pool tokens
-#     (151,330) at a ~5% cache-busted prefill cost (540.7 → 513.6 tok/s).
-#     Do not "fix" it back to 256 without re-running the capacity gate.
+#   - max_num_seqs 8→2 and max_model_len 140,000→148,000 on 2026-08-18
+#     (operator direction): batched tokens returned to 256, restoring full
+#     prefill (540.7 tok/s); pool 156,738 tokens (1.06× at 148K). At 148K the
+#     profile is fit-gate-confirmed only — long-context recall at the new
+#     ceiling was not re-run.
+#   - If you raise max_num_seqs back to 8, batched tokens MUST drop to 192
+#     (at 256 the KV pool 141,770 cannot satisfy max-model-len and the engine
+#     refuses startup: estimated max 137,216).
 #   - gpu-memory-utilization stays 0.98; 0.985+ fails the startup pre-flight
-#     (free-memory gate). VRAM idle headroom at 140K is 35–41 MiB/card —
-#     capacity-ceiling class profile; reopen condition = OOM at/below
+#     (free-memory gate). VRAM idle headroom at 140K is 35–41 MiB/card under
+#     load — capacity-ceiling class profile; reopen condition = OOM at/below
 #     operating context.
 #   - IQ2_XXS-class quantization drift vs FP16 oracle is documented (M6
 #     layer oracle: 28/43 layers fail per-layer windows; final logits
@@ -90,11 +94,11 @@ services:
       - "--tensor-parallel-size"
       - "4"
       - "--max-model-len"
-      - "140000"
+      - "148000"
       - "--max-num-seqs"
-      - "8"
+      - "2"
       - "--max-num-batched-tokens"
-      - "192"
+      - "256"
       - "--gpu-memory-utilization"
       - "0.98"
       - "--kv-cache-dtype"

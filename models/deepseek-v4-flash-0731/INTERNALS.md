@@ -412,3 +412,93 @@ replacements for this profile.
 Keep these failures in mind when changing the engine base, cache operations,
 quant, or warm-up. Short smoke prompts are insufficient: the bugs appeared only
 at depth or across micro-batch boundaries.
+
+# GGUF-TP engine (vLLM-native, production since 2026-08-18)
+
+Since 2026-08-18 the production DeepSeek V4 serving path on server60 is the
+**GGUF-TP engine** — a native vLLM tensor-parallel engine that loads the exact
+Antirez GGUF bytes (IQ2_XXS/Q2_K/Q8_0, sha256 `ca22ae2f…`) with from-scratch
+Ampere kernels. It replaces the canonical llama.cpp profile (which becomes the
+validated rollback). Full detail: `vllm/gguf-tp/README.md` (build contract,
+MANIFEST, operating contract). This section records the milestone trail
+(M0–M9) and why this engine wins.
+
+## Why GGUF-TP
+
+- **Quality:** loads the community-standard Antirez GGUF bit-exact — the same
+  weights llama.cpp serves. The earlier WNA16 path served a *requantized*
+  artifact and lost quality (DeepSWE SuperJSON gate: ~0.92 partial vs 0.995).
+- **Serving surface:** vLLM OpenAI API, native tool calling, reasoning parser,
+  prefix cache, 8-way concurrency at full 140K context.
+- **Speed:** decode 78.3 tok/s single / 254.0 aggregate at 8 concurrent;
+  cache-busted prefill 513.6 tok/s; DeepSWE pilot 2.65× faster wall-clock than
+  llama.cpp at equal-or-better reward.
+
+## Milestone trail (evidence: `feat/gguf-tp-engine` worktree)
+
+- **M0** optimized WNA16 FlashMLA + hierarchical all-reduce trace.
+- **M1** capacity floor 140–142K accepted; Q8_0/Q2_K/IQ2_XXS L0 oracle bitwise.
+- **M2** raw/aligned+DP4A/DwarfStar IQ2_XXS kernels; fused indexed gate/up
+  (247 GB/s); grouped DwarfStar gate/up + grouped Q2_K down (1.6811× realistic
+  uniform M=256); TP=4 graph slice decode 0.1934 ms/layer (74.13 tok/s
+  projection). 34/34 GPU tests + memcheck/racecheck clean.
+- **M3** Q2_K down 300.23 GB/s (raw layout kept).
+- **M4** full-model TP=4 meta verifier: 1,328 GGUF tensors → 1,180 runtime
+  targets, exact per-rank name/element sets; raw Q8_0 load-to-Marlin lifecycle
+  11/11; identity caching.
+- **M5** TP=4 API at 140K (load 271.9 s; 21.53 GiB/rank; KV 0.81 GiB @
+  154,519 tokens); functional gates passed (deterministic gen, auto tool call,
+  post-tool continuation, NIAH exact recall @ 119,730); quick quality 27/30;
+  decode 76.70, prefill 551.89, agg-2 121.86; zero swap. Measured capacity
+  ceiling, not release-safe (71–73 MiB free/GPU).
+- **M6** functional gates passed; per-layer oracle preregistered gate FAILED
+  (28/43 layers; median cos 0.993, NRMSE 0.119) but final logits PASSED
+  (cos 0.9973). Bisection rejected FP16 router storage, forced indexed
+  experts, FP32 router compute as single mechanisms → drift is the documented
+  class-B accumulation (Q8_0→Marlin scale rounding, DP4A order, FlashMLA-vs-
+  llama attention). Open finding + weight-rounding follow-up: TODO-175a7261.
+- **M7** (service/watchdog hardening during pilot ops).
+- **M8** DeepSWE SuperJSON pilot (one cell): reward **0.9949** (F2P 79/80,
+  P2P 116/116), 2,520 s wall vs llama.cpp control 0.9898 / 6,678 s — passed
+  by Will's judgment. Harness fix upstreamed (deep-swe-bench `d856c630`).
+- **M9** promotion 2026-08-18: seq8@140K verified (see below), Compose profile
+  `vllm/compose/multi4/gguf-tp/base.yml` made the production default.
+
+## M9 promotion verification (2026-08-18)
+
+Concurrency sweep on server60 (canonical 3 warm + 5 measured):
+
+| max_num_seqs | max_model_len | KV pool | single decode | aggregate decode |
+|---|---|---|---|---|
+| 2 | 140,000 | 154,519 | 78.6 | 128.1 |
+| 4 | 140,000 | 149,321 | 78.6 | ~141.7 |
+| 6 | 125,000 | 147,994 | 78.2 | 167.9 |
+| 8 | 125,000 | 141,770 | 78.4 | 253.2 |
+| **8** | **140,000** | **151,330** | **78.3** | **254.0** |
+
+Two hard engine gates found while pushing seq8 to 140K:
+
+1. **KV-pool gate:** at `max_num_seqs=8`, `max-num-batched-tokens=256` yields
+   a 141,770-token pool (0.75 GiB) — below the 0.77 GiB needed for
+   max_model_len 140,000; the engine refuses startup (estimated max length
+   137,216). Fix: `max-num-batched-tokens 256 → 192`, freeing 9,560 pool
+   tokens (151,330) at ~5% cache-busted prefill cost (540.7 → 513.6 tok/s).
+2. **Pre-flight gate:** `gpu-memory-utilization 0.985` fails ("free memory on
+   startup less than desired utilization"); 0.98 is the ceiling.
+
+Full-140K single-sequence recall passed (139,565 prompt tokens, unique
+prompt); 8×~40K concurrent probes completed with zero preemption; zero swap.
+VRAM idle headroom 35–41 MiB/card — capacity-ceiling class; the promote
+decision records that explicitly (reopen condition = OOM at/below operating
+context).
+
+## Operational amendment (2026-08-18, post-M9)
+
+By operator direction the same day, production switched **max_num_seqs 8→2**
+and **max_model_len 140,000→148,000**, returning max-num-batched-tokens to
+**256**. KV pool at the new profile: 156,738 tokens (1.06× at 148K); idle
+VRAM ~99 MiB/card; zero serving swap. Batched 256 restores full cache-busted
+prefill (540.7 tok/s vs 513.6 at 192). The 148K operating point is
+fit-gate-confirmed only — long-context recall at the new ceiling was not
+re-run by direction. The seq8 arm stays available (254.0 aggregate decode)
+with the 192 requirement documented in the compose header.
