@@ -332,3 +332,27 @@ to the default production setting."
 - VRAM idle headroom 35–41 MiB/card under load at 140K — capacity-ceiling
   class; reopen condition = OOM at/below operating context (documented in
   the compose header).
+
+## 2026-08-20 — Cold-expert offload route gate NO-GO signal
+
+- Follow-through goal `c81a9590-5605-4098-b899-86264f759b49` started with the
+  measurement-only offload gate before any fusion work.
+- Whamp/vLLM `research/gguf-tp-route-stats` commits `e0646f991` and
+  `761b48a44` add opt-in per-layer route histograms. The optional 8,192-step
+  decode ring costs about 34 MiB/rank and made the 148K KV fit gate fail, so
+  histogram-only capture is the production-shape mode.
+- Histogram-only image `sha256:5936741a…bbd25` reached 148K API health. Four
+  TP-rank snapshots matched exactly at 43×256 counts and 265 token rows/layer.
+- Compaction-aware replays were reconstructed for the 24,916-token SuperJSON
+  pilot and the completed 12-task, 8.70-agent-hour GGUF-TP corpus (548,850
+  rendered tokens). Every replay converter matched its captured second real
+  provider request before CPU-only rendering.
+- Exact immutable `tid2eid` lookup for static-routing layers 0–2 already
+  falsifies the H≤224 gate: pilot H99 is 249/248/249; 12-task H99 is
+  251/251/251; cov@224 is 93.0–94.6%; LRU@224 is 95.3–95.7%. Any one layer at
+  H99≥248 is sufficient for NO-GO.
+- Durable evidence and reproduction tooling live in
+  `route-offload/ROUTE-OFFLOAD.md`. Full dynamic-layer capture and the required
+  four-GPU fusion trace remain pending because the separate user-owned
+  Qwen3.8-27B service currently occupies all four server60 GPUs. It is healthy
+  on port 8098 and was left untouched; GGUF-TP capture restart is disabled.
