@@ -13,6 +13,9 @@ owner = root / "models/deepseek-v4-flash-0731/vllm/gguf-tp"
 compose_dir = root / "models/deepseek-v4-flash-0731/vllm/compose/multi4/gguf-tp"
 manifest_path = owner / "FP4-INDEXER-MANIFEST.json"
 manifest = json.loads(manifest_path.read_text())
+equivalence = json.loads(
+    (owner / "FP4-INDEXER-RUNTIME-EQUIVALENCE.json").read_text()
+)
 compose = (compose_dir / "fp4-indexer.yml").read_text()
 builder = (owner / "build-fp4-indexer-image.sh").read_text()
 dockerfile = (owner / "Dockerfile.fp4-indexer").read_text()
@@ -40,6 +43,13 @@ assert len({entry["path"] for entry in runtime_files}) == 11
 assert all(sha.fullmatch(entry["sha256"]) for entry in runtime_files)
 assert all(entry["path"].startswith("vllm/") for entry in runtime_files)
 assert digest.fullmatch(manifest["image"]["digest"])
+assert equivalence["all_runtime_files_identical"] is True
+assert equivalence["images"]["packaged"] == manifest["image"]["digest"]
+assert len(equivalence["files"]) == len(runtime_files)
+assert all(
+    row["expected"] == row["validated"] == row["packaged"]
+    for row in equivalence["files"]
+)
 
 profile = manifest["profile"]
 assert profile["max_model_len"] == 200000
