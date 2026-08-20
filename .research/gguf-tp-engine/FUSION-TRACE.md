@@ -1,82 +1,85 @@
 # GGUF-TP decode fusion trace
 
-Status: trace gate complete. The preregistered launch/dependency-latency premise is falsified. Do not implement the original F1+F2 package as proposed.
+Status: complete, measured no-go. The preregistered launch/dependency-latency premise is falsified. No fusion kernel was implemented or shipped.
 
 ## Decision
 
-The TP=4 decoder-layer graph is kernel and collective dominated, not launch-gap dominated.
+The production-semantic TP=4 decoder-layer graph is kernel and collective dominated, not launch-gap dominated.
 
 | Stable replay metric | Median | Range |
 | --- | ---: | ---: |
-| First graph node to final graph node | 195.746 µs | 194.147–197.794 µs |
-| GPU busy-time union | 194.561 µs | 192.867–196.545 µs |
-| Internal idle time | 1.184 µs | 1.056–1.378 µs |
-| Gap before the next graph replay | 4.576 µs | 4.512–4.928 µs |
-| First-node to next first-node period | 200.322 µs | 198.723–202.338 µs |
+| First graph node to final graph node | 182.529 µs | 180.835–184.546 µs |
+| GPU busy-time union | 181.793 µs | 180.099–183.810 µs |
+| Internal idle time | 0.736 µs | 0.736–0.736 µs |
+| Gap before the next graph replay | 4.576 µs | 4.480–4.864 µs |
+| First-node to next first-node period | 187.090 µs | 185.411–189.058 µs |
 
-The preregistration expected 60–100 µs/layer of launch or dependency latency. The trace finds about 1.2 µs inside the graph and 4.6 µs between graph replays. CUDA Graph node launch gaps inside a replay are generally 0.06–0.10 µs.
+The preregistration expected 60–100 µs/layer between summed standalone kernels and the measured layer slice, substantially caused by launch or dependency latency. The corrected trace finds 0.736 µs inside the graph and 4.576 µs between graph replays. CUDA Graph node gaps inside a replay are generally below 0.1 µs.
 
-The first replay on each rank is excluded from these statistics because the profiling-start barrier perturbs its first collective. The remaining sample contains 49 stable replays on each of four GPUs, 196 layer replays total.
+That result fails the explicit implementation gate. Rewriting the indexed IQ2/Q2 kernels would test a different hypothesis, so this bounded pass stops without a production change.
 
-## Where the layer time goes
+## Correction to the first trace
 
-Median node-duration sums across stable replays:
+The initial trace used the historical M2 layer-slice harness from Whamp/vLLM `0ef05fe53`. It reconstructed 23 graph nodes and correctly falsified the large launch-gap premise, but a source audit caught two synthetic-tail differences before any fusion implementation:
 
-| Group | Time | Share of 195.746 µs graph span |
+- the benchmark expressed shared-expert clamped SwiGLU as six eager PyTorch kernels, while production `DeepseekV4MLP` already uses `SiluAndMulWithClamp`;
+- the benchmark converted routed and shared outputs to FP32 before adding and casting, while production converts the routed reduction to BF16 and performs one BF16 add.
+
+Whamp/vLLM `6f4f658ab` corrects the benchmark to the production operation and dtype contracts. The corrected 17-node trace is the decision record. The original 23-node trace remains archived as historical evidence rather than being silently replaced.
+
+## Where the corrected layer time goes
+
+Median node-duration sums across 49 stable replays on each of four GPUs:
+
+| Group | Time | Share of 182.529 µs graph span |
 | --- | ---: | ---: |
-| Six dense Q8 Marlin projections | 84.416 µs | 43.1% |
-| Two hierarchical all-reduces | 45.729 µs | 23.4% |
-| Indexed IQ2 gate/up and Q2 down | 38.304 µs | 19.6% |
-| Original F1+F2 removable standalone nodes | 10.432 µs | 5.3% |
-| Shared-expert SwiGLU pointwise chain | 10.880 µs | 5.6% |
-| Final shared-convert, routed-add, and BF16-cast chain | 5.760 µs | 2.9% |
+| Six dense Q8 Marlin projections | 84.160 µs | 46.1% |
+| Two hierarchical all-reduces | 45.409 µs | 24.9% |
+| Indexed IQ2 gate/up and Q2 down | 38.304 µs | 21.0% |
+| Original F1+F2 removable standalone nodes | 10.496 µs | 5.8% |
+| Existing fused shared activation | 1.376 µs | 0.8% |
+| Existing BF16 routed/shared add | 1.504 µs | 0.8% |
 
-The original F1+F2 upper bound is the complete duration of the five standalone nodes it proposed to absorb: routed input quantization, weighted SwiGLU requantization, top-k reduction, routed/shared add, and final BF16 cast. Their median sum is 10.432 µs. Real savings must be lower because the fused producer kernels still have to perform that arithmetic.
+The original F1+F2 upper bound is the complete duration of the five standalone nodes it proposed to absorb: routed input quantization, weighted SwiGLU requantization, top-k reduction, routed FP32-to-BF16 conversion, and routed/shared BF16 addition. Their median sum is 10.496 µs. Real savings must be lower because the fused producer kernels still have to perform that arithmetic and may pay additional register or occupancy cost.
 
-At the whole-model level, even deleting all 10.432 µs from all 43 layers would save only 0.449 ms/token before accounting for epilogue cost. Against the measured 13.34 ms/token baseline used in M2, that is a 3.4% optimistic ceiling. The original package's complexity is not justified by the trace.
+Deleting all 10.496 µs from all 43 layers would save 0.451 ms/token before any epilogue cost. Against the M2 decode budget of about 13.04 ms/token, that is a 3.5% optimistic whole-token ceiling. The measured target is therefore too small for the proposed multi-kernel rewrite under this pass's evidence gate.
 
-## Re-derived fusion target
-
-Two pointwise chains are better first targets because they occupy more measured time and do not require rewriting the quantized matvecs:
-
-1. **Shared SwiGLU:** fuse BF16→FP32 conversion, gate clamp, up clamp, SiLU, multiply, and BF16 cast. Six graph nodes currently total 10.880 µs.
-2. **Final add/cast:** fuse shared BF16→FP32 conversion, routed/shared FP32 add, and BF16 cast. Three graph nodes currently total 5.760 µs.
-
-Together these chains consume 16.640 µs/layer before replacement. Two small fused kernels should retain the current operation order and dtypes while avoiding seven launches and intermediate tensor traffic. This is a measured target, not a speedup claim. Numerical parity and a fresh layer-slice trace remain mandatory.
-
-Dense Marlin and hierarchical collectives are larger targets, but neither exposes a comparably bounded fusion seam. The indexed IQ2/Q2 matvecs remain worthwhile kernel-optimization targets, but the trace does not support rewriting both merely to eliminate launch latency.
+The largest remaining pools are dense Marlin execution and hierarchical collectives. They are real kernel/communication work, not launch gaps, and neither is a legal substitute for the preregistered numerics-preserving fusion hypothesis.
 
 ## Method
 
-The trace used the exact M2 TP=4 graph-captured layer-slice harness at Whamp/vLLM `0ef05fe53` and capture image `sha256:5fab88440740a6033bcacda473ffaeed7a4f4e386d494b516432487f0df09729` on server60. The only harness change adds `--profile-decode`, which brackets indexed-decode graph replays with `cudaProfilerStart/Stop` and an NVTX range.
+The final trace used the production-semantic TP=4 graph-captured layer-slice harness at Whamp/vLLM `6f4f658ab` and capture image `sha256:5fab88440740a6033bcacda473ffaeed7a4f4e386d494b516432487f0df09729` on server60.
 
 Configuration:
 
-- four RTX 3090 GPUs;
+- four RTX 3090 GPUs under the unchanged 230 W / 210–1650 MHz safety policy;
 - `VLLM_HIER_ALL_REDUCE=0,1;2,3`;
-- custom all-reduce disabled by the existing PCIe-only dispatch;
+- vLLM custom all-reduce disabled on the PCIe-only topology;
 - 10 warmup graph replays;
-- 50 captured decode replays per rank;
+- 50 captured indexed-decode replays per rank;
 - CUDA Graph trace granularity `node`;
 - Nsight Systems 2025.3.1;
-- prefill runs after capture and is not part of the trace.
+- grouped M=256 prefill run after capture, unchanged from M2.
 
-The profiled run reported 0.2028–0.2042 ms/layer across ranks. Profiler overhead explains the difference from M2's unprofiled five-run mean of 0.193402 ms/layer.
+The first replay on each rank is excluded because the profiler-start barrier perturbs its first collective. The stable sample contains 196 complete layer replays. The profiled benchmark reported 0.1893–0.1905 ms/layer across ranks; timeline first-node spans are lower because event timing includes graph-launch and surrounding measurement overhead.
+
+The corrected grouped M=256 path remained functional at 9.93–10.13 ms/layer in the one-iteration post-capture check. Those timings are smoke evidence, not a performance comparison.
 
 ## Evidence
 
-`evidence/fusion-trace-20260820/` contains:
+`evidence/fusion-trace-20260820/` contains both trace generations:
 
-- `tp4-decode-layer-slice.nsys-rep`: compact four-process trace;
-- `tp4-decode-layer-slice.sqlite`: queryable event export;
-- `analysis.json`: asserted 23-node replay reconstruction and timing summary;
-- `analyze_trace.py`: deterministic SQLite analyzer;
-- `nsys-stats.csv`: standard CUDA kernel/API/NVTX summaries;
-- rank-local benchmark results and complete smoke/profile logs;
-- the exact benchmark scripts used for capture.
+- root files: original 23-node synthetic-tail trace and analysis;
+- `production-semantics/`: authoritative 17-node report, SQLite timeline, `analysis.json`, standard Nsight summaries, rank results, logs, and exact corrected harness;
+- `analyze_trace.py`: deterministic analyzer with explicit `synthetic-v1` and `production-v2` profiles;
+- `SHA256SUMS`: checksum manifest for the complete compact archive.
 
-The 2.5 GB target-side `.qdstrm` was deleted after successful import to the compact report and successful SQLite export. It contained no additional durable information.
+Both 2.5 GB target-side `.qdstrm` streams were deleted only after successful report import and SQLite export. The compact `.nsys-rep` and SQLite files preserve the queryable evidence.
 
-## Next step
+## Acceptance accounting
 
-Implement the two re-derived pointwise fusions test-first. Compare each fused kernel against the current PyTorch sequence, then replace only the indexed-decode layer-slice call sites. Re-run the TP=4 trace before considering any quantized-matvec epilogue fusion.
+- Trace and attribution: **passed**, and premise falsified.
+- Fusion implementation: **not entered**, as required by the failed gate.
+- New-kernel numerical, graph, sanitizer, cubin, layer-oracle, and serving A/B gates: **not applicable because no kernel or runtime path changed**.
+- Model bytes, grouped prefill, Q8 KV, 148K context, maximum sequence count, and production Compose: **unchanged**.
+- Final service state: **passed**. `dsv4-gguf-tp-prod` is healthy with zero restarts, restart policy `unless-stopped`, exact image `sha256:f91e8283e7ad116b8664b4a936dba88ebafcb8910a968dce2a3c34420f010adf`, exact model identity, deterministic `PILOT-READY-8421` output, idle scheduler/KV metrics, zero swap for every container process, one DeepSeek container, no restore timer, and the active 230 W / 210–1650 MHz safety policy. Physical headroom remains the previously documented 99–100 MiB per GPU.

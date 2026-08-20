@@ -400,3 +400,21 @@ to the default production setting."
   work without rewriting IQ2/Q2 matvecs.
 - Owner report: `FUSION-TRACE.md`. Compact `.nsys-rep`, SQLite export, asserted
   analyzer, rank results, and logs live in `evidence/fusion-trace-20260820/`.
+
+## 2026-08-20: Production-semantic trace supersedes synthetic target
+
+- Source audit caught that the first layer-slice trace's proposed shared-SwiGLU
+  and final-add targets were benchmark artifacts. Production already uses one
+  fused `SiluAndMulWithClamp` kernel and one BF16 routed/shared add.
+- Whamp/vLLM `6f4f658ab` makes the benchmark use those exact production
+  operation and dtype contracts. No runtime kernel or serving path changed.
+- The corrected 17-node TP=4 trace measures a 182.529 µs median graph span,
+  181.793 µs GPU busy union, 0.736 µs internal idle, and a 4.576 µs inter-graph
+  gap across 196 stable replays.
+- The production shared activation and final add cost only 1.376 and 1.504 µs.
+  The original F1+F2 removable nodes total 10.496 µs before replacement work,
+  only a 3.5% optimistic whole-token ceiling across 43 layers.
+- Final decision: measured no-go. The trace does not satisfy the explicit
+  launch/dependency-latency gate, so no fusion kernel or production path is
+  implemented. `FUSION-TRACE.md` and `evidence/fusion-trace-20260820/
+  production-semantics/` are authoritative.

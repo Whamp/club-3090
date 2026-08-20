@@ -9,12 +9,11 @@ import sqlite3
 import statistics
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-GRAPH_NODES_PER_REPLAY = 23
 CAPTURED_REPLAYS_PER_RANK = 50
 
-NODE_LABELS = (
+COMMON_NODE_LABELS = (
     "attention_fused_wqa_wkv",
     "attention_wq_b",
     "attention_wo_a",
@@ -26,19 +25,54 @@ NODE_LABELS = (
     "routed_swiglu_weighted_quantize",
     "routed_q2_down",
     "routed_topk_sum",
-    "shared_gate_up",
-    "shared_bf16_to_fp32",
-    "shared_gate_clamp",
-    "shared_up_clamp",
-    "shared_silu",
-    "shared_multiply",
-    "shared_fp32_to_bf16",
-    "shared_down",
-    "shared_output_to_fp32",
-    "routed_shared_add",
-    "ffn_fp32_to_bf16",
-    "ffn_all_reduce",
 )
+
+TRACE_PROFILES = {
+    "synthetic-v1": {
+        "node_labels": COMMON_NODE_LABELS
+        + (
+            "shared_gate_up",
+            "shared_bf16_to_fp32",
+            "shared_gate_clamp",
+            "shared_up_clamp",
+            "shared_silu",
+            "shared_multiply",
+            "shared_fp32_to_bf16",
+            "shared_down",
+            "shared_output_to_fp32",
+            "routed_shared_add",
+            "ffn_fp32_to_bf16",
+            "ffn_all_reduce",
+        ),
+        "groups": {
+            "dense_marlin_projections": (0, 1, 2, 4, 11, 18),
+            "hierarchical_all_reduce": (5, 22),
+            "routed_major_matvecs": (7, 9),
+            "original_f1_f2_removable_nodes": (6, 8, 10, 20, 21),
+            "shared_swiglu_pointwise_chain": (12, 13, 14, 15, 16, 17),
+            "final_add_cast_pointwise_chain": (19, 20, 21),
+        },
+    },
+    "production-v2": {
+        "node_labels": COMMON_NODE_LABELS
+        + (
+            "routed_fp32_to_bf16",
+            "shared_gate_up",
+            "shared_swiglu_with_clamp",
+            "shared_down",
+            "routed_shared_bf16_add",
+            "ffn_all_reduce",
+        ),
+        "groups": {
+            "dense_marlin_projections": (0, 1, 2, 4, 12, 14),
+            "hierarchical_all_reduce": (5, 16),
+            "routed_major_matvecs": (7, 9),
+            "original_f1_f2_removable_nodes": (6, 8, 10, 11, 15),
+            "production_shared_activation": (13,),
+            "production_final_add": (15,),
+        },
+    },
+}
 
 JsonObject = dict[str, Any]
 KernelRow = tuple[int, int, int, str]
@@ -72,7 +106,9 @@ def interval_union_ns(rows: list[KernelRow]) -> int:
     return covered + active_end - active_start
 
 
-def load_graph_replays(database: Path) -> dict[int, list[list[KernelRow]]]:
+def load_graph_replays(
+    database: Path, nodes_per_replay: int
+) -> dict[int, list[list[KernelRow]]]:
     """Load graph kernels by device and split the repeated node sequence."""
     connection = sqlite3.connect(database)
     rows = connection.execute(
@@ -95,14 +131,14 @@ def load_graph_replays(database: Path) -> dict[int, list[list[KernelRow]]]:
 
     replays: dict[int, list[list[KernelRow]]] = {}
     for device, kernels in by_device.items():
-        expected = GRAPH_NODES_PER_REPLAY * CAPTURED_REPLAYS_PER_RANK
+        expected = nodes_per_replay * CAPTURED_REPLAYS_PER_RANK
         if len(kernels) != expected:
             raise ValueError(
                 f"device {device}: expected {expected} graph kernels, found {len(kernels)}"
             )
         chunks = [
-            kernels[offset : offset + GRAPH_NODES_PER_REPLAY]
-            for offset in range(0, len(kernels), GRAPH_NODES_PER_REPLAY)
+            kernels[offset : offset + nodes_per_replay]
+            for offset in range(0, len(kernels), nodes_per_replay)
         ]
         reference_nodes = [row[2] for row in chunks[0]]
         for replay_index, chunk in enumerate(chunks):
@@ -114,9 +150,12 @@ def load_graph_replays(database: Path) -> dict[int, list[list[KernelRow]]]:
     return replays
 
 
-def analyze(database: Path) -> JsonObject:
+def analyze(database: Path, profile_name: str) -> JsonObject:
     """Analyze stable replays, excluding capture-start synchronization."""
-    replays = load_graph_replays(database)
+    profile = TRACE_PROFILES[profile_name]
+    node_labels = cast(tuple[str, ...], profile["node_labels"])
+    groups = cast(dict[str, tuple[int, ...]], profile["groups"])
+    replays = load_graph_replays(database, len(node_labels))
     stable_replays = [chunk for chunks in replays.values() for chunk in chunks[1:]]
 
     graph_spans = []
@@ -153,7 +192,7 @@ def analyze(database: Path) -> JsonObject:
         )
 
     nodes: list[JsonObject] = []
-    for position, label in enumerate(NODE_LABELS):
+    for position, label in enumerate(node_labels):
         durations = [
             (replay[position][1] - replay[position][0]) / 1000
             for replay in stable_replays
@@ -171,14 +210,6 @@ def analyze(database: Path) -> JsonObject:
         )
 
     median_node_us = [node["duration"]["median_us"] for node in nodes]
-    groups = {
-        "dense_marlin_projections": (0, 1, 2, 4, 11, 18),
-        "hierarchical_all_reduce": (5, 22),
-        "routed_major_matvecs": (7, 9),
-        "original_f1_f2_removable_nodes": (6, 8, 10, 20, 21),
-        "shared_swiglu_pointwise_chain": (12, 13, 14, 15, 16, 17),
-        "final_add_cast_pointwise_chain": (19, 20, 21),
-    }
     group_median_sums = {
         name: {
             "positions": list(positions),
@@ -188,8 +219,9 @@ def analyze(database: Path) -> JsonObject:
     }
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "database": database.name,
+        "trace_profile": profile_name,
         "captured_replays_per_rank": CAPTURED_REPLAYS_PER_RANK,
         "stable_replays_per_rank": CAPTURED_REPLAYS_PER_RANK - 1,
         "excluded_replays": "replay 0 on each rank; capture-start barrier perturbs its first collective",
@@ -215,9 +247,12 @@ def analyze(database: Path) -> JsonObject:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("database", type=Path)
+    parser.add_argument(
+        "--profile", choices=sorted(TRACE_PROFILES), default="synthetic-v1"
+    )
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    result = analyze(args.database)
+    result = analyze(args.database, args.profile)
     rendered = json.dumps(result, indent=2) + "\n"
     if args.output:
         args.output.write_text(rendered, encoding="utf-8")

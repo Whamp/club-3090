@@ -1,0 +1,45 @@
+
+NOTICE: Existing SQLite export found: /profiles/tp4-decode-layer-slice-production-semantics.sqlite
+        It is assumed file was previously exported from: /profiles/tp4-decode-layer-slice-production-semantics.nsys-rep
+        Consider using --force-export=true if needed.
+
+Processing [/profiles/tp4-decode-layer-slice-production-semantics.sqlite] with [/opt/nvidia/nsight-compute/2025.3.1/host/target-linux-x64/reports/cuda_gpu_kern_sum.py]...
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+28.5,14641378,8,1830172.3,35248.5,9057,7486568,3181026.9,ncclDevKernel_AllReduce_Sum_f32_RING_LL(ncclDevKernelArgsStorage<(unsigned long)4096>)
+18.1,9288043,400,23220.1,22784.5,20320,96225,5726.5,_hier_all_reduce_kernel
+16.8,8640995,600,14401.7,14016.0,12608,16544,1334.7,"void marlin::Marlin<(long)1125899906909960, (long)1125899923621888, (long)1125899906909960, (long)1125899906909960, (int)128, (int)1, (int)4, (int)8, (bool)1, (int)4, (int)2, (bool)0>(const int4 *, const int4 *, int4 *, int4 *, const int4 *, const float *, const int4 *, const float *, const int4 *, const int *, int, int, int, int, int, int *, bool, bool, bool, int)"
+15.9,8181881,600,13636.5,15792.5,8064,17344,3823.0,"void marlin::Marlin<(long)1125899906909960, (long)1125899923621888, (long)1125899906909960, (long)1125899906909960, (int)256, (int)1, (int)8, (int)8, (bool)1, (int)4, (int)2, (bool)0>(const int4 *, const int4 *, int4 *, int4 *, const int4 *, const float *, const int4 *, const float *, const int4 *, const int *, int, int, int, int, int, int *, bool, bool, bool, int)"
+9.8,5042951,200,25214.8,25056.0,24704,26176,400.8,"vllm::gguf_dsv4::<unnamed>::iq2_xxs_q8_1_indexed_gate_up_kernel(const __half *, const signed char *, const unsigned char *, const unsigned char *, const int *, float *, float *, int, int, int, int, int, int, int)"
+5.2,2655898,200,13279.5,13248.0,12992,13632,188.6,"vllm::gguf_dsv4::<unnamed>::q2_k_q8_1_indexed_down_kernel(const __half *, const signed char *, const unsigned char *, const int *, float *, int, int, int, int, int, int)"
+1.5,779079,200,3895.4,3904.0,3808,4033,37.6,"void at::native::reduce_kernel<(int)128, (int)4, at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, float>::operator ()(at::TensorIterator &)::[lambda(float, float) (instance 1)]>, unsigned int, float, (int)4, (int)4>>(T3)"
+0.9,484230,200,2421.2,2432.0,2368,2560,28.8,"void at::native::elementwise_kernel<(int)128, (int)4, void at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda() (instance 3)]::operator ()() const::[lambda() (instance 12)]::operator ()() const::[lambda(c10::BFloat16) (instance 1)]>(at::TensorIteratorBase &, const T1 &)::[lambda(int) (instance 1)]>(int, T3)"
+0.8,420353,200,2101.8,2112.0,2015,2208,49.6,"vllm::gguf_dsv4::<unnamed>::swiglu_weighted_q8_1_kernel(const float *, const float *, const float *, __half *, signed char *, int, int, float)"
+0.6,319523,200,1597.6,1600.0,1536,1664,29.0,"vllm::gguf_dsv4::<unnamed>::quantize_bf16_to_q8_1_kernel(const __nv_bfloat16 *, __half *, signed char *, int)"
+0.6,298916,200,1494.6,1504.0,1408,1600,30.1,"void at::native::vectorized_elementwise_kernel<(int)4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char *, (unsigned long)3>>(int, T2, T3)"
+0.5,273029,200,1365.1,1376.0,1344,1408,15.9,triton_poi_fused_clamp_mul_sigmoid_slice_0
+0.5,272833,200,1364.2,1376.0,1344,1408,16.1,"void at::native::vectorized_elementwise_kernel<(int)4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase &)::[lambda(float) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)"
+0.0,12896,9,1432.9,1376.0,1184,1568,140.2,"void at::native::vectorized_elementwise_kernel<(int)4, at::native::FillFunctor<float>, std::array<char *, (unsigned long)1>>(int, T2, T3)"
+
+Processing [/profiles/tp4-decode-layer-slice-production-semantics.sqlite] with [/opt/nvidia/nsight-compute/2025.3.1/host/target-linux-x64/reports/cuda_api_sum.py]...
+Time (%),Total Time (ns),Num Calls,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+49.4,31762556,4,7940639.0,8083493.0,7422944,8172626,347679.8,cudaDeviceSynchronize
+22.4,14375493,8,1796936.6,13029.5,3426,7425749,3163478.0,cudaStreamSynchronize
+19.0,12178196,3,4059398.7,4263225.0,3516080,4398891,475392.1,cudaProfilerStop
+8.0,5142694,200,25713.5,21119.5,19376,93596,9666.7,cudaGraphLaunch_v10000
+0.5,352634,9,39181.6,38232.0,15740,75632,22013.9,cudaLaunchKernel
+0.2,101042,8,12630.3,12298.0,9118,17052,3038.8,cuLaunchKernelEx
+0.1,65172,24,2715.5,1603.0,982,9688,2529.8,cudaEventRecord
+0.1,60846,16,3802.9,3837.0,1333,7154,1837.3,cudaEventRecordWithFlags_v11010
+0.1,46769,16,2923.1,2674.5,1413,7674,1546.7,cudaEventCreateWithFlags
+0.1,36509,8,4563.6,4158.0,1713,11542,3013.6,cudaGetFuncBySymbol_v11000
+0.1,36278,4,9069.5,6582.5,3987,19126,6815.1,cuProfilerStart
+0.1,35586,16,2224.1,1838.5,982,4969,1274.3,cudaStreamWaitEvent
+0.0,27071,25,1082.8,781.0,511,2906,738.0,cudaStreamIsCapturing_v10000
+0.0,19325,16,1207.8,956.5,360,2735,876.7,cudaStreamGetCaptureInfo_v12030
+0.0,14928,8,1866.0,1818.5,1032,3035,706.6,cudaEventDestroy
+0.0,5970,9,663.3,691.0,320,1072,244.4,cuKernelGetName
+
+Processing [/profiles/tp4-decode-layer-slice-production-semantics.sqlite] with [/opt/nvidia/nsight-compute/2025.3.1/host/target-linux-x64/reports/nvtx_sum.py]...
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Style,Range
+99.0,55672180,4,13918045.0,13808035.5,10260967,17795142,3895198.9,PushPop,:gguf_tp_decode_layer_slice_replays
+1.0,546769,8,68346.1,64637.0,46788,100579,20302.0,PushPop,NCCL:ncclAllReduce

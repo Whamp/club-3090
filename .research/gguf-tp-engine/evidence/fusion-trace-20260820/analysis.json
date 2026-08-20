@@ -1,6 +1,7 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "database": "tp4-decode-layer-slice.sqlite",
+  "trace_profile": "synthetic-v1",
   "captured_replays_per_rank": 50,
   "stable_replays_per_rank": 49,
   "excluded_replays": "replay 0 on each rank; capture-start barrier perturbs its first collective",
