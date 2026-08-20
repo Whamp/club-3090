@@ -1,0 +1,21 @@
+# Thin FP4 DS-MLA cache overlay over the verified GGUF-TP production image.
+# Build only through build-fp4-kv-image.sh, which verifies every input against
+# FP4-MANIFEST.json before invoking Docker.
+ARG BASE_IMAGE=club-3090/deepseek-v4-gguf-tp:3ec20ceb
+FROM ${BASE_IMAGE}
+
+COPY root/ /workspace/vllm/
+COPY _C_stable_libtorch.abi3.so /workspace/vllm/vllm/_C_stable_libtorch.abi3.so
+COPY flash_mla-2.0.0-cp39-abi3-linux_x86_64.whl /tmp/flash_mla-2.0.0-cp39-abi3-linux_x86_64.whl
+
+RUN uv pip install --python /opt/venv/bin/python --reinstall --no-deps \
+      /tmp/flash_mla-2.0.0-cp39-abi3-linux_x86_64.whl \
+    && rm /tmp/flash_mla-2.0.0-cp39-abi3-linux_x86_64.whl
+
+LABEL org.opencontainers.image.revision="633815f6889d9d033aefa04bf40cb270d5b6a3f1" \
+      club3090.vllm.tree="2230f7d43768e45fab2547bea056c9df160aab45" \
+      club3090.flash_mla.revision="81a06aa6feb608bcba687a40acf60ee87d14f2da" \
+      club3090.fp4_ds_mla="368-byte E2M1/UE8M0 NoPE + BF16 RoPE" \
+      club3090.base.image="sha256:f91e8283e7ad116b8664b4a936dba88ebafcb8910a968dce2a3c34420f010adf" \
+      club3090.stable_extension.sha256="971cfcb9391617889ad29a98f7811eb830fc6704ce2f2bcf9a14e3ccc482389c" \
+      club3090.flash_mla.wheel.sha256="c4cb6acaf4f5284f7906f263033f66881838561117fe9918eec265ea554cd8eb"

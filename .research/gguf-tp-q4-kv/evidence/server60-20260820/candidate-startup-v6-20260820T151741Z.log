@@ -1,0 +1,208 @@
+fp4_before=running health=healthy restarts=0 image=sha256:35bb8630b9f9ac2188e9233ce586f96333062f72bdaee7a6efaa00366e9f0dc0
+candidate=running health=healthy restarts=0 image=sha256:6ec61abbbf4e00b59c5711431b75868abe06e264d4eca949767f190f22e3092c
+(APIServer pid=1) INFO 08-20 15:17:59 [api_utils.py:345]
+(APIServer pid=1) INFO 08-20 15:17:59 [api_utils.py:345]        █     █     █▄   ▄█
+(APIServer pid=1) INFO 08-20 15:17:59 [api_utils.py:345]  ▄▄ ▄█ █     █     █ ▀▄▀ █  version 0.1.dev4+g2a3dd2ea7
+(APIServer pid=1) INFO 08-20 15:17:59 [api_utils.py:345]   █▄█▀ █     █     █     █  model   /runtime-model
+(APIServer pid=1) INFO 08-20 15:17:59 [api_utils.py:345]    ▀▀  ▀▀▀▀▀ ▀▀▀▀▀ ▀     ▀
+(APIServer pid=1) INFO 08-20 15:17:59 [api_utils.py:345]
+(APIServer pid=1) INFO 08-20 15:17:59 [api_utils.py:273] non-default args: {'model_tag': '/runtime-model', 'enable_auto_tool_choice': True, 'tool_call_parser': 'deepseek_v4', 'host': '0.0.0.0', 'model': '/runtime-model', 'trust_remote_code': True, 'max_model_len': 148000, 'quantization': 'gguf_dsv4', 'served_model_name': ['deepseek-v4-flash-0731-gguf-tp'], 'load_format': 'gguf_dsv4', 'model_loader_extra_config': {'gguf_path': '/model.gguf', 'sha256': 'ca22ae2f838e14077c22bc1c1417b71b45b5e5a3687bd96c2ac6e17fdb6261c0', 'file_size': 86720111488, 'tensor_count': 1328}, 'reasoning_parser': 'deepseek_v4', 'tensor_parallel_size': 4, 'disable_custom_all_reduce': True, 'gpu_memory_utilization': 0.98, 'kv_cache_dtype': 'fp4_ds_mla', 'max_num_batched_tokens': 256, 'max_num_seqs': 2}
+(APIServer pid=1) WARNING 08-20 15:17:59 [envs.py:2427] Unknown vLLM environment variable detected: VLLM_PRECOMPILED_WHEEL_VARIANT
+(APIServer pid=1) WARNING 08-20 15:17:59 [envs.py:2427] Unknown vLLM environment variable detected: VLLM_PRECOMPILED_WHEEL_COMMIT
+(APIServer pid=1) INFO 08-20 15:18:16 [model.py:641] Resolved architecture: DeepseekV4ForCausalLM
+(APIServer pid=1) INFO 08-20 15:18:16 [model.py:659] Defaulting to tokenizer_mode='deepseek_v4' for DeepseekV4ForCausalLM
+(APIServer pid=1) INFO 08-20 15:18:16 [model.py:1879] Using max model len 148000
+(APIServer pid=1) INFO 08-20 15:18:18 [scheduler.py:242] Chunked prefill is enabled with max_num_batched_tokens=256.
+(APIServer pid=1) INFO 08-20 15:18:18 [vllm.py:1231] Auto-enabling VLLM_USE_BREAKABLE_CUDAGRAPH=1. Set VLLM_USE_BREAKABLE_CUDAGRAPH=0 to opt out.
+(APIServer pid=1) WARNING 08-20 15:18:18 [vllm.py:1237] VLLM_USE_BREAKABLE_CUDAGRAPH is set, disabling vLLM's torch.compile pipeline. Equivalent to -cc.mode=none.
+(APIServer pid=1) WARNING 08-20 15:18:18 [vllm.py:1247] Inductor compilation was disabled by user settings, optimizations settings that are only active during inductor compilation will be ignored.
+(APIServer pid=1) INFO 08-20 15:18:18 [kernel.py:306] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['vllm_c', 'native'], fused_add_rms_norm=['vllm_c', 'native'])
+(APIServer pid=1) INFO 08-20 15:18:19 [compilation.py:329] Enabled custom fusions: norm_quant, act_quant
+(EngineCore pid=207) INFO 08-20 15:18:28 [core.py:121] Initializing a V1 LLM engine (v0.1.dev4+g2a3dd2ea7) with config: model='/runtime-model', speculative_config=None, tokenizer='/runtime-model', skip_tokenizer_init=False, tokenizer_mode=deepseek_v4, revision=None, tokenizer_revision=None, trust_remote_code=True, dtype=torch.bfloat16, max_seq_len=148000, download_dir=None, load_format=gguf_dsv4, tensor_parallel_size=4, pipeline_parallel_size=1, data_parallel_size=1, decode_context_parallel_size=1, dcp_comm_backend=ag_rs, disable_custom_all_reduce=True, quantization=gguf_dsv4, quantization_config=None, enforce_eager=False, enable_return_routed_experts=False, kv_cache_dtype=fp4_ds_mla, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='deepseek_v4', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, kv_cache_metrics=False, kv_cache_metrics_sample=0.01, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False, jit_monitor_mode='warn', jit_monitor_verbose=False), seed=0, served_model_name=deepseek-v4-flash-0731-gguf-tp, enable_prefix_caching=True, enable_chunked_prefill=True, pooler_config=None, compilation_config={'mode': <CompilationMode.NONE: 0>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['all'], 'ir_enable_torch_wrap': False, 'splitting_ops': [], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_vision_items_per_batch': 0, 'encoder_cudagraph_max_frames_per_batch': None, 'compile_sizes': [], 'compile_ranges_endpoints': [256], 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.FULL_AND_PIECEWISE: (2, 1)>, 'cudagraph_num_of_warmups': 1, 'cudagraph_capture_sizes': [1, 2, 4], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': True, 'fuse_act_quant': True, 'fuse_attn_quant': False, 'enable_sp': False, 'fuse_gemm_comms': False, 'fuse_allreduce_rms': False, 'enable_qk_norm_rope_fusion': False, 'fuse_rope_kvcache_cat_mla': False, 'fuse_act_padding': False, 'fuse_qk_norm_rope_kvcache': False}, 'max_cudagraph_capture_size': 4, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': False, 'static_all_moe_layers': []}, kernel_config=KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=['vllm_c', 'native'], fused_add_rms_norm=['vllm_c', 'native']), enable_flashinfer_autotune=True, enable_cutedsl_warmup=True, enable_jit_warmup=True, enable_bf16x3_router_gemm=False, moe_backend='auto', linear_backend='auto')
+(EngineCore pid=207) INFO 08-20 15:18:28 [multiproc_executor.py:140] DP group leader: node_rank=0, node_rank_within_dp=0, master_addr=127.0.0.1, mq_connect_ip=192.168.160.2 (local), world_size=4, local_world_size=4
+(Worker pid=230) INFO 08-20 15:18:38 [parallel_state.py:1640] world_size=4 rank=2 local_rank=2 distributed_init_method=tcp://127.0.0.1:56287 backend=nccl
+(Worker pid=228) INFO 08-20 15:18:39 [parallel_state.py:1640] world_size=4 rank=0 local_rank=0 distributed_init_method=tcp://127.0.0.1:56287 backend=nccl
+(Worker pid=231) INFO 08-20 15:18:39 [parallel_state.py:1640] world_size=4 rank=3 local_rank=3 distributed_init_method=tcp://127.0.0.1:56287 backend=nccl
+(Worker pid=229) INFO 08-20 15:18:39 [parallel_state.py:1640] world_size=4 rank=1 local_rank=1 distributed_init_method=tcp://127.0.0.1:56287 backend=nccl
+(Worker pid=228) INFO 08-20 15:18:40 [pynccl.py:113] vLLM is using nccl==2.29.7
+(Worker pid=228) WARNING 08-20 15:18:41 [symm_mem.py:67] SymmMemCommunicator: Device capability 8.6 not supported, communicator is not available.
+(Worker pid=229) WARNING 08-20 15:18:41 [symm_mem.py:67] SymmMemCommunicator: Device capability 8.6 not supported, communicator is not available.
+(Worker pid=230) WARNING 08-20 15:18:41 [symm_mem.py:67] SymmMemCommunicator: Device capability 8.6 not supported, communicator is not available.
+(Worker pid=231) WARNING 08-20 15:18:41 [symm_mem.py:67] SymmMemCommunicator: Device capability 8.6 not supported, communicator is not available.
+(Worker pid=228) INFO 08-20 15:18:41 [cuda_communicator.py:297] Using ['HIERARCHICAL', 'PYNCCL'] all-reduce backends (in dispatch order) for group 'tp:0' out of potential backends: ['NCCL_SYMM_MEM', 'QUICK_REDUCE', 'FLASHINFER', 'AITER_CUSTOM', 'HIERARCHICAL', 'CUSTOM', 'SYMM_MEM', 'PYNCCL'].
+(Worker pid=228) INFO 08-20 15:18:41 [cuda_communicator.py:297] Using ['HIERARCHICAL', 'PYNCCL'] all-reduce backends (in dispatch order) for group 'ep:0' out of potential backends: ['NCCL_SYMM_MEM', 'QUICK_REDUCE', 'FLASHINFER', 'AITER_CUSTOM', 'HIERARCHICAL', 'CUSTOM', 'SYMM_MEM', 'PYNCCL'].
+(Worker pid=228) INFO 08-20 15:18:41 [parallel_state.py:1977] rank 0 in world size 4 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+(Worker pid=228) INFO 08-20 15:18:42 [topk_topp_sampler.py:62] Using FlashInfer for top-p & top-k sampling.
+(Worker_TP0 pid=228) INFO 08-20 15:18:42 [gpu_model_runner.py:5308] Starting to load model /runtime-model...
+(Worker_TP0 pid=228) INFO 08-20 15:18:42 [attention.py:229] VLLM_UNREPLICATE_ATTN_GEMMS: token-sharding fused_wqa_wkv on 43/43 attention layers at >=1024 tokens, TP=4 (21 carry the merged input trio and shard it too, 22 do not).
+(Worker_TP0 pid=228) INFO 08-20 15:18:42 [attention.py:123] Using DeepSeek's fp4_ds_mla KV cache format.
+(Worker_TP0 pid=228) INFO 08-20 15:18:42 [ampere_sparse.py:127] Using native Ampere FlashMLA sparse decode for fp4_ds_mla and native sparse prefill.
+(Worker_TP0 pid=228) INFO 08-20 15:18:43 [attention.py:962] Using FP8 indexer cache for Lightning Indexer.
+(Worker_TP0 pid=228) WARNING 08-20 15:18:43 [sparse_attn_indexer.py:926] DeepGEMM not supported on this platform; using Triton fallback for sparse attention indexer.
+[rank3]:[W820 15:23:03.227802390 CUDACachingAllocator.cpp:3933] memory allocation failed with OOM on device 3 while trying to allocate 23068672 bytes (free: 13893632, total: 25298403328).
+[rank2]:[W820 15:23:03.248540266 CUDACachingAllocator.cpp:3933] memory allocation failed with OOM on device 2 while trying to allocate 23068672 bytes (free: 13631488, total: 25298141184).
+[rank0]:[W820 15:23:03.266369486 CUDACachingAllocator.cpp:3933] memory allocation failed with OOM on device 0 while trying to allocate 23068672 bytes (free: 13631488, total: 25298141184).
+[rank1]:[W820 15:23:03.266833068 CUDACachingAllocator.cpp:3933] memory allocation failed with OOM on device 1 while trying to allocate 23068672 bytes (free: 13631488, total: 25298141184).
+(Worker_TP3 pid=231) INFO 08-20 15:23:06 [interface.py:635] Setting kv cache block size to 256 for DEEPSEEK_SPARSE_SWA backend.
+(Worker_TP2 pid=230) INFO 08-20 15:23:06 [interface.py:635] Setting kv cache block size to 256 for DEEPSEEK_SPARSE_SWA backend.
+(Worker_TP1 pid=229) INFO 08-20 15:23:07 [interface.py:635] Setting kv cache block size to 256 for DEEPSEEK_SPARSE_SWA backend.
+(Worker_TP0 pid=228) INFO 08-20 15:23:07 [gpu_model_runner.py:5405] Model loading took 21.53 GiB memory and 260.499878 seconds
+(Worker_TP0 pid=228) INFO 08-20 15:23:07 [breakable_cudagraph.py:288] Breakable CUDA graph enabled
+(Worker_TP0 pid=228) INFO 08-20 15:23:07 [interface.py:635] Setting kv cache block size to 256 for DEEPSEEK_SPARSE_SWA backend.
+(Worker_TP0 pid=228) 2026-08-20 15:23:13  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `mhc_pre_big_fuse_broadcast_with_norm_tilelang` with `out_idx=None`
+(Worker_TP0 pid=228) 2026-08-20 15:23:24  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `mhc_pre_big_fuse_broadcast_with_norm_tilelang`
+(Worker_TP0 pid=228) INFO 08-20 15:23:25 [marlin_utils.py:625] Marlin kernel can achieve better performance for small size_n with experimental use_atomic_add feature. You can consider set environment variable VLLM_MARLIN_USE_ATOMIC_ADD to 1 if possible.
+[15:23:26] : Warning: T.vectorized loop over `i_hci` with extent 4 is lowered as a serial loop because TileLang could not find a valid vectorization plan. Scalar accumulator updates inside the loop are a common cause; move reductions to T.unroll or T.serial if this is intended.
+[15:23:26] : Warning: T.vectorized loop over `i_hci` with extent 4 is lowered as a serial loop because TileLang could not find a valid vectorization plan. Scalar accumulator updates inside the loop are a common cause; move reductions to T.unroll or T.serial if this is intended.
+[15:23:26] : Warning: T.vectorized loop over `i_hci` with extent 4 is lowered as a serial loop because TileLang could not find a valid vectorization plan. Scalar accumulator updates inside the loop are a common cause; move reductions to T.unroll or T.serial if this is intended.
+[15:23:27] : Warning: T.vectorized loop over `i_hci` with extent 4 is lowered as a serial loop because TileLang could not find a valid vectorization plan. Scalar accumulator updates inside the loop are a common cause; move reductions to T.unroll or T.serial if this is intended.
+(Worker_TP2 pid=230) 2026-08-20 15:23:12  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `mhc_pre_big_fuse_broadcast_with_norm_tilelang` with `out_idx=None`
+(Worker_TP2 pid=230) 2026-08-20 15:23:24  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `mhc_pre_big_fuse_broadcast_with_norm_tilelang`
+(Worker_TP2 pid=230) 2026-08-20 15:23:26  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `mhc_post_tilelang` with `out_idx=None`
+(Worker_TP2 pid=230) 2026-08-20 15:23:28  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `mhc_post_tilelang`
+(Worker_TP2 pid=230) 2026-08-20 15:23:29  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `mhc_pre_big_fuse_with_norm_tilelang` with `out_idx=None`
+(Worker_TP2 pid=230) 2026-08-20 15:23:40  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `mhc_pre_big_fuse_with_norm_tilelang`
+(Worker_TP2 pid=230) 2026-08-20 15:23:43  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `hc_head_fuse_tilelang` with `out_idx=None`
+(Worker_TP2 pid=230) 2026-08-20 15:23:47  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `hc_head_fuse_tilelang`
+(EngineCore pid=207) INFO 08-20 15:24:08 [shm_broadcast.py:802] No available shared memory broadcast block found in 60 seconds. This typically happens when some processes are hanging or doing some time-consuming work (e.g. compilation, weight/kv cache quantization).
+(EngineCore pid=207) INFO 08-20 15:25:08 [shm_broadcast.py:802] No available shared memory broadcast block found in 60 seconds. This typically happens when some processes are hanging or doing some time-consuming work (e.g. compilation, weight/kv cache quantization).
+(Worker_TP1 pid=229) 2026-08-20 15:23:13  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `mhc_pre_big_fuse_broadcast_with_norm_tilelang` with `out_idx=None`
+(Worker_TP1 pid=229) 2026-08-20 15:23:25  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `mhc_pre_big_fuse_broadcast_with_norm_tilelang`
+(Worker_TP1 pid=229) 2026-08-20 15:23:26  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `mhc_post_tilelang` with `out_idx=None`
+(Worker_TP1 pid=229) 2026-08-20 15:23:29  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `mhc_post_tilelang`
+(Worker_TP1 pid=229) 2026-08-20 15:23:29  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `mhc_pre_big_fuse_with_norm_tilelang` with `out_idx=None`
+(Worker_TP1 pid=229) 2026-08-20 15:23:42  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `mhc_pre_big_fuse_with_norm_tilelang`
+(Worker_TP1 pid=229) 2026-08-20 15:23:43  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `hc_head_fuse_tilelang` with `out_idx=None`
+(Worker_TP1 pid=229) 2026-08-20 15:23:48  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `hc_head_fuse_tilelang`
+(Worker_TP0 pid=228) 2026-08-20 15:23:26  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `mhc_post_tilelang` with `out_idx=None`
+(Worker_TP0 pid=228) 2026-08-20 15:23:28  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `mhc_post_tilelang`
+(Worker_TP0 pid=228) 2026-08-20 15:23:29  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `mhc_pre_big_fuse_with_norm_tilelang` with `out_idx=None`
+(Worker_TP0 pid=228) 2026-08-20 15:23:40  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `mhc_pre_big_fuse_with_norm_tilelang`
+(Worker_TP0 pid=228) 2026-08-20 15:23:43  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `hc_head_fuse_tilelang` with `out_idx=None`
+(Worker_TP0 pid=228) 2026-08-20 15:23:47  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `hc_head_fuse_tilelang`
+(Worker_TP3 pid=231) 2026-08-20 15:23:13  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `mhc_pre_big_fuse_broadcast_with_norm_tilelang` with `out_idx=None`
+(Worker_TP3 pid=231) 2026-08-20 15:23:25  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `mhc_pre_big_fuse_broadcast_with_norm_tilelang`
+(Worker_TP3 pid=231) 2026-08-20 15:23:26  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `mhc_post_tilelang` with `out_idx=None`
+(Worker_TP3 pid=231) 2026-08-20 15:23:28  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `mhc_post_tilelang`
+(Worker_TP3 pid=231) 2026-08-20 15:23:29  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `mhc_pre_big_fuse_with_norm_tilelang` with `out_idx=None`
+(Worker_TP3 pid=231) 2026-08-20 15:23:40  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `mhc_pre_big_fuse_with_norm_tilelang`
+(Worker_TP3 pid=231) 2026-08-20 15:23:43  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `hc_head_fuse_tilelang` with `out_idx=None`
+(Worker_TP3 pid=231) 2026-08-20 15:23:47  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `hc_head_fuse_tilelang`
+(Worker_TP2 pid=230) INFO 08-20 15:25:24 [gpu_model_runner.py:6673] Profiling CUDA graph memory: PIECEWISE=3 (largest=4), FULL=2 (largest=2)
+(Worker_TP1 pid=229) INFO 08-20 15:25:24 [gpu_model_runner.py:6673] Profiling CUDA graph memory: PIECEWISE=3 (largest=4), FULL=2 (largest=2)
+(Worker_TP0 pid=228) INFO 08-20 15:25:24 [indexer.py:703] Indexer query-sharding ENABLED: prefill rows split across 4 TP ranks (>= 2048 tokens); top-k all-gathered per chunk. Decode query groups split at >= 4 decode requests (0 = decode half disabled); top-k all-reduced per layer.
+(Worker_TP0 pid=228) INFO 08-20 15:25:24 [indexer.py:761] DSA indexer decode path: use_flattening=False (next_n=1, use_fp4_indexer_cache=False)
+(Worker_TP0 pid=228) INFO 08-20 15:25:24 [gpu_model_runner.py:6673] Profiling CUDA graph memory: PIECEWISE=3 (largest=4), FULL=2 (largest=2)
+(Worker_TP3 pid=231) INFO 08-20 15:25:24 [gpu_model_runner.py:6673] Profiling CUDA graph memory: PIECEWISE=3 (largest=4), FULL=2 (largest=2)
+(Worker_TP0 pid=228) 2026-08-20 15:25:25  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `hc_prenorm_gemm_tilelang` with `out_idx=None`
+(Worker_TP0 pid=228) 2026-08-20 15:25:27  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `hc_prenorm_gemm_tilelang`
+(Worker_TP0 pid=228) 2026-08-20 15:25:28  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `mhc_fused_tilelang` with `out_idx=None`
+(Worker_TP0 pid=228) 2026-08-20 15:25:30  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `mhc_fused_tilelang`
+(Worker_TP0 pid=228) 2026-08-20 15:25:31  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `mhc_pre_big_fuse_with_norm_tilelang` with `out_idx=None`
+(Worker_TP0 pid=228) 2026-08-20 15:25:42  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `mhc_pre_big_fuse_with_norm_tilelang`
+(Worker_TP0 pid=228) INFO 08-20 15:25:47 [sparse_attn_indexer.py:684] Indexer decode-sharding INACTIVE for this batch shape (below VLLM_INDEXER_DECODE_SHARD_MIN_REQS, or ineligible).
+(Worker_TP2 pid=230) 2026-08-20 15:25:25  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `hc_prenorm_gemm_tilelang` with `out_idx=None`
+(Worker_TP2 pid=230) 2026-08-20 15:25:27  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `hc_prenorm_gemm_tilelang`
+(Worker_TP2 pid=230) 2026-08-20 15:25:28  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `mhc_fused_tilelang` with `out_idx=None`
+(Worker_TP2 pid=230) 2026-08-20 15:25:30  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `mhc_fused_tilelang`
+(Worker_TP2 pid=230) 2026-08-20 15:25:31  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `mhc_pre_big_fuse_with_norm_tilelang` with `out_idx=None`
+(Worker_TP2 pid=230) 2026-08-20 15:25:43  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `mhc_pre_big_fuse_with_norm_tilelang`
+(Worker_TP2 pid=230) INFO 08-20 15:25:50 [gpu_model_runner.py:6798] Estimated CUDA graph memory: 0.18 GiB total
+(Worker_TP2 pid=230) INFO 08-20 15:25:50 [gpu_worker.py:578] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9800 is equivalent to --gpu-memory-utilization=0.9722 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9878. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.
+(Worker_TP1 pid=229) 2026-08-20 15:25:25  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `hc_prenorm_gemm_tilelang` with `out_idx=None`
+(Worker_TP1 pid=229) 2026-08-20 15:25:27  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `hc_prenorm_gemm_tilelang`
+(Worker_TP1 pid=229) 2026-08-20 15:25:28  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `mhc_fused_tilelang` with `out_idx=None`
+(Worker_TP1 pid=229) 2026-08-20 15:25:30  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `mhc_fused_tilelang`
+(Worker_TP1 pid=229) 2026-08-20 15:25:31  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `mhc_pre_big_fuse_with_norm_tilelang` with `out_idx=None`
+(Worker_TP1 pid=229) 2026-08-20 15:25:43  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `mhc_pre_big_fuse_with_norm_tilelang`
+(Worker_TP1 pid=229) INFO 08-20 15:25:50 [gpu_model_runner.py:6798] Estimated CUDA graph memory: 0.18 GiB total
+(Worker_TP1 pid=229) INFO 08-20 15:25:50 [gpu_worker.py:578] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9800 is equivalent to --gpu-memory-utilization=0.9722 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9878. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.
+(Worker_TP3 pid=231) 2026-08-20 15:25:26  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `hc_prenorm_gemm_tilelang` with `out_idx=None`
+(Worker_TP3 pid=231) 2026-08-20 15:25:27  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `hc_prenorm_gemm_tilelang`
+(Worker_TP3 pid=231) 2026-08-20 15:25:28  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `mhc_fused_tilelang` with `out_idx=None`
+(Worker_TP3 pid=231) 2026-08-20 15:25:30  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `mhc_fused_tilelang`
+(Worker_TP3 pid=231) 2026-08-20 15:25:31  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:129): TileLang begins to compile kernel `mhc_pre_big_fuse_with_norm_tilelang` with `out_idx=None`
+(Worker_TP3 pid=231) 2026-08-20 15:25:42  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:137): TileLang completes to compile kernel `mhc_pre_big_fuse_with_norm_tilelang`
+(Worker_TP3 pid=231) INFO 08-20 15:25:50 [gpu_model_runner.py:6798] Estimated CUDA graph memory: 0.18 GiB total
+(Worker_TP3 pid=231) INFO 08-20 15:25:50 [gpu_worker.py:578] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9800 is equivalent to --gpu-memory-utilization=0.9722 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9878. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.
+(Worker_TP0 pid=228) INFO 08-20 15:25:50 [gpu_model_runner.py:6798] Estimated CUDA graph memory: 0.18 GiB total
+(Worker_TP0 pid=228) INFO 08-20 15:25:50 [gpu_worker.py:563] Available KV cache memory: 0.8 GiB
+(Worker_TP0 pid=228) INFO 08-20 15:25:50 [gpu_worker.py:578] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9800 is equivalent to --gpu-memory-utilization=0.9722 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9878. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.
+(EngineCore pid=207) INFO 08-20 15:25:50 [kv_cache_utils.py:2235] GPU KV cache size: 180,039 tokens
+(EngineCore pid=207) INFO 08-20 15:25:50 [kv_cache_utils.py:2236] Maximum concurrency for 148,000 tokens per request: 1.22x
+(Worker_TP3 pid=231) INFO 08-20 15:25:57 [flashinfer_sparse_mla_warmup.py:233] Warming up DeepSeek V4 sparse MLA attention for mixed tokens=16.
+(Worker_TP2 pid=230) INFO 08-20 15:25:57 [flashinfer_sparse_mla_warmup.py:233] Warming up DeepSeek V4 sparse MLA attention for mixed tokens=16.
+(Worker_TP1 pid=229) INFO 08-20 15:25:57 [flashinfer_sparse_mla_warmup.py:233] Warming up DeepSeek V4 sparse MLA attention for mixed tokens=16.
+(Worker_TP0 pid=228) INFO 08-20 15:25:57 [flashinfer_sparse_mla_warmup.py:233] Warming up DeepSeek V4 sparse MLA attention for mixed tokens=16.
+(Worker_TP0 pid=228) INFO 08-20 15:25:58 [gpu_model_runner.py:6859] Rank 0: Torch profiler disabled for CUDA graph capture
+(Worker_TP0 pid=228)
+Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/3 [00:00<?, ?it/s]
+Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  33%|███▎      | 1/3 [00:00<00:00,  3.73it/s]
+Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  67%|██████▋   | 2/3 [00:00<00:00,  3.73it/s]
+Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 3/3 [00:00<00:00,  3.74it/s]
+Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 3/3 [00:00<00:00,  3.73it/s]
+(Worker_TP0 pid=228)
+Capturing CUDA graphs (decode, FULL):   0%|          | 0/2 [00:00<?, ?it/s]
+Capturing CUDA graphs (decode, FULL):  50%|█████     | 1/2 [00:00<00:00,  3.36it/s]
+Capturing CUDA graphs (decode, FULL): 100%|██████████| 2/2 [00:00<00:00,  3.29it/s]
+Capturing CUDA graphs (decode, FULL): 100%|██████████| 2/2 [00:00<00:00,  3.30it/s]
+(Worker_TP1 pid=229) INFO 08-20 15:26:00 [gpu_worker.py:726] CUDA graph pool memory: 0.06 GiB (actual), 0.18 GiB (estimated), difference: 0.12 GiB (193.8%).
+(Worker_TP1 pid=229) INFO 08-20 15:26:00 [gpu_worker.py:789] Free memory on device (23.12/23.56 GiB) on startup. Desired GPU memory utilization is (0.98, 23.09 GiB). Actual usage is 22.01 GiB for consumed memory (weights + non-torch), 0.27 GiB for peak activation, and 0.06 GiB for CUDAGraph memory. Replace gpu_memory_utilization config with `--kv-cache-memory=638844601` (0.59 GiB) to fit into requested memory, or `--kv-cache-memory=667508736` (0.62 GiB) to fully utilize gpu memory. Current kv cache memory in use is 0.8 GiB.
+(Worker_TP3 pid=231) INFO 08-20 15:26:00 [gpu_worker.py:726] CUDA graph pool memory: 0.06 GiB (actual), 0.18 GiB (estimated), difference: 0.12 GiB (193.8%).
+(Worker_TP2 pid=230) INFO 08-20 15:26:00 [gpu_worker.py:726] CUDA graph pool memory: 0.06 GiB (actual), 0.18 GiB (estimated), difference: 0.12 GiB (193.8%).
+(Worker_TP3 pid=231) INFO 08-20 15:26:00 [gpu_worker.py:789] Free memory on device (23.12/23.56 GiB) on startup. Desired GPU memory utilization is (0.98, 23.09 GiB). Actual usage is 22.01 GiB for consumed memory (weights + non-torch), 0.27 GiB for peak activation, and 0.06 GiB for CUDAGraph memory. Replace gpu_memory_utilization config with `--kv-cache-memory=639101502` (0.6 GiB) to fit into requested memory, or `--kv-cache-memory=667770880` (0.62 GiB) to fully utilize gpu memory. Current kv cache memory in use is 0.8 GiB.
+(Worker_TP2 pid=230) INFO 08-20 15:26:00 [gpu_worker.py:789] Free memory on device (23.12/23.56 GiB) on startup. Desired GPU memory utilization is (0.98, 23.09 GiB). Actual usage is 22.01 GiB for consumed memory (weights + non-torch), 0.27 GiB for peak activation, and 0.06 GiB for CUDAGraph memory. Replace gpu_memory_utilization config with `--kv-cache-memory=638844601` (0.59 GiB) to fit into requested memory, or `--kv-cache-memory=667508736` (0.62 GiB) to fully utilize gpu memory. Current kv cache memory in use is 0.8 GiB.
+(Worker_TP0 pid=228) INFO 08-20 15:26:00 [gpu_model_runner.py:6905] Graph capturing finished in 2 secs, took 0.06 GiB
+(Worker_TP0 pid=228) INFO 08-20 15:26:00 [gpu_worker.py:726] CUDA graph pool memory: 0.06 GiB (actual), 0.18 GiB (estimated), difference: 0.12 GiB (193.8%).
+(Worker_TP0 pid=228) INFO 08-20 15:26:00 [gpu_worker.py:789] Free memory on device (23.12/23.56 GiB) on startup. Desired GPU memory utilization is (0.98, 23.09 GiB). Actual usage is 22.01 GiB for consumed memory (weights + non-torch), 0.27 GiB for peak activation, and 0.06 GiB for CUDAGraph memory. Replace gpu_memory_utilization config with `--kv-cache-memory=638844601` (0.59 GiB) to fit into requested memory, or `--kv-cache-memory=667508736` (0.62 GiB) to fully utilize gpu memory. Current kv cache memory in use is 0.8 GiB.
+(Worker_TP1 pid=229) INFO 08-20 15:26:00 [jit_monitor.py:79] Kernel JIT monitor activated; monitored JIT compilations during inference will use mode=warn.
+(Worker_TP3 pid=231) INFO 08-20 15:26:00 [jit_monitor.py:79] Kernel JIT monitor activated; monitored JIT compilations during inference will use mode=warn.
+(Worker_TP2 pid=230) INFO 08-20 15:26:00 [jit_monitor.py:79] Kernel JIT monitor activated; monitored JIT compilations during inference will use mode=warn.
+(Worker_TP0 pid=228) INFO 08-20 15:26:00 [jit_monitor.py:79] Kernel JIT monitor activated; monitored JIT compilations during inference will use mode=warn.
+(EngineCore pid=207) INFO 08-20 15:26:01 [core.py:355] init engine (profile, create kv cache, warmup model) took 174.00 s
+(EngineCore pid=207) WARNING 08-20 15:26:06 [vllm.py:1237] VLLM_USE_BREAKABLE_CUDAGRAPH is set, disabling vLLM's torch.compile pipeline. Equivalent to -cc.mode=none.
+(EngineCore pid=207) WARNING 08-20 15:26:06 [vllm.py:1247] Inductor compilation was disabled by user settings, optimizations settings that are only active during inductor compilation will be ignored.
+(EngineCore pid=207) INFO 08-20 15:26:06 [kernel.py:306] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['vllm_c', 'native'], fused_add_rms_norm=['vllm_c', 'native'])
+(EngineCore pid=207) INFO 08-20 15:26:06 [compilation.py:329] Enabled custom fusions: norm_quant, act_quant
+(APIServer pid=1) INFO 08-20 15:26:06 [api_server.py:678] Supported tasks: ['generate']
+(APIServer pid=1) INFO 08-20 15:26:07 [parser_manager.py:37] "auto" tool choice has been enabled.
+(APIServer pid=1) WARNING 08-20 15:26:07 [model.py:1633] Default vLLM sampling parameters have been overridden by the model's `generation_config.json`: `{'temperature': 1.0, 'top_p': 1.0}`. If this is not intended, please relaunch vLLM instance with `--generation-config vllm`.
+(APIServer pid=1) INFO 08-20 15:26:07 [api_server.py:682] Starting vLLM server on http://0.0.0.0:8000
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:37] Available routes are:
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /openapi.json, Methods: GET, HEAD
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /docs, Methods: GET, HEAD
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /docs/oauth2-redirect, Methods: GET, HEAD
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /redoc, Methods: GET, HEAD
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /load, Methods: GET
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /version, Methods: GET
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /health, Methods: GET
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /metrics, Methods: GET
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /tokenize, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /detokenize, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/models, Methods: GET
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /ping, Methods: GET
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /ping, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /invocations, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/chat/completions, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/chat/completions/batch, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/responses, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/responses/{response_id}, Methods: GET
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/responses/{response_id}/cancel, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/completions, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/messages, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/messages/count_tokens, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /generative_scoring, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /scale_elastic_ep, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /is_scaling_elastic_ep, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/chat/completions/render, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/completions/render, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/chat/completions/derender, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/completions/derender, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /inference/v1/generate, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:08 [launcher.py:99] API server: waiting for HTTP server to start
+(APIServer pid=1) INFO:     Started server process [1]
+(APIServer pid=1) INFO:     Waiting for application startup.
+(APIServer pid=1) INFO:     Application startup complete.
+(APIServer pid=1) INFO 08-20 15:26:11 [launcher.py:105] API server: HTTP server started
+(APIServer pid=1) INFO:     127.0.0.1:41592 - "GET /health HTTP/1.1" 200 OK
+candidate_start_healthy

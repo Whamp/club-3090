@@ -9,7 +9,9 @@ gguf_dsv4`), quantized operators run as vLLM-native CUDA kernels.
 - **Source:** `Whamp/vLLM` branch `incubate/gguf-tp-sm86`, promoted commit
   `3ec20cebe` (tree `82a1def1…`). All engine sources are in that branch;
   nothing in this directory is a fork-vendored copy.
-- **Production profile:** `../compose/multi4/gguf-tp/base.yml` (port 8034).
+- **Production profile:** `../compose/multi4/gguf-tp/base.yml` (port 8034,
+  `fp8_ds_mla`). The validated opt-in `fp4.yml` uses `fp4_ds_mla` without
+  changing the production default.
 - **Status:** ✅ production default for DeepSeek V4 since 2026-08-18; the
   canonical llama.cpp profile (`models/deepseek-v4-flash-0731/llama-cpp/
   compose/multi4/antirez-iq2-xxs/fast-prefill.yml`) is the validated rollback.
@@ -38,7 +40,7 @@ pilot: reward 0.9949 vs llama.cpp 0.9898, 2.65× faster wall-clock.
 | `--max-num-seqs` | 2 | operator-chosen 2026-08-18; aggregate 128.1 tok/s at 2. Raising to 8 gives 254.0 tok/s but forces batched 192 (see below) |
 | `--max-num-batched-tokens` | 256 | default again after seq8→2: restores full cache-busted prefill (540.7 tok/s). **Only drop to 192 if max_num_seqs is raised to 8** (at 256 the pool 141,770 < 140K need; engine refuses, estimated max 137,216) |
 | `--gpu-memory-utilization` | 0.98 | 0.985+ fails the startup pre-flight (free-memory gate) |
-| `--kv-cache-dtype` | fp8_ds_mla | DeepSeek UE8M0-packed MLA cache |
+| `--kv-cache-dtype` | fp8_ds_mla | DeepSeek UE8M0-packed MLA cache; `fp4.yml` is the validated opt-in |
 | env `VLLM_HIER_ALL_REDUCE` | `0,1;2,3` | PCIe islands; no NVLink; custom all-reduce disabled (`--disable-custom-all-reduce`) |
 
 Measured (2026-08-18, 3 warm + 5 measured, at 140K): decode **78.6** single /
@@ -48,6 +50,42 @@ arm: 254.0 aggregate decode (batched 192, prefill 513.6). Pool at the
 current profile: 156,738 tokens (1.06× at 148K). VRAM idle headroom ~99
 MiB/card; under load at 140K it was 35–41 MiB/card — capacity-ceiling
 class; reopen condition = OOM at or below operating context.
+
+## Optional FP4 DS-MLA cache
+
+`compose/multi4/gguf-tp/fp4.yml` adds a native `fp4_ds_mla` cache without
+changing the GGUF weights, attention math after cache dequantization, FP8
+indexer cache, Q8 KV fallback, or production `base.yml` profile.
+
+Each 512-value MLA row stores 448 NoPE values as packed E2M1 with fourteen
+UE8M0 group-32 scales, followed by the original 64 BF16 RoPE values. The
+physical row is 368 bytes: 224 packed NoPE bytes, 128 RoPE bytes, and a
+16-byte scale tail. The FP8 row remains byte-for-byte 584 bytes.
+
+Matched server60 results (2026-08-20, 4× RTX 3090, zero serving-process swap):
+
+| result | `fp8_ds_mla` | `fp4_ds_mla` | FP4 delta |
+|---|---:|---:|---:|
+| cache tokens in the 0.8 GiB pool | 156,373 | 180,039 | +15.1% |
+| narrative decode | 79.84 tok/s | 80.36 tok/s | +0.7% |
+| code decode | 79.82 tok/s | 80.37 tok/s | +0.7% |
+| concurrency-2 aggregate | 126.02 tok/s | 127.27 tok/s | +1.0% |
+| cache-busted prefill, 10K | 541.79 tok/s | 524.87 tok/s | -3.1% |
+| cache-busted prefill, 93K | 518.82 tok/s | 495.79 tok/s | -4.4% |
+| quick quality | 27/30 | 27/30 | identical failures |
+
+The FP4 path passed independent E2M1/UE8M0 writer/reader oracles, native
+FlashMLA decode and prefill parity, deterministic CUDA Graph replay, SM86
+cubin inspection, Compute Sanitizer memcheck/racecheck, API/tool/reasoning
+checks, and exact NIAH retrieval at 136K. It remains opt-in because only
+31 MiB/card remained during the 136K stress ladder, below the normal 1 GiB
+release guard. The evidence and decision are under
+`.research/gguf-tp-q4-kv/`.
+
+`FP4-MANIFEST.json` and `build-fp4-kv-image.sh` pin the thin-image inputs:
+Whamp/vLLM `633815f68`, Whamp/forks-flash-mla-int `81a06aa6`, the SM86 stable
+extension, the FlashMLA wheel, all 14 runtime overlay files, and the final
+image digest.
 
 ## Image build contract
 

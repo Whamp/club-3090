@@ -5,34 +5,36 @@
 # Profile (at-a-glance):
 #   Model:     DeepSeek-V4-Flash-0731 native GGUF (Antirez IQ2_XXS/Q2_K/Q8_0
 #              exact bytes, pinned sha256 ca22ae2f…; gguf_dsv4 loader)
-#   Engine:    Whamp/vLLM 3ec20cebe (incubate/gguf-tp-sm86) — native GGUF
-#              tensor-parallel engine, from-scratch SM86 kernels, no llama.cpp
+#   Engine:    Whamp/vLLM 633815f68 (feat/gguf-tp-q4-kv) — native GGUF TP
+#              plus native FP4 DS-MLA writes, decode, and prefill on SM86
 #   Topology:  4× RTX 3090 PCIe (TP=4, no NVLink; hierarchical AR 0,1;2,3)
 #   Drafter:   none (MTP omitted from artifact)
-#   KV:        fp8_ds_mla, block 256, DEEPSEEK_SPARSE_SWA sparse indexer
+#   KV:        fp4_ds_mla, block 256, DEEPSEEK_SPARSE_SWA sparse indexer;
+#              368-byte rows: E2M1/UE8M0 NoPE + unchanged BF16 RoPE
 #   Vision:    no
 #   Max ctx:   148,000 tokens; max_num_seqs=2; max_num_batched_tokens=256;
 #              GPU KV pool 156,738 tokens (1.06× max-model-len)
 #   Genesis:   N/A — Genesis is Qwen3-Next-specific
 #   Reasoning: off · low · high · max (native reasoning_parser)
-#   Status:    ✅ Production — DeepSeek V4 serving default on server60
-#              (promoted 2026-08-18; canonical llama.cpp demoted to rollback)
-#   Measured:  server60 4× RTX 3090, 2026-08-18 (3 warm + 5 measured):
-#              decode 78.6 tok/s single · 128.1 tok/s aggregate at 2 concurrent
-#              · cache-busted prefill 540.7 tok/s · full-140K recall correct ·
-#              0 preemptions/evictions/OOM across all experiments · zero swap.
-#              (seq8@140K arm: 254.0 aggregate decode; requires batched 192.)
-#              DeepSWE SuperJSON pilot (M8): partial reward 0.9949 vs llama.cpp
-#              0.9898 control, 2.65× faster wall-clock.
-#   Correctness: deterministic canary, auto tool call, post-tool continuation,
-#                NIAH exact recall at 119,730 and 139,565 tokens passed.
-#   Quality:   Quick quality gate 27/30 pass@1 / pass@3 (M5, seq2 config).
+#   Status:    🧪 Validated opt-in — FP8 base.yml remains production default.
+#   Measured:  server60 4× RTX 3090, 2026-08-20 (3 warm + 5 measured):
+#              decode 80.36/80.37 tok/s narrative/code · 127.27 tok/s aggregate
+#              at 2 concurrent · cache-busted prefill 524.87 tok/s at 10K and
+#              495.79 tok/s at 93K · 180,039 cache tokens (1.22× at 148K) ·
+#              zero serving-process swap during matched measurements.
+#   Correctness: deterministic generation, tool/reasoning/post-tool, CUDA Graph,
+#                verify-full, and NIAH exact recall at 136K passed.
+#   Quality:   Quick quality gate 27/30 pass@1 / pass@3, identical failures to
+#              the contemporaneous FP8 control.
 #   Best for:  Coding-agent workloads; deep single-request context.
 #              (For aggregate concurrency, raise max_num_seqs to 8 — measured
 #              at 140K: 254.0 tok/s; requires batched 192.)
 # Caveats:
 #   - Local custom image, digest-pinned (see vllm/gguf-tp/ for the build
-#     contract + MANIFEST.json). Only runs on server60's rig layout.
+#     contract + FP4-MANIFEST.json). Only runs on server60's rig layout.
+#   - Capacity-ceiling profile: only 31 MiB/card remained during the 136K
+#     stress ladder, below the normal 1 GiB release guard. Functional checks
+#     passed, but use base.yml when FP8's lower-risk cache is preferred.
 #   - max_num_seqs 8→2 and max_model_len 140,000→148,000 on 2026-08-18
 #     (operator direction): batched tokens returned to 256, restoring full
 #     prefill (540.7 tok/s); pool 156,738 tokens (1.06× at 148K). At 148K the
@@ -54,15 +56,14 @@
 #   - All four GPUs are occupied; do not co-start another GPU service.
 # Requires-homogeneous-arch: true
 # ---------------------------------------------------------------------------
-# Production deployment (server60): `docker compose up -d` from this directory.
-# Serves DeepSeek V4 on :8034. Image built from Whamp/vLLM incubate/gguf-tp-sm86
-# commit 3ec20cebe (tree 82a1def1…); the 21 overlaid engine files are
-# byte-identical to that commit (verified) and pinned in MANIFEST.json.
+# Opt-in deployment (server60): `docker compose -f fp4.yml up -d`.
+# Serves DeepSeek V4 on :8034. Image inputs are pinned in FP4-MANIFEST.json:
+# Whamp/vLLM 633815f68 and Whamp/forks-flash-mla-int 81a06aa6.
 # ===========================================================================
 services:
   deepseek-v4-gguf-tp-sm86:
-    image: club-3090/deepseek-v4-gguf-tp@sha256:f91e8283e7ad116b8664b4a936dba88ebafcb8910a968dce2a3c34420f010adf
-    container_name: "${ESTATE_CONTAINER:-dsv4-gguf-tp-prod}"
+    image: club-3090/deepseek-v4-gguf-tp@sha256:eb94d5049bf4d8d55c335ac1d2445382a811b7312d28e3e73088011a8103e181
+    container_name: "${ESTATE_CONTAINER:-dsv4-gguf-tp-fp4}"
     restart: ${CLUB3090_RESTART:-unless-stopped}
     ports:
       - "${BIND_HOST:-0.0.0.0}:${PORT:-8034}:8000"
@@ -105,7 +106,7 @@ services:
       - "--gpu-memory-utilization"
       - "0.98"
       - "--kv-cache-dtype"
-      - "fp8_ds_mla"
+      - "fp4_ds_mla"
       - "--load-format"
       - "gguf_dsv4"
       - "--quantization"

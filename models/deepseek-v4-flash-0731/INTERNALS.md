@@ -502,3 +502,27 @@ prefill (540.7 tok/s vs 513.6 at 192). The 148K operating point is
 fit-gate-confirmed only — long-context recall at the new ceiling was not
 re-run by direction. The seq8 arm stays available (254.0 aggregate decode)
 with the 192 requirement documented in the compose header.
+
+## Native FP4 DS-MLA cache experiment (2026-08-20)
+
+The opt-in `vllm/compose/multi4/gguf-tp/fp4.yml` profile replaces only the
+physical MLA cache representation. It keeps the Antirez GGUF weights,
+attention math after cache dequantization, BF16 RoPE values, FP8 sparse-indexer
+cache, routing, tool/reasoning parsers, and TP topology unchanged.
+
+The `fp4_ds_mla` row is 368 bytes versus 584 for `fp8_ds_mla`: 448 NoPE
+values become packed E2M1 nibbles with fourteen group-32 UE8M0 scales, while
+the 64 RoPE values stay BF16. AppMana FlashMLA commit `81a06aa6` implements
+native SM86 sparse decode and prefill; Whamp/vLLM commit `633815f68`
+integrates cache allocation, all writer paths, readers, paging, CUDA Graphs,
+and attention dispatch. `vllm/gguf-tp/FP4-MANIFEST.json` pins the complete
+thin-image lineage.
+
+Matched zero-swap server60 testing found 180,039 cache tokens versus 156,373
+for FP8 (+15.1%), effectively unchanged decode and concurrency-2 throughput,
+and 3.1–4.4% lower cache-busted prefill. Both cache formats scored 27/30 on
+the quick quality gate with the same failures. FP4 recalled the exact needle
+at 136K and passed verify-full, native decode/prefill oracles, CUDA Graph replay,
+memcheck, and racecheck. It stays opt-in rather than replacing `base.yml`
+because only 31 MiB/card remained during the 136K stress ladder, below the
+1 GiB sustained-service guard.

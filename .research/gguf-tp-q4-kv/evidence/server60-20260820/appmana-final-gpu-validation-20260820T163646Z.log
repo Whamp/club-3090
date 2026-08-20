@@ -1,0 +1,51 @@
+dsv4-gguf-tp-prod
+Using Python 3.12.3 environment at: /opt/venv
+Resolved 1 package in 2ms
+Prepared 1 package in 24ms
+Uninstalled 1 package in 2ms
+Installed 1 package in 4ms
+ - flash-mla==2.0.0 (from file:///tmp/flash_mla-2.0.0-cp39-abi3-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl)
+ + flash-mla==2.0.0 (from file:///tmp/flash_mla-2.0.0-cp39-abi3-linux_x86_64.whl)
+..............................                                           [100%]
+=============================== warnings summary ===============================
+../opt/venv/lib/python3.12/site-packages/_pytest/cacheprovider.py:469
+  /opt/venv/lib/python3.12/site-packages/_pytest/cacheprovider.py:469: PytestCacheWarning: could not create cache path /src/.pytest_cache/v/cache/nodeids: [Errno 30] Read-only file system: '/src/pytest-cache-files-xuidg9ub'
+    config.cache.set("cache/nodeids", sorted(self.cached_nodeids))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+30 passed, 1 warning in 15.65s
+Using Python 3.12.3 environment at: /opt/venv
+Resolved 1 package in 1ms
+Prepared 1 package in 25ms
+Uninstalled 1 package in 2ms
+Installed 1 package in 5ms
+ - flash-mla==2.0.0 (from file:///tmp/flash_mla-2.0.0-cp39-abi3-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl)
+ + flash-mla==2.0.0 (from file:///tmp/flash_mla-2.0.0-cp39-abi3-linux_x86_64.whl)
+========= COMPUTE-SANITIZER
+.                                                                        [100%]
+=============================== warnings summary ===============================
+../opt/venv/lib/python3.12/site-packages/_pytest/cacheprovider.py:469
+  /opt/venv/lib/python3.12/site-packages/_pytest/cacheprovider.py:469: PytestCacheWarning: could not create cache path /src/.pytest_cache/v/cache/nodeids: [Errno 30] Read-only file system: '/src/pytest-cache-files-8mtmnibm'
+    config.cache.set("cache/nodeids", sorted(self.cached_nodeids))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1 passed, 8 deselected, 1 warning in 4.65s
+========= ERROR SUMMARY: 0 errors
+Using Python 3.12.3 environment at: /opt/venv
+Resolved 1 package in 1ms
+Prepared 1 package in 20ms
+Uninstalled 1 package in 2ms
+Installed 1 package in 3ms
+ - flash-mla==2.0.0 (from file:///tmp/flash_mla-2.0.0-cp39-abi3-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl)
+ + flash-mla==2.0.0 (from file:///tmp/flash_mla-2.0.0-cp39-abi3-linux_x86_64.whl)
+========= COMPUTE-SANITIZER
+.                                                                        [100%]
+=============================== warnings summary ===============================
+../opt/venv/lib/python3.12/site-packages/_pytest/cacheprovider.py:469
+  /opt/venv/lib/python3.12/site-packages/_pytest/cacheprovider.py:469: PytestCacheWarning: could not create cache path /src/.pytest_cache/v/cache/nodeids: [Errno 30] Read-only file system: '/src/pytest-cache-files-mf94uzkp'
+    config.cache.set("cache/nodeids", sorted(self.cached_nodeids))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1 passed, 8 deselected, 1 warning in 22.93s
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+restored=running health=healthy restarts=0
