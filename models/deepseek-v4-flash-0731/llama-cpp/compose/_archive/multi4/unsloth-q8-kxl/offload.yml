@@ -1,0 +1,179 @@
+# ARCHIVED 2026-08-16 — DO NOT LAUNCH. This CPU-offload experiment is
+# superseded by llamacpp/deepseek-flash-multi4-antirez-iq2-fast-prefill. It remains only for historical links.
+# ===========================================================================
+# Profile (at-a-glance):
+#   Model:     DeepSeek-V4-Flash-0731 (284B MoE, unsloth UD-Q8_K_XL, 151 GB)
+#   Engine:    llama.cpp (mainline server-cuda-b10236, external DSpark drafter)
+#   Topology:  4× 24 GB PCIe (layer-split -ts 1,1,1,1)
+#   Drafter:   DSpark n=5 external (--spec-type draft-dspark) — REQUIRES b10236+
+#   KV:        fp16 (llama.cpp default)
+#   Vision:    no
+#   Max ctx:   204800
+#   Genesis:   N/A — llama.cpp engine
+#   Status:    🗑️ Deprecated
+#   Caveats:   • NO performance or quality numbers are published for this slug —
+#                it is INCUBATING. A canonical bench and the 8-pack are both owed;
+#                only operational validation (boot + prefill probe + verify-full) exists.
+#              • ⚠️ NEVER BOOTED BY US — authored from measured 2-card data plus a
+#                calibrated extrapolation. We have 2 cards. Every number in the
+#                multi4 row of BENCHMARKS is an ESTIMATE until a 4-card owner runs it.
+#              • Quality UNTESTED on this tier (no 8-pack).
+#              • Needs ~113 GB host RAM (est.) — lower than the 2-card ~140 GB,
+#                see below, but still a hard gate.
+#              • Residency counts (~10 layers) are extrapolated with the ~0.55
+#                calibration factor, not measured. They may be optimistic.
+#   Best for:  4-card owners who want the QUALITY tier. ⭐
+# ---------------------------------------------------------------------------
+# Sibling comparison:
+#   unsloth-q8-kxl/offload.yml  · mainline b10236 · FP16 KV · 200K · CPU offload
+#   antirez-iq2-xxs/fast-prefill.yml · external fork · Q8 KV · 430K · all-GPU
+#
+# ⭐ WHY MULTI4 IS WORTH SHIPPING, and it is not "more cards = more speed":
+#
+# Every layer whose experts are pinned to a GPU is a layer whose experts are NOT in
+# host RAM. So host RAM FALLS as card count rises:
+#
+#   | rig        | resident layers | host RAM  |
+#   |------------|----------------:|----------:|
+#   | 2× 24 GB   |  2 (measured)   | ~140 GB   |
+#   | 4× 24 GB   |  8 (@milano, 2026-08-07) | **~120 GB** |
+#   | 4× 32 GB   | ~15 (est.)      |  ~95 GB   |
+#
+# 128 GB is a very common host configuration. At ~140 GB the 2-card Q8 slug EXCLUDES
+# those users and pushes them to the low-bit tier; at ~120 GB the 4-card config FITS.
+# So multi4 is what puts the QUALITY tier inside a mainstream RAM budget — that, not
+# throughput, is its argument.
+#
+# ⚠️ STATIC ARITY IS WHY THIS FILE EXISTS SEPARATELY. A folded `command:` string
+#    cannot vary its number of -ot flags, so an N-card rig needs N device slots plus
+#    the catch-all. The dual compose carries 2; this one carries 4. The launcher-side
+#    sizing is already N-ary — it reads free VRAM per device and emits one rule each,
+#    so only the compose is topology-shaped.
+#
+# ⚠️ -ot IS FIRST-MATCH-WINS — all four device rules MUST precede the =CPU rule.
+#    Defaults match NO layer (blk.99999), so an unset env degrades to all-experts-CPU
+#    rather than to an OOM. Asymmetric counts fall out for free, which is what mixed
+#    rigs (e.g. 5090 + 3090) need.
+# ⚠️ THESE TWO CONSTANTS ARE 4-CARD-DERIVED — do NOT copy them from the dual compose.
+# This slug originally shipped with the dual's values (reserve 18000 / host 146) because
+# it was authored by copying that file, and neither was re-derived for four cards. Both
+# were wrong in the same direction and the slug contradicted its own purpose:
+#   • reserve 18000 was sized for a 2-WAY dense split. On four cards each card carries a
+#     quarter of the dense stack, so the budget was far too conservative — the sizer
+#     granted 1 bundle/card where 2 fit, i.e. HALF the residency the hardware holds.
+#   • host 146 GB then followed from those 4 resident layers — and the registry note for
+#     this very slug sells it as "what puts the quality tier inside a mainstream RAM
+#     budget", naming 128 GB. So preflight REFUSED the exact box the slug exists for.
+# Corrected from a real 4x3090 + 128 GB boot by @milano (Discord, 2026-08-07), and the
+# pair is self-consistent with our own residency math: reserve 12000 -> 2 bundles/card ->
+# 8 resident -> 137.1 GiB routed - 8x3.19 GiB = 111.6 GiB = ~120 GB host. That ~120 is
+# what preflight now COMPUTES on a real 4x24 rig (worst case minus detected residency);
+# the header below stays the all-on-CPU worst case. It briefly shipped as 120 here —
+# which under-gated any 4-card rig fitting fewer than 8 bundles (4x16 GB fits ZERO and
+# truly needs the full ~146). The gate subtracting residency itself is what lets one
+# header serve every card size.
+# CPU-Offload-Host-RAM-GB: 146
+#   ⚠️ MUST stay the ALL-experts-on-CPU worst case — preflight_cpu_offload_ram()
+#   subtracts this rig's detected residency grant itself (offload_residency_grant_mib),
+#   so pre-baking expected residency here would DOUBLE-COUNT it and under-gate.
+#   Same quant, same worst case as the dual Q8 compose (guarded by the offload test).
+#   Measured, not computed (the quant name does not give you the byte size).
+# CPU-Offload-Bundle-MiB: 3264
+# CPU-Offload-MoE-Layers: 43
+# CPU-Offload-First-MoE-Layer: 0
+#   0 = no dense prefix on this model (all 43 layers are MoE). Models WITH one
+#   (Laguna=1, Inkling=2) must set it: a residency rule naming a dense layer
+#   silently matches nothing, so fewer layers land resident than we granted.
+# CPU-Offload-GPU-Reserve-MiB: 14500
+#   Inputs for resolve_offload_residency(). RESERVE = this compose's true
+#   per-card engine cost (4-way dense split + drafter share + compute buffers).
+#   Sizing is additive from DETECTED FREE VRAM (#931 recalibration):
+#     fit = (free − reserve − first-card-extra − margin) / bundle
+#   14500 (was 12000 in the ×0.55 era) grants the field-validated 2/card on
+#   4x24 GB (@milano's boot). A 3rd bundle/card is UNTESTED on any rig — do not
+#   lower this to chase it without a deep-prefill validation at depth.
+# ===========================================================================
+
+services:
+  llama-cpp-deepseek-flash:
+    image: ${LLAMACPP_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-cuda-b10236}
+    container_name: "${ESTATE_CONTAINER:-llama-cpp-deepseek-flash-q8-multi4}"
+    restart: unless-stopped
+    ports:
+      - "${BIND_HOST:-0.0.0.0}:${ESTATE_PORT:-${PORT:-8032}}:8080"
+    volumes:
+      - "${MODEL_DIR:-../../../../../../models-cache}:/models:ro"
+    shm_size: "16g"
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    # ⚠️ THREADS is INJECTED by the launcher as nproc/2 — `-t` must track the rig, not
+    # a number that suited the reference box. The `:-8` below is the bare-`docker
+    # compose up` fallback and is deliberately LOW: the error is ASYMMETRIC.
+    # Measured on 35B-A3B: over-subscribing costs -69% (-t 48 on 32 cores, 94% CPU for
+    # 31% of peak) while under-subscribing costs -9.6% (-t 8 vs the -t 16 peak). When
+    # the core count is unknown, being too low is ~7x cheaper than being too high.
+    # ⚠️ LIST FORM, NOT a folded `command: >-` string — REQUIRED, not style.
+    # Docker Compose's command-line parser REJECTS `(gate|up|down)` inside a folded
+    # string: `invalid command line string`. The alternation is the trigger (verified
+    # by bisection; `blk\.[0-9]+\.ffn_exps\.weight=CPU` parses fine, adding the group
+    # breaks it). The list form skips shell parsing altogether, so the regex — and any
+    # injected OT_G* value — survives byte-for-byte.
+    command:
+      - '-m'
+      - '/models/deepseek-v4-flash-0731-gguf/UD-Q8_K_XL/DeepSeek-V4-Flash-0731-UD-Q8_K_XL-00001-of-00005.gguf'
+      - '--host'
+      - '0.0.0.0'
+      - '--port'
+      - '8080'
+      - '--alias'
+      - 'deepseek-v4-flash'
+      - '-np'
+      - '1'
+      - '-c'
+      - '${CTX:-204800}'
+      - '-ngl'
+      - '99'
+      - '-sm'
+      - 'layer'
+      - '-ts'
+      - '1,1,1,1'
+      - '-fa'
+      - 'on'
+      - '-ot'
+      - '${OT_G0:-blk\.99999\.ffn_(gate|up|down)_exps\.weight=CUDA0}'
+      - '-ot'
+      - '${OT_G1:-blk\.99999\.ffn_(gate|up|down)_exps\.weight=CUDA1}'
+      - '-ot'
+      - '${OT_G2:-blk\.99999\.ffn_(gate|up|down)_exps\.weight=CUDA2}'
+      - '-ot'
+      - '${OT_G3:-blk\.99999\.ffn_(gate|up|down)_exps\.weight=CUDA3}'
+      - '-ot'
+      - 'blk\.[0-9]+\.ffn_(gate|up|down)_exps\.weight=CPU'
+      - '-t'
+      - '${THREADS:-8}'
+      - '-ub'
+      - '4096'
+      - '-b'
+      - '4096'
+      - '--cache-prompt'
+      - '--no-mmap'
+      - '-md'
+      - '/models/deepseek-v4-flash-0731-gguf/dspark/dspark-DeepSeek-V4-Flash-0731-Q8_0.gguf'
+      - '--spec-type'
+      - 'draft-dspark'
+      - '--spec-draft-n-max'
+      - '${SPEC_N:-5}'
+      - '--fit'
+      - 'off'
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:${PORT:-8032}/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 40
+      start_period: 900s

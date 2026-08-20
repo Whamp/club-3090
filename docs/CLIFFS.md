@@ -4,30 +4,82 @@ Comprehensive deep-dive into Cliff 1 and Cliff 2: what they are, why they fire, 
 
 This document supersedes earlier characterizations in CHANGELOG and FAQ where they conflict — those have been corrected to match what's documented here.
 
+> ⚠️ **2026-05-05 update — PN59 doesn't close single-card Cliff 2b on consumer Ampere.** Genesis v7.72.2 advertised PN59 streaming-GDN as the structural Cliff 2b fix, but its eligibility check rejects calls with `chunk_indices`/`chunk_offsets` populated — which vLLM's mandatory `--max-num-batched-tokens 4128` always sets when prompts exceed that. PN59 falls back to `_vanilla_path`, which OOMs at the same `chunk_o.py:161 torch.empty_like(v)` site. Affects `long-text.yml`, `long-text-no-mtp.yml`, `long-vision.yml` on single 24 GB cards with prompts >~50K. **Workarounds**: use `dual.yml`, `dual-turbo.yml` (TP=2 — escapes the cliff per the section below), or `llamacpp/default` (different engine). Filed as [Sandermage/genesis-vllm-patches#22](https://github.com/Sandermage/genesis-vllm-patches/issues/22) with reproducer + 4 fix proposals; pending Sander's review.
+
 > **Cross-reference:** Sandermage's Genesis tree maintains a broader catalog of [8 cliffs](https://github.com/Sandermage/genesis-vllm-patches/blob/main/docs/CLIFFS.md) covering patch behavior across configs and pin versions: Cliff 1 (FA2 lse), Cliff 2 (GDN fwd_h), Cliff 3 (TQ + spec-verify K+1 + FULL cudagraph), Cliff 4 (non-pow-2 GQA + P67), Cliff 5 (ngram strict prompt_lookup_min), Cliff 6 (MoE v0.20+ for non-FP8, [vllm#41306](https://github.com/vllm-project/vllm/pull/41306)), Cliff 7 (DFlash 24 GB OOM at >80K), Cliff 8 (anchor drift on vLLM pin bumps). Our doc here focuses on Cliff 1 + Cliff 2 with the Qwen3.6-27B / RTX 3090 forensics that motivated those Genesis cliffs.
 
 ---
 
 ## TL;DR
 
-**Two distinct OOM "cliffs"** fire during prefill on a single 24 GB RTX 3090 when serving Qwen3.6-27B with vLLM + Genesis patches. They affect different workload patterns and live in different libraries:
+**Three distinct OOM "cliffs"** fire on a single 24 GB RTX 3090 when serving Qwen3.6-27B with vLLM + Genesis patches. They affect different workload patterns:
 
-| | **Cliff 1** | **Cliff 2** |
-|---|---|---|
-| Trigger | 25K+ token tool messages → chunked prefill | Single prompt > ~50–60K tokens |
-| OOM site | `_vllm_fa2_C.varlen_fwd` (FlashAttention 2) | `fla.ops.chunk_gated_delta_rule_fwd` |
-| Root cause | `softmax_lse` allocated as `[num_seqs, num_heads, max_seqlen]` — padded to **max_seqlen parameter, not actual cu_seqlens** | DeltaNet/GDN intermediate state buffer non-streaming, sized by actual sequence length |
-| Affects | TQ3 paths primarily (`docker-compose.yml` at higher max-ctx, `long-vision.yml`, `long-text.yml`) | All single-card vLLM configs at long single prompts |
-| Our mitigation | **PN8** (Genesis patch) closes it on `tools-text.yml` (FP8+MTP); cap max-ctx at 48K on TQ3 default | **TP=2** (`dual.yml`) splits the GDN state across cards (verified at 237K); **llama.cpp** uses a different GDN implementation entirely |
-| Real fix | vLLM-side clamp at FA call site (asked Sandermage in [Genesis #11](https://github.com/Sandermage/genesis-vllm-patches/issues/11)) OR FA2 source fix ([Dao-AILab/flash-attention#1011](https://github.com/Dao-AILab/flash-attention/issues/1011)) | Streaming GDN forward in `fla.ops` — no upstream effort underway. Or FlashQLA Ampere port (QwenLM, currently SM90+ only) |
+| | **Cliff 1** | **Cliff 2a (single-prompt)** | **Cliff 2b (multi-turn)** ⭐ NEW |
+|---|---|---|---|
+| Trigger | 25K+ token tool messages → chunked prefill | Single prompt > ~50–60K tokens | ~21-26K **accumulated** multi-turn context (hermes/openhands/Cline/etc.) |
+| OOM site | `_vllm_fa2_C.varlen_fwd` (FlashAttention 2) | `fla.ops.chunk_gated_delta_rule_fwd → chunk_fwd_o → empty_like(v)` | Same kernel as 2a, fires earlier under multi-turn KV pressure |
+| Root cause | `softmax_lse` padded to max_seqlen | GDN forward live-tensor cascade (~500 MiB at T=4128) | Same cascade; multi-turn KV accumulation eats activation headroom |
+| Allocation requested at OOM | varies | 50 MiB | 38-50 MiB (per chunk, not scaled by ctx) |
+| Affects | TQ3 paths at large prompts | All single-card vLLM at long single prompts | **All single-card vLLM under accumulating-context agentic traffic** |
+| Closed status | **CLOSED** ✅ — PN25 + PN30 in v7.69, PN17 (FA clamp) in v7.64 | ⚠️ **REGRESSED 2026-05-05** — v7.72.2 PN59 doesn't engage on chunked-prefill, OOMs at `chunk_o.py:161` ([genesis#22](https://github.com/Sandermage/genesis-vllm-patches/issues/22)) | **NOT CLOSED** ❌ — fires in 4-5 turns of agentic traffic regardless of config |
+| Our mitigation | Genesis PN17/PN25 (default-on) | **`vllm/dual` or `dual-turbo` (TP=2)** OR **`llamacpp/default`** — single-card no longer reliable above ~50K | **`vllm/dual` (TP=2)** OR **`llamacpp/default`** — see "Why those escape" below |
+| Real fix | Already shipped | **Pending Sander review** of [genesis#22](https://github.com/Sandermage/genesis-vllm-patches/issues/22) — PN59 eligibility-gate adjustment | **Streaming refactor of `chunk_gated_delta_rule_fwd`** — partial via PN59 but eligibility-gate excludes the path that needs it |
 
-**Practical impact today:** users following the SINGLE_CARD.md TL;DR table land on cliff-safe configs by default. The cliffs only bite users who explicitly opt into long-context variants AND have specific workload patterns (big tool returns, RAG single-shot prompts).
+**Practical impact today:** Cliff 1 is closed. **Cliff 2a regressed under v7.72.2** on single-card 24 GB long-context — PN59 was supposed to be the structural fix but doesn't engage on the chunked-prefill path that 24 GB single-card configs are forced into. **Cliff 2b is open and bites every user running an agentic coding client on single-card vLLM** — see [#41](https://github.com/noonghunna/club-3090/issues/41) for the full validation matrix and [genesis-vllm-patches#22](https://github.com/Sandermage/genesis-vllm-patches/issues/22) for the v7.72.2 cross-rig finding.
 
 ---
 
-## vLLM pin compatibility status (master shipped on v0.20 + Genesis v7.66 — 2026-05-02)
+## Why TP=2 escapes Cliff 2b (and Cliff 2a above 60K)
 
-**Master now ships on `vllm/vllm-openai:nightly-7a1eb8ac2ec4ea69338c51dc7afd4b15010abfa8` (`0.20.1rc1.dev16+g7a1eb8ac2`) + Genesis v7.66 dev tip (commit `fc89395`).** Cliff 1 mech B (inductor compile-path FFN intermediate buffer leak) is **closed** across all 4 TQ3 composes via PN25 v3 (local import-time backport for TP=1) + PN30 dst-shaped temp fix (local correction for Sander's compact `.contiguous()`). verify-stress.sh 7-probe ladder: 6/7 pass on every TQ3 variant; only Cliff 2 architectural fails.
+`chunk_gated_delta_rule_fwd` allocates intermediate tensors shaped `[1, T, H, D]` where `H=48` value heads at TP=1. With TP=2, the heads dimension is sharded — each card sees `H=24`. **Same kernel runs on each card, but per-card live-tensor sizes are halved.**
+
+| Tensor | Size at TP=1 (H=48) | Size at TP=2 (H=24 per card) |
+|---|---|---|
+| v, u, v_new, o, w | 48 MiB each (×5 = 240) | **24 MiB each (×5 = 120)** |
+| A | 48 MiB | **24 MiB** |
+| Ai | 24 MiB | **12 MiB** |
+| h | 97 MiB | **49 MiB** |
+| Total per-card live FLA set | ~500 MiB | **~250 MiB** |
+
+Plus per-card model weights drop from ~14 GB to ~7 GB (sharded), KV cache from full to half, etc. Per-card peak stays comfortably below 24 GB even with 25K accumulated multi-turn context. **Validated 2026-05-03**: dual.yml passed 5×5 v2 continuous soak with 0 errors / 0 MiB growth, 23.5 GB per-card steady, 111 TPS p50 decode.
+
+Cost paid for this: NCCL allreduce per layer between cards (~30-50µs/token on PCIe), ~10-20% TPS overhead vs single-card if single-card actually worked.
+
+> **Reading soak-test results for TP=2 / llama.cpp configs.** A clean `verdict PASS` on `dual.yml` / `dual-turbo.yml` / `llamacpp/default` does NOT mean the Cliff 2 mitigation patches in the compose's overlay set (PN-* sidecars, FLA chunked-prefill stabilizers, etc.) are doing the work — the topology alone takes that failure mode off the table. PASS on TP=2 reflects "the configuration is stable end-to-end at this depth," not "patches X/Y are load-bearing here." For per-patch attribution, run the same soak with overlays stripped and compare. See `scripts/soak-test.sh --help` ("PASS VERDICT" block) and [#140](https://github.com/noonghunna/club-3090/issues/140).
+
+## Why llama.cpp escapes Cliff 2b on a single card
+
+llama.cpp uses **different kernels and a different memory allocator** than vLLM. Three concrete differences:
+
+1. **Different GDN kernel implementation.** vLLM uses `flash-linear-attention` (fla-org) Triton kernels — those are the ones with the simultaneous live-tensor cascade. llama.cpp ships its own hand-written CUDA implementation of DeltaNet attention with smaller per-step working buffers and more sequential intermediate computation.
+
+2. **Different memory allocator.** vLLM uses **PyTorch's caching allocator** (designed for training where shapes change a lot — caches freed blocks for fast reuse, which causes our fragmentation under fixed-shape inference). llama.cpp uses **ggml's manual memory management** — pre-allocates fixed buffers per op type at boot, no caching layer, no fragmentation accumulation. For fixed-shape inference, ggml's flat allocator is more predictable on tight VRAM.
+
+3. **No JIT / no Triton autotune.** vLLM relies on `torch.compile` + Triton autotune + lazy cudagraph capture — new shapes at runtime trigger new compilations that pin memory. llama.cpp ships pre-compiled CUDA kernels — memory layout is static from boot.
+
+Trade: llama.cpp gives up ~3× decode speed (21 TPS vs 67 on vLLM single when single works) for cliff-immunity at long context. Different engineering posture for different workload shapes.
+
+> **2026-05-19 update — `llamacpp/mtp` config closes most of the speed gap and walks past 91K cleanly.** With MTP `n=2` + `-ub 1024` + native template + `--reasoning off` on a single 3090, the llama.cpp path now measures **~51 narr / ~60 code TPS** (vs ~21 vanilla), and `verify-stress.sh` 7/7 — *including* the 60K + 91K needle rungs we previously treated as Cliff-2-territory. So the "Cliff 2 single-prompt at 50–60K is architectural" framing was too strong: on llama.cpp at this config, the cliff was **config-driven, not architectural** (the per-pass activation peak at `-ub 2048` was the actual bound; halving it to 1024 + the larger KV pool closes it). The vLLM Cliff 2 narrative above is unchanged — those configs hit a different kernel-level failure path. See `llamacpp/mtp` in [docs/SINGLE_CARD.md](SINGLE_CARD.md).
+
+> **2026-05-20 refinement — `-ub` is doing two jobs at once.** Surfaced by @JensJN in [#170](https://github.com/noonghunna/club-3090/discussions/170): on `llamacpp/mtp-vision` (where mmproj F16 competes for headroom), dropping `-ub 1024 → 512` frees ~1 GB to the KV pool. That trades ~10% TPS for **4× more context** (49K → 192K) with verify-stress 7/7 still passing including the 91K needle. So `-ub` simultaneously caps the per-pass activation peak (cliff-survival) AND eats into the KV-cache budget (ctx ceiling). The optimal value is **configuration-conditional**: with mmproj loaded, smaller `-ub` is meaningfully better for context-heavy workloads. Documented in [`models/qwen3.6-27b/llama-cpp/README.md`](../models/qwen3.6-27b/llama-cpp/README.md#speed-vs-context--pick-your-trade-off).
+
+> **2026-05-23 finding — the `CTX_SIZE` default itself is a "boots ≠ fills" false ceiling; 200K is the max-safe single-card value.** Surfaced diagnosing @syangsao's single-card OOM in [#197](https://github.com/noonghunna/club-3090/issues/197). The shipped `llamacpp/mtp` default `CTX_SIZE=262144` *boots*, pre-reserves its KV pool, and passes `verify-stress` to the 91K needle — yet it only **fills to ~125K** (47% of declared) before OOMing. The wall is **not** the GDN cliff (Cliff 2) and **not** the pre-reserved KV pool: it's the **flash-attention transient scratch at high fill** (`launch_fattn` / `cuMemCreate`), which scales with how much context is actually *populated*, not with what was reserved at boot. Measured via the [#200](https://github.com/noonghunna/club-3090/pull/200) ceiling-ladder probe (Q4_K_M, q4_0 KV, MTP n=2, `-ub 512`, single 3090): 262K → walls at the 155K rung (353 MB free at boot); **200K → fills 183K (91%) with 1177 MB free, clearing the 1024 MB margin gate**; 224K (by the rate math) → fills but ends ~400 MB free, below margin. So **200K is the max-safe single-card `CTX_SIZE`** — above it the config *advertises* more context than it can fill. Calibrated rates: KV-pool reservation ≈ **25 MB/1K tok**, at-fill at-rest growth ≈ **7.9 MB/1K tok**. This is also *why* the old fixed-depth (91K) needle gave a false all-clear — the probe didn't scale to `CTX_SIZE`, so it never reached the wall; [#200](https://github.com/noonghunna/club-3090/pull/200) makes the ladder scale to 0.92×`n_ctx`. **Practical impact:** the `Max ctx: 262144` header on [`models/qwen3.6-27b/llama-cpp/compose/single/unsloth-q4km/mtp.yml`](../models/qwen3.6-27b/llama-cpp/compose/single/unsloth-q4km/mtp.yml) overstates fillable context — treat ~125K as that config's real ceiling, or set `CTX_SIZE=200000` for a fully-fillable single-card config. Note also the **prefill cost at depth**: 1057 t/s short-prompt → 457 t/s at 183K (~245 s/prefill) — "fits ≠ usable" for interactive agents.
+
+> **2026-05-28 caveat — needle/NIAH certifies retrieval, NOT KV-quant *quality*.** Distinct from the #200 fixed-depth issue above: even at the correct depth, synthetic passkey/needle is **insensitive to KV-cache-quant distributional drift**. [Anbeeld's KV-quant long-context benchmarks](https://anbeeld.com/articles/kv-cache-quantization-benchmarks-for-long-context) (Qwen3.6-27B on a single 3090 — our exact setup) show needle at 32K scoring **100% across *every* cache mode**, bf16 down to `turbo2_tcq`, while 99.9%-percentile KL divergence shows tail precision falling **100% → 54%**. The tail is exactly where quantization breaks JSON keys / closing braces / tool calls. **So a `verify-stress` 7/7 (including the 91K needle) does NOT certify that a KV-quant choice (`turboquant_3bit_nc`, `q4_0`, fp8) is tail-safe for code / JSON / agent workloads** — only that retrieval works. For those workloads prefer **≥ `q5_0`/`q4_1` (asymmetric K/V — K is the sensitive cache)** and treat aggressive KV quant as a context-push trade, not free quality.
+
+---
+
+## vLLM pin compatibility status (master ships on v0.20 + Genesis v7.69 — 2026-05-02 PM)
+
+**Master now ships on `vllm/vllm-openai:nightly-7a1eb8ac2ec4ea69338c51dc7afd4b15010abfa8` (`0.20.1rc1.dev16+g7a1eb8ac2`) + Genesis v7.69 dev tip (commit `2db18df`).** Cliff 1 mech B closed across all 4 TQ3 composes; **Cliff 2 60K is now closed on TP=1 + 24 GB** via Genesis v7.69 + vllm#35975 backport + mem-util tuning. See "Genesis v7.69 dev tip" section below for the v7.69 closure recipe.
+
+The v7.66 section that follows is **historical**: it documents the initial v0.20 migration shipped 2026-05-02 AM. v7.68 was tested + rejected; v7.69 is the current pin. `scripts/setup.sh` reflects this (`GENESIS_PIN=2db18df`).
+
+> **Rig-class caveat — "known good" is rig-specific, not universal.** The v7.66 / v7.69 verdicts above were measured on **bare-metal Ubuntu 2× 3090 PCIe with default Docker runtime**. Configurations that differ materially from that baseline have surfaced separate, older bugs that are NOT closed by Genesis pin choice within the v7.x cycle. Specifically: [@lexhoefsloot reports](https://github.com/noonghunna/club-3090/issues/49) `vllm serve` hits an `uvloop` event-loop crash before reaching GPU initialization on a 3× 3090 Proxmox VE / Debian 12 / kernel 6.17.2 / `default-runtime: nvidia` setup — the crash predates v7.66 and is independent of `GENESIS_ENABLE_P87`. Cross-rig confirmed environmental on the Proxmox host stack (same image + same args boots clean on bare-metal Ubuntu). See [CONTAINER_RUNTIMES.md](CONTAINER_RUNTIMES.md#proxmox-ve--known-footgun-on-kernel-617x) for the full elimination trail and what's been ruled out. If you're not on the bare-metal baseline and hit a pre-engine crash, please file with rig-class details so we can disambiguate environment effects from Genesis-pin effects.
+
+### Cliff 1 mech B — what closed it (initial v7.66 work, retained for history)
+
+(History snapshot: `fc89395`, the v7.66 dev tip, was the initial pin. Patch trail and sidecars described in this section are still illustrative of the mechanisms; current sidecar list lives in the v7.69 section.)
 
 ### Cliff 1 mech B — what closed it
 
@@ -73,7 +125,9 @@ Cross-rig validation of v7.68 on the `v7.68-cliff2-test` branch (pushed to origi
 | **P103** (FLA Cliff 2 chunked fwd_h+fwd_o) | ❌ broken | Wrap reports "rebound at 0 caller sites" — never intercepts. Cliff 2 OOM trace passes through `chunk_gated_delta_rule_fwd` directly. v7.68 commit `5743c03` fixed a NameError but the binding mechanism still has 0 callers on Qwen3.6-27B. |
 | **PN32** (GDN chunked-prefill) | ❌ insufficient on TP=1 | Chunks `gdn_linear_attn.forward_cuda` but the inner FLA `chunk_gated_delta_rule_fwd` still allocates the full h tensor. Without PN30 (broken above) the activation budget is so tight Cliff 2 fires at 30K instead of 50-60K. |
 
-**Verdict:** master stays on v7.66 (`fc89395`) + our 3 sidecars. Branch `v7.68-cliff2-test` retained as a snapshot for cross-rig data. Re-evaluate when Sander cuts v7.69 with these 3 fixes applied.
+**Verdict (at the time):** master stayed on v7.66 (`fc89395`) + 3 sidecars after v7.68 didn't work. Branch `v7.68-cliff2-test` retained as a snapshot for cross-rig data.
+
+**Update 2026-05-02 PM:** Sander cut v7.69 with all 3 of these fixes applied — see next section. Master moved to v7.69 (`2db18df`). The 3 sidecars listed in this section are now folded into v7.69 itself.
 
 Full findings in [`results/v0.20-migration/v768-cliff2-test.summary`](../results/v0.20-migration/v768-cliff2-test.summary).
 
@@ -111,8 +165,8 @@ Plus MTP-off + 0.95: 60K passes in 504s with full 5+ GiB KV pool — separate "m
 
 | Variant | File | max_model_len | mem-util | MTP | Cliff 2 60K | Use case |
 |---|---|---|---|---|---|---|
-| **Balanced MTP** | [`long-text.yml`](../models/qwen3.6-27b/vllm/compose/docker-compose.long-text.yml) | 180K | 0.93 | ✅ K=3 | ✅ 623s | Default — multi-turn agentic coding |
-| **Max-context safety** | [`long-text-no-mtp.yml`](../models/qwen3.6-27b/vllm/compose/docker-compose.long-text-no-mtp.yml) (NEW) | 200K | 0.95 | ❌ off | ✅ 537s | Long single-shot RAG / codebase analysis |
+| **Balanced MTP** | [`long-text.yml`](../models/qwen3.6-27b/vllm/compose/single/autoround-int4/long-text.yml) | 180K | 0.93 | ✅ K=3 | ✅ 623s | Default — multi-turn agentic coding |
+| **Max-context safety** | [`long-text-no-mtp.yml`](../models/qwen3.6-27b/vllm/compose/single/autoround-int4/long-text-no-mtp.yml) (NEW) | 200K | 0.95 | ❌ off | ✅ 537s | Long single-shot RAG / codebase analysis |
 
 Both top out at 60K Cliff 2 ceiling — that's the hardware-physical wall on 24 GB single-card. 90K probes hit OOM (Balanced MTP) or fail to complete in 25-min budget (Max-context). For prompts >60K, route to `dual.yml` (TP=2 splits state) or `llamacpp/default` (262K, different engine).
 
@@ -127,13 +181,13 @@ The 3 prior sidecars (`patch_pn25_*`, `patch_pn30_dst_shaped_*`, `patch_workspac
 
 Full diagnostic trail (6-round bisect): [`results/v0.20-migration/v769-codex-r1-test.summary`](../results/v0.20-migration/v769-codex-r1-test.summary).
 
-### Validation across all 4 TQ3 variants (2026-05-02 on Genesis v7.66 + local sidecars)
+### Validation across all 4 TQ3 variants (2026-05-02 — initial v7.66 + local sidecars run; superseded by v7.69 results above)
 
 | Variant | Ctx | mem-util | verify-stress.sh probes | Notes |
 |---|---|---|---|---|
 | `long-text.yml` | 180K | 0.95 | 6/7 (Cliff 2 only fail) | IDE-agent recommended |
 | `long-vision.yml` | 145K | 0.95 | 6/7 (Cliff 2 only fail) | Vision tower tightens budget further |
-| `bounded-thinking.yml` | 180K | 0.95 | 6/7 (Cliff 2 only fail) | Parity with long-text |
+| `bounded-thinking.yml` | 180K | 0.95 | 6/7 (Cliff 2 only fail) | Parity with long-text. Recommended grammar: DeepSeek scratchpad. |
 | `dual-turbo.yml` | 262K | 0.85 (TP=2) | 6/7 (Cliff 2 only fail) | TP=2 doesn't avoid Cliff 2 |
 | `tools-text.yml` | 75K | 0.97 | ✅ | ✅ 8/8 | ✅ | ✅ | 69.66 (CV 1.4%) |
 | `dual-turbo.yml` | 262K | 0.85 | ✅ | ✅ 8/8 | ✅ | ✅ | 76.01 (CV 4.5%, 269 TPS aggregate at n=4 streams) |
@@ -349,17 +403,120 @@ This is **not** a max_seqlen cap-leak like Cliff 1. The allocation is sized by *
 
 The architectural fix is a **streaming/tiled forward** — process the sequence in tiles, fold intermediate state at each tile boundary instead of materializing the whole thing. This is exactly what FlashAttention does for attention, and what FlashQLA does for DeltaNet on Hopper. There's no Ampere implementation today.
 
+#### Theoretical grounding
+
+This mechanism is documented in the literature. The PerfMamba paper ([arxiv 2511.22849](https://arxiv.org/html/2511.22849)) measures it directly on the parent architecture: at sequence length 2048, **Mamba-2's SSM consumes 33.5% more memory than Mamba-1 (115.68 GB vs. 86.64 GB) due to "block-wise state materialization"** — the same algorithmic pattern Qwen3-Next inherits via Gated DeltaNet (Mamba-2 + delta rule, [NVlabs ICLR 2025](https://github.com/NVlabs/GatedDeltaNet)). The peak memory grows as **O(γ·D·N·L)** per the paper's analysis: γ = expansion factor, D = hidden dim, N = state dim, L = seq len. That's the formal scaling we'd been describing empirically.
+
+What the literature *doesn't* cover (and is club-3090's contribution): the activation-peak interaction with KV quantization format choice (TQ3 vs fp8 — see "KV format choice tunes the boundary" below) and the per-VRAM-class budget consequences for consumer Ampere deployments. PerfMamba describes the mechanism; we describe the application-side trade-offs.
+
 ### Why TP=2 splits Cliff 2 in half
 
 Under tensor parallelism with 2 cards, the GDN state buffer's per-card allocation is roughly halved (state is sharded across cards along the head dim). At seq_len = 240K, each card holds ~120K worth of state — fits in 24 GB. **Verified at 237K single-prompt prefill on `dual.yml`** (2026-04-29; ~830 tok/s prefill, peak 23.5 GB / card, no OOM).
 
 This is why our long-prompt single-card recommendation is "use llama.cpp 262K (no cliff at all) or move to dual-card."
 
+### KV format choice tunes the boundary
+
+The Cliff 2 boundary isn't just "context length" — it's the sum of (KV pool bytes) + (DeltaNet GDN forward intermediate at the activation peak), and **the KV format choice trades these against each other**:
+
+- `turboquant_3bit_nc` (TQ3 KV): 0.375 bytes/cached-token — smallest KV pool → most concurrency. Activation peak is *higher* (TQ3 dequant happens during the GDN forward, adding ~1 GB/card to the working set).
+- `fp8_e5m2`: 1 byte/cached-token — larger KV pool but smaller activation peak. Single-prompt long-ctx is roomier; concurrency at full ctx drops.
+- `q4_0` / `q8_0` / `k8v4` (vLLM's other KV options): in between, with their own dequant patterns.
+
+On 24 GB / 3090 the per-card budget absorbs TQ3's activation peak and the smaller KV pool wins. **On 20 GB Ampere (modded 3080 / cap'd cards) the trade flips** — TQ3's activation peak after TP=2 split exceeds the per-card budget at 90K and Cliff 2 fires there. Override to fp8_e5m2 and the full 262K window opens. Validated cross-rig 2026-05-04 by [@efschu](https://github.com/noonghunna/club-3090/issues/47); see [HARDWARE.md](HARDWARE.md#note-for-sub-24-gb-cards) for the byte math.
+
+The general principle: **the variant matrix is per-card-budget × KV-format-tradeoff aware**. Compose defaults are tuned for 24 GB / 3090; users on different VRAM classes may need to override `--kv-cache-dtype` to relocate the activation/pool balance for their hardware.
+
+#### The naming trap — fp8 is *larger* than TQ3 per token
+
+The KV-format names are misleading. **fp8_e5m2 stores 8 bits per cached element; turboquant_3bit_nc packs 3 bits.** At long single-prompt contexts on memory-tight rigs, this flips the conventional intuition:
+
+| KV format | Bytes / cached token | Verdict at 180K on 24 GB single-card |
+|---|---:|---|
+| `turboquant_3bit_nc` (TQ3) | 0.375 | ✅ fits at 180K with mem-util 0.93 |
+| `fp8_e5m2` | 1.0 | ❌ OOMs — needs 6.64 GiB KV pool, only 4.36 GiB available |
+
+**Validated by [@easel #102](https://github.com/noonghunna/club-3090/issues/102#issuecomment-4412264989) on RTX 5090 Laptop**: switching from TQ3 → fp8_e5m2 at 180K context produced `ValueError: 6.64 GiB KV cache is needed, larger than available (4.36 GiB)`. Reverted to TQ3 and the boot succeeded.
+
+**Pin**: on 24 GB single-card, **TQ3 is the long-context KV; fp8 is for short-context throughput**. The TQ3 activation-peak trade discussed above is real but ~1 GB; the fp8 KV-pool inflation at long-ctx is several GB. At 180K the activation-peak trade is dominated by the pool-size trade.
+
+**On dual-card rigs** the analysis is the same per-card; TQ3 is still the long-context-on-tight-budget choice. fp8 starts to make sense again when (a) context is short enough that pool size doesn't dominate, or (b) you have generous per-card headroom (32 GB+ cards, or shorter max_model_len giving you VRAM to spare).
+
 ### Why llama.cpp doesn't have Cliff 2
 
 llama.cpp's Qwen3-Next implementation processes DeltaNet/GDN layers with **online state updates** (incremental) rather than materializing the full intermediate. State is updated per-token or per-tile, never as a single multi-GB tensor. Different algorithm, different memory profile.
 
 This is the same design difference that explains why llama.cpp doesn't have Cliff 1 either — see [LLAMA_CPP.md](engines/LLAMA_CPP.md) "Why llama.cpp doesn't hit the prefill cliffs vLLM does."
+
+---
+
+## Cliff 3 — DeltaNet SSM state is not prefix-cacheable (the prefill cliff)
+
+A separate cliff from Cliff 1 (memory) and Cliff 2 (GDN forward OOM): a **scaling cliff in TTFT** that fires on multi-turn agentic workloads on single-card vLLM, even when memory is fine and the engine is otherwise healthy.
+
+### What you see
+
+vLLM prefix caching reports 60-80% KV-block hit rates across turns, but **TTFT scales linearly with accumulated context regardless** of cache hit rate. Cross-rig measured by [@easel on RTX 5090 Laptop 24 GB](https://github.com/noonghunna/club-3090/issues/102#issuecomment-4414111137) on `long-text.yml` with the optimal CUDA-graph + chunked-prefill config:
+
+| Turn | Prompt tokens | TTFT | Ratio vs T1 | Decode TPS |
+|---:|---:|---:|---:|---:|
+| 1 | 1,212 | 5.6 s | 1.0× | 62.3 |
+| 5 | 4,972 | 85.3 s | 15.3× | 64.2 |
+| 10 | 21,792 | 202.4 s | **36.3×** | 55.6 |
+| 12 | 35,643 | 254.2 s | **45.5×** | 46.0 |
+| 15 | ~74K | >600 s — TIMEOUT | — | — |
+
+Decode TPS stayed healthy (46-62) throughout. The model computed correctly. The **prefill** was the problem — the warm-cache run B at 68.7% KV-block hit rate at turn 10 took **577s** (2.3× the cold-start 254s at the same depth), confirming the cache wasn't the bottleneck.
+
+### Root cause — DeltaNet recurrent state is not cacheable
+
+Qwen3-Next family (Qwen3.6, Qwen3.5) is a hybrid attention + DeltaNet GDN architecture. Prefix caching works for the **attention** layers' KV blocks — those are content-addressable and cache-friendly. But DeltaNet's recurrent state evolution `h_t = f(h_{t-1}, x_t)` is sequence-dependent: every token's hidden state depends on the previous token's, going back to the start of the conversation. There's no way to "jump in" partway through.
+
+vLLM's prefix-cache hit returns the cached KV blocks, but the GDN layers must replay the entire accumulated sequence to reconstruct the recurrent state. PN32 fixes the OOM stability of this replay (without it, the FLA kernel OOMs in a single shot above ~50K accumulated tokens — that's Cliff 2). PN32 does not fix the O(n) compute scaling, because it can't — the architecture itself is sequential.
+
+### Practical ceiling on single-card vLLM
+
+Per @easel's data on the most-tuned single-card config we have (5090 Laptop, CUDA graphs + PN32 + chunked-prefill 4128, ~110W):
+
+| Use case | Accumulated tokens | TTFT |
+|---|---|---|
+| Short Q&A | < 5K | < 30 s — usable |
+| Light agentic | 10-17K | 45-110 s/turn — slow |
+| IDE-agent at depth | 22-35K | 3-4 min/turn — unusable |
+| Deep agent session | ~74K | > 10 min — client timeout |
+
+This holds for any single-card Qwen3-Next config — Blackwell 5090 Laptop or 3090 alike. The architectural cost is per-token, not per-flop, so faster cards don't escape it.
+
+### How TP=2 helps (but doesn't fully escape)
+
+Dual-card TP=2 splits the GDN forward across 2 GPUs, doubling the per-second compute on the recurrent path. TTFT scaling is still O(n), but the constant is roughly halved. Combined with `max_num_seqs=2` (`dual.yml`), the practical envelope extends — we measure 25K-30K accumulated tokens before TTFT becomes painful, not 5K.
+
+For *deep* agent sessions (50K+) even TP=2 falls behind — at that depth, batch decode dominates economics regardless. **There is no single-Qwen3-Next-vLLM path to fast 50K+ multi-turn agentic on consumer hardware.**
+
+### Why llama.cpp doesn't have Cliff 3
+
+llama.cpp's GDN implementation streams the recurrent state computation tile-by-tile during prefill — the same property that lets it dodge Cliff 2 (OOM) also dodges Cliff 3 (TTFT scaling). The constant factor per-token is similar to vLLM's, but llama.cpp doesn't try to cache anything; it just streams. So a "cache hit" doesn't give you any speedup, but a 30K-context cold prefill takes ~30 sec instead of 200+ sec. **Sustained throughput is lower, sustained TTFT is much better** — exactly the opposite tradeoff vLLM makes.
+
+### Mitigation on vLLM — LMCache keeps the DeltaNet state warm (opt-in)
+
+The Cliff-3 scaling above is a property of vLLM's **native** prefix cache: it caches the attention KV blocks but *replays* the GDN recurrent state from token 0, so a cache hit saves nothing on the recurrent path. **LMCache is the measured mitigation for exactly this.** Its HMA hybrid support (0.4.7) caches the recurrent state that native caching drops — so a previously-computed prefix warm-loads instead of replaying.
+
+Measured on the reference dual-3090 ([#423](https://github.com/noonghunna/club-3090/discussions/423), reproduced cross-rig by @alexpolo1 + @efschu): a **~40K-token prefix warm-loads in 0.5–2.4 s (L1 RAM) vs 34–43 s cold** — a 14–69× TTFT win. A 0.5 s hit is far faster than a 40K Mamba replay, so it is genuinely keeping GDN state warm, not just attention blocks. **Native prefix cache and vLLM's generic CPU KV-offload do NOT do this** — they are attention-KV-block mechanisms and hit the same Cliff 3; LMCache's hybrid recurrent-state caching is the differentiator on GDN models.
+
+What it fixes depends on the loop shape:
+- **Resumed / repeated prefixes** (reopen a session, survive a restart, many agents sharing a big system prompt): **measured win** — this is #423's headline case.
+- **A single *growing* agentic session** (each turn longer — the classic IDE-agent shape): mechanically it *should* bound per-turn TTFT to the new-token delta (LMCache commits state per request, so turn N warm-hits turn N-1's prefix instead of replaying from 0) — but **this is not yet benchmarked end-to-end**; #423 tested cold→warm on fixed prefixes only. Treat as promising-but-unverified; cross-rig numbers on a live growing loop are wanted.
+
+Caveats (why it stays 🐣): **L1 RAM** keeps state warm *within* a session; **L2 disk recomputes** the Mamba state on rehydrate (~4.8 s, compute-bound — good for cross-restart survival, not within-session warmth). Real single-request fillable ceiling ~214K (OOM-wall at 241K), a soak VRAM-growth caveat, and ~58 GB host-RAM for the default `--l1-size-gb 30`. Full sizing + the env-passthrough fix (#454) in [`models/qwen3.6-27b/INTERNALS.md` → LMCache KV-offload](../models/qwen3.6-27b/INTERNALS.md#lmcache-kv-offload-opt-in--incubating--ram--disk-sizing).
+
+### Practical recommendation
+
+Two viable paths for multi-turn agentic Qwen3-Next — pick by whether you want simplicity or vLLM's throughput:
+
+- **Simplest, no RAM, guaranteed-flat TTFT: llama.cpp** (`llamacpp/mtp` single-card, or the dual llama.cpp paths). It streams the recurrent state tile-by-tile instead of caching it — a 30K cold prefill is ~30 s vs 200+ s on native vLLM, *with no cache and no dependence on hit rates*. Lower sustained throughput, dramatically better and more predictable TTFT. For pure agentic-prefill pain on one card, this is the low-effort answer — even when vLLM wins the canonical bench (49/65 vs 49/66 TPS on 5090 Laptop), the native-cache mismatch makes it the wrong default for IDE-agent workloads.
+- **Keep vLLM's throughput, feed it RAM: `vllm/qwen-27b-dual-lmcache`** (🐣, `--force`). The measured mitigation above — best when your sessions *repeat/resume*; promising-but-unverified for a growing single loop.
+
+For dual-card without LMCache: `dual.yml` (fp8 KV) handles 25K–30K accumulated context smoothly — Cliff 3's reach extends but doesn't disappear at TP=2.
 
 ---
 
@@ -385,10 +542,10 @@ This is why our launch frame is **two routes, not one**: vLLM dual-card for max 
 
 | Mitigation | Closes which cliff? | Where shipped |
 |---|---|---|
-| Cap `max-model-len` at 48K (TQ3) | Cliff 1 (under threshold) | `docker-compose.yml` (default) |
+| Cap `max-model-len` at 48K (TQ3) | Cliff 1 (under threshold) | `tq3-mtp.yml` (single default) |
 | FP8 KV + PN8 + cap at 75K | Cliff 1 (PN8 absorbs leak) | `tools-text.yml` |
 | TP=2 (dual-card) | Cliff 2 (state splits across cards) | `dual.yml`, `dual-turbo.yml` |
-| llama.cpp engine swap | Both (different library entirely) | `llamacpp/default`, `llamacpp/concurrent` |
+| llama.cpp engine swap | Both (different library entirely) | `llamacpp/default`, `llamacpp/mtp`, `llamacpp/mtp-vision` |
 
 ### Workarounds that don't work or are unavailable
 
@@ -667,3 +824,16 @@ Until then 185K + 0.975 is the validated text-only ceiling on a single 24 GB 309
 - [models/qwen3.6-27b/INTERNALS.md](../models/qwen3.6-27b/INTERNALS.md) — engineering deep dive
 - [Cross-rig data on club-3090 issue #2](https://github.com/noonghunna/club-3090/issues/2) — HoodOG1 + tenitram repro thread
 - [Cross-rig data on single-3090 issue #1](https://github.com/noonghunna/qwen36-27b-single-3090/issues/1) — ampersandru's original Cliff 1 OOM trace
+
+### Academic references
+
+The mechanisms documented above are grounded in the published literature; club-3090's contribution is the *applied* analysis (combining these formulas with KV-quantization choice and per-VRAM-class budgets to produce a working variant matrix).
+
+- **Cliff 2 root mechanism** — [PerfMamba: Performance Analysis and Pruning of Selective State Space Models (arxiv 2511.22849)](https://arxiv.org/html/2511.22849) — measures Mamba-2's 33.5% memory delta vs Mamba-1 at seq 2048 due to "block-wise state materialization." Same mechanism Qwen3-Next inherits via Gated DeltaNet. Activation peak scales as O(γ·D·N·L).
+- **Gated DeltaNet architecture** — [Gated Delta Networks: Improving Mamba2 with Delta Rule (NVlabs, ICLR 2025)](https://github.com/NVlabs/GatedDeltaNet) — the architecture Qwen3-Next uses for 75% of its layers (the other 25% being standard attention).
+- **Mamba-2 baseline** — [Mamba: Linear-Time Sequence Modeling with Selective State Spaces (arxiv 2312.00752)](https://arxiv.org/abs/2312.00752) — foundation paper; PerfMamba's Mamba-2-vs-Mamba-1 numbers are anchored to this.
+- **KV cache memory management** — [Efficient Memory Management for Large Language Model Serving with PagedAttention (arxiv 2309.06180)](https://arxiv.org/abs/2309.06180) — vLLM's foundation paper. <4% memory waste vs 60-80% in earlier engines.
+- **TurboQuant 3-bit KV** — [TurboQuant: Online Vector Quantization with Near-optimal Distortion Rate (arxiv 2504.19874, ICLR 2026)](https://arxiv.org/abs/2504.19874) — the technique behind `--kv-cache-dtype turboquant_3bit_nc`. Random rotation + scalar quantizers + 1-bit QJL transform on the residual.
+- **FP8 KV cache** — [An Investigation of FP8 Across Accelerators for LLM Inference (arxiv 2502.01070)](https://arxiv.org/html/2502.01070v1) — covers FP8 e5m2 / e4m3 trade-offs for `--kv-cache-dtype fp8_e5m2`.
+- **GPU inference characterization** — [A Systematic Characterization of LLM Inference on GPUs (arxiv 2512.01644)](https://www.arxiv.org/pdf/2512.01644) — recent (Dec 2025) prefill/decode characterization; useful background for memory-bound vs compute-bound regime analysis.
+- **Peak memory in large-batch inference** — [Mind the Memory Gap: Unveiling GPU Bottlenecks in Large-Batch LLM Inference (arxiv 2503.08311)](https://arxiv.org/pdf/2503.08311) — peak memory patterns in prefill vs decode; relevant context for the activation-peak side of our budget math.

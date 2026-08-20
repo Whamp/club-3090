@@ -1,0 +1,3 @@
+OK: 14 vLLM runtime files verified
+OK: built club-3090/deepseek-v4-gguf-tp:fp4-633815f6
+image=sha256:eb94d5049bf4d8d55c335ac1d2445382a811b7312d28e3e73088011a8103e181

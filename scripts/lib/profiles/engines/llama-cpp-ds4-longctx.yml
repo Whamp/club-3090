@@ -1,0 +1,39 @@
+schema_version: 1
+id: llama-cpp-ds4-longctx
+display_name: alesha-pro llama.cpp DeepSeek V4 long-context fork (Q8 repair)
+type: llama.cpp
+stability: stable
+install:
+  method: docker_image
+  # Digest-pinned public image. Built from the exact validated runtime commit
+  # named in feature_provenance; the tag is only a human-readable alias.
+  spec: ghcr.io/whamp/llama-cpp-ds4-longctx@sha256:a96bd947d63eb81d8baf9f6f5ecb26669476383976717237450fbb5727b03745
+min_sm: 8.6
+supported_model_families:
+  - deepseek4-moe
+features:
+  deepseek4_q8_kv: true
+  dsv4_prefill_graphs: true
+feature_provenance:
+  deepseek4_q8_kv: https://github.com/Whamp/llama.cpp/commit/0379cf4bf889f3d28038a005210c4bc193fc8ba1
+  dsv4_prefill_graphs: https://github.com/alesha-pro/llama.cpp/tree/ds4-longctx
+supported_kv_formats:
+  - q8_0
+supported_drafters: []
+supported_weight_formats:
+  - gguf
+required_overlays: []
+vendored_overlays: []
+required_genesis: false
+notes: >-
+  Canonical DeepSeek V4 Flash llama.cpp engine; it remains separately named and
+  does not replace llama-cpp-local for other model families. The base is alesha-pro/ds4-longctx at b001c8cd7,
+  which adds stable-topology CUDA graphs, resident-MoE scheduling, sparse
+  attention, and the other DSV4_* fast-prefill paths. Whamp commit 0379cf4bf
+  repairs that fork's Q8 KV path: packed quantized concat, CUDA-native Q8
+  padding, and type-preserving long-context gathers, with Q8 concat regression
+  tests. Validated only on 4x RTX 3090 sm_86 with Antirez IQ2_XXS, matching Q8 K/V,
+  LLAMA_ATTN_ROT_DISABLE=1, and fixed 230 W/card. The image is compiled for sm_86.
+  The external dependency and rotation-disabled Q8 path remain explicit
+  operational constraints; replace this engine only after an equivalent
+  mainline path passes the same depth, quality, and soak gates.

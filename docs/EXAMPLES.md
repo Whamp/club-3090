@@ -1,6 +1,6 @@
 # Client examples
 
-Copy-pasteable snippets for talking to the club-3090 endpoint. The default URL is `http://localhost:8020`; the served model name is `qwen3.6-27b-autoround` (vLLM) or `qwen3.6-27b-autoround` (llama.cpp via the `--alias` flag we set).
+Copy-pasteable snippets for talking to the club-3090 endpoint. The default URL is `http://localhost:8020`; the served model name is `qwen3.6-27b` (vLLM) or `qwen3.6-27b` (llama.cpp via the `--alias` flag we set).
 
 All examples assume:
 
@@ -19,12 +19,14 @@ Qwen3.6-27B is a thinking model. The `<think>...</think>` block before the answe
 
 | Scenario | `max_tokens` |
 |---|---|
-| **FREE thinking on (default long-text / long-vision composes)** | **8192** minimum. 16384 for hard reasoning / competition-grade problems. |
-| **FSM bounded thinking (`bounded-thinking.yml`)** | **4096** is fine — grammar caps the think block to a few hundred tokens of structured form. |
+| **FREE thinking (enabled per-request — see note below)** | **8192** minimum. 16384 for hard reasoning / competition-grade problems. |
+| **FSM bounded thinking (`bounded-thinking.yml`)** | **4096** is comfortable. The recommended DeepSeek scratchpad grammar uses ~500-1000 think tokens; the andthattoo G/A/E grammar uses ~150. Either fits well below 4096. |
 | **`enable_thinking: False`** | Set as tight as the answer needs (50-200 typically). |
 | **Tool-using agents (multi-turn)** | 1024-2048 per turn. If a middle turn needs >2K to think, your prompt structure probably needs work. |
 
 The smoke-test examples below use `max_tokens: 200` because they ask short questions where thinking + answer fits comfortably. Real workloads should follow the table above.
+
+> **Thinking is OFF by default on the shipped composes.** Every Qwen3.6 compose sets `--default-chat-template-kwargs '{"enable_thinking": false}'`, so the model answers directly with no `<think>` block unless you opt in. Enable it per-request with `chat_template_kwargs: {"enable_thinking": true}` (no restart) and budget `max_tokens` per the table. The one exception is `bounded-thinking.yml`, which keeps thinking on but bounds its cost via a structured-CoT grammar (see [`docs/STRUCTURED_COT.md`](STRUCTURED_COT.md)).
 
 ---
 
@@ -34,13 +36,13 @@ The smoke-test examples below use `max_tokens: 200` because they ask short quest
 curl -sf http://localhost:8020/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "qwen3.6-27b-autoround",
+    "model": "qwen3.6-27b",
     "messages": [{"role": "user", "content": "Capital of France?"}],
     "max_tokens": 200
   }' | jq -r '.choices[0].message.content'
 ```
 
-Expected response: a sentence containing `Paris`. The `max_tokens: 200` headroom is intentional — Qwen3.6 thinks before answering by default, so even simple questions burn ~50–150 tokens inside `<think>...</think>` before reaching the answer. Set tighter (`max_tokens: 30`) only if you also pass `chat_template_kwargs: {"enable_thinking": false}` to skip the think block — that's what `verify-full.sh` does internally.
+Expected response: a sentence containing `Paris`. The shipped composes set `enable_thinking: false` by default, so the model answers directly with no `<think>` block — `max_tokens: 200` is comfortable slack. If you enable thinking per-request (`chat_template_kwargs: {"enable_thinking": true}`), raise `max_tokens` substantially (see the table above) — the model then emits a `<think>...</think>` block first even for simple questions. `verify-full.sh` passes `enable_thinking: false` explicitly.
 
 ---
 
@@ -58,7 +60,7 @@ from openai import OpenAI
 client = OpenAI(base_url="http://localhost:8020/v1", api_key="not-needed")
 
 resp = client.chat.completions.create(
-    model="qwen3.6-27b-autoround",
+    model="qwen3.6-27b",
     messages=[{"role": "user", "content": "Write a haiku about tensor cores."}],
     max_tokens=120,
     temperature=0.6,
@@ -71,7 +73,7 @@ print(resp.choices[0].message.content)
 
 ```python
 stream = client.chat.completions.create(
-    model="qwen3.6-27b-autoround",
+    model="qwen3.6-27b",
     messages=[{"role": "user", "content": "Explain attention in 100 words."}],
     max_tokens=300,
     stream=True,
@@ -103,7 +105,7 @@ tools = [
 ]
 
 resp = client.chat.completions.create(
-    model="qwen3.6-27b-autoround",
+    model="qwen3.6-27b",
     messages=[{"role": "user", "content": "What's the weather in Tokyo?"}],
     tools=tools,
     tool_choice="auto",
@@ -129,7 +131,7 @@ from pathlib import Path
 img_b64 = base64.b64encode(Path("photo.png").read_bytes()).decode()
 
 resp = client.chat.completions.create(
-    model="qwen3.6-27b-autoround",
+    model="qwen3.6-27b",
     messages=[
         {
             "role": "user",
@@ -152,7 +154,7 @@ print(resp.choices[0].message.content)
 
 ```python
 resp = client.chat.completions.create(
-    model="qwen3.6-27b-autoround",
+    model="qwen3.6-27b",
     messages=[{"role": "user", "content": "Solve: 7x + 14 = 49. Show your reasoning."}],
     max_tokens=2048,  # FREE thinking on; 2048 fits easy math comfortably. Bump to 8192 for harder reasoning.
     extra_body={"chat_template_kwargs": {"enable_thinking": True}},
@@ -177,7 +179,7 @@ resp = requests.post(
     "http://localhost:8020/v1/chat/completions",
     headers={"Content-Type": "application/json"},
     json={
-        "model": "qwen3.6-27b-autoround",
+        "model": "qwen3.6-27b",
         "messages": [{"role": "user", "content": "What is 17 × 23?"}],
         "max_tokens": 50,
     },
@@ -192,7 +194,7 @@ For streaming, use `stream=True` and parse SSE lines:
 with requests.post(
     "http://localhost:8020/v1/chat/completions",
     headers={"Content-Type": "application/json"},
-    json={"model": "qwen3.6-27b-autoround", "messages": [...], "stream": True, "max_tokens": 200},
+    json={"model": "qwen3.6-27b", "messages": [...], "stream": True, "max_tokens": 200},
     stream=True,
 ) as r:
     for line in r.iter_lines():
@@ -204,6 +206,62 @@ with requests.post(
         chunk = json.loads(payload)
         delta = chunk["choices"][0]["delta"].get("content", "")
         print(delta, end="", flush=True)
+```
+
+---
+
+## Python — tool calling (agentic workflow)
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8020/v1", api_key="not-needed")
+
+# Define a tool the model can call
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get current temperature for a city",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string", "description": "City name"}
+                },
+                "required": ["location"]
+            },
+        }
+    }
+]
+
+# First turn: model decides to call the tool
+resp = client.chat.completions.create(
+    model="qwen3.6-27b",
+    messages=[{"role": "user", "content": "What's the weather in Paris?"}],
+    tools=tools,
+    tool_choice="auto",
+    max_tokens=512,
+)
+
+msg = resp.choices[0].message
+print(f"Tool call: {msg.tool_calls}")
+
+# Second turn: feed tool result back
+messages = [
+    {"role": "user", "content": "What's the weather in Paris?"},
+    msg,
+    {"role": "tool", "tool_call_id": msg.tool_calls[0].id, "content": "22°C, sunny"},
+]
+
+resp2 = client.chat.completions.create(
+    model="qwen3.6-27b",
+    messages=messages,
+    tools=tools,
+    max_tokens=512,
+)
+
+print(f"Final answer: {resp2.choices[0].message.content}")
 ```
 
 ---
@@ -223,10 +281,10 @@ const client = new OpenAI({
 });
 
 const resp = await client.chat.completions.create({
-  model: "qwen3.6-27b-autoround",
+  model: "qwen3.6-27b",
   messages: [{ role: "user", content: "Quicksort in Rust, please." }],
-  // FREE thinking is on by default. 4096 covers easy code-gen think+answer;
-  // 8192 is the safe default for harder coding problems. 800 traps mid-think.
+  // Shipped composes default enable_thinking:false → this answers with no <think> block; 4096 is generous.
+  // To get reasoning, add extra_body chat_template_kwargs {"enable_thinking": true} and budget 8192+ (800 traps mid-think).
   max_tokens: 4096,
   temperature: 0.6,
   top_p: 0.95,
@@ -239,7 +297,7 @@ Streaming:
 
 ```ts
 const stream = await client.chat.completions.create({
-  model: "qwen3.6-27b-autoround",
+  model: "qwen3.6-27b",
   messages: [{ role: "user", content: "..." }],
   max_tokens: 300,
   stream: true,
@@ -261,7 +319,7 @@ Settings → Connections → Add OpenAI Connection:
 
 - **Base URL:** `http://localhost:8020/v1`  *(or `http://<host-ip>:8020/v1` from another machine on your LAN — see [Security](#security-note-network-binding))*
 - **API Key:** anything (e.g. `sk-local`) — the server doesn't check it
-- **Model:** `qwen3.6-27b-autoround`
+- **Model:** `qwen3.6-27b`
 
 Vision, tool calling, streaming all work through the WebUI's standard flows.
 
@@ -272,17 +330,17 @@ In the Cline settings panel:
 - **API Provider:** OpenAI Compatible
 - **Base URL:** `http://localhost:8020/v1`
 - **API Key:** `sk-local` (any non-empty string)
-- **Model ID:** `qwen3.6-27b-autoround`
+- **Model ID:** `qwen3.6-27b`
 
-Cline sends large tool returns (file reads, web fetches) up to ~25K tokens. As of 2026-05-02 PM (Genesis v7.69 dev tip + vllm#35975 backport), `vllm/long-text` (180K balanced + MTP K=3) handles these cleanly — 33K AND 50K tool-prefill stress PASS, and **60K single-prompt prefill PASS** (the Cliff 2 wall closed at 60K). For one-shot prompts beyond 60K, switch to `llamacpp/default` (262K, slower) or `dual-turbo.yml` (262K + 4 streams). See [docs/SINGLE_CARD.md](SINGLE_CARD.md), [docs/CLIFFS.md](CLIFFS.md), and the [VRAM diagram](../models/qwen3.6-27b/README.md#vram-allocation-across-configs).
+Cline sends large tool returns (file reads, web fetches) up to ~25K tokens. As of 2026-05-02 PM (Genesis v7.69 dev tip + vllm#35975 backport), `vllm/long-text` (180K balanced + MTP K=3) handles these cleanly — 33K AND 50K tool-prefill stress PASS, and **60K single-prompt prefill PASS** (the Cliff 2 wall closed at 60K). For one-shot prompts beyond 60K, switch to `llamacpp/default` (262K vanilla, slower), `llamacpp/mtp` (131K + MTP, ~60 code TPS, single-card, 7/7 verify-stress incl. 91K needle), or `dual-turbo.yml` (262K + 4 streams). See [docs/SINGLE_CARD.md](SINGLE_CARD.md), [docs/CLIFFS.md](CLIFFS.md), and the [VRAM diagram](../models/qwen3.6-27b/README.md#vram-allocation-across-configs).
 
 ### Cursor
 
 Settings → Models → Add OpenAI-compatible:
 
 - **Override OpenAI Base URL:** `http://localhost:8020/v1`
-- **Verify config:** click "Verify" — should list `qwen3.6-27b-autoround`
-- **Model name:** `qwen3.6-27b-autoround`
+- **Verify config:** click "Verify" — should list `qwen3.6-27b`
+- **Model name:** `qwen3.6-27b`
 
 Cursor's "Apply" feature works against this model since tool-calling is supported.
 
@@ -308,8 +366,33 @@ Or override at run-time with `--host 127.0.0.1` (llama.cpp) / by editing the com
 
 ---
 
+## Switch the served model over HTTP
+
+On a 1–2 GPU rig only one model fits in VRAM at a time. The optional
+[`tools/model-switch`](../tools/model-switch/README.md) service wraps
+`scripts/switch.sh` behind an HTTP endpoint so an experiment harness can swap
+models programmatically (it adds no orchestration — `switch.sh` stays the source
+of truth). stdlib-only; run it on the host:
+
+```bash
+python3 tools/model-switch/server.py        # or the club3090-model-switch systemd unit
+```
+
+```bash
+TOKEN=...   # CLUB3090_API_TOKEN (falls back to VLLM_API_KEY); empty = open on loopback
+# what's serving now:
+curl -s -H "Authorization: Bearer $TOKEN" localhost:8099/status
+# switch (blocks until the new model is ready, ~1-2 min):
+curl -s -XPOST -H "Authorization: Bearer $TOKEN" localhost:8099/switch -d '{"model":"gemma-4-31b"}'
+# list switchable slugs:
+curl -s -H "Authorization: Bearer $TOKEN" localhost:8099/models
+```
+
+---
+
 ## See also
 
+- [`tools/model-switch/README.md`](../tools/model-switch/README.md) — HTTP endpoint to swap the served model
 - [`models/qwen3.6-27b/README.md`](../models/qwen3.6-27b/README.md) — variant matrix + VRAM diagram
 - [`docs/SINGLE_CARD.md`](SINGLE_CARD.md) and [`docs/DUAL_CARD.md`](DUAL_CARD.md) — workload → recommended compose
 - [`scripts/launch.sh`](../scripts/launch.sh) — interactive variant picker

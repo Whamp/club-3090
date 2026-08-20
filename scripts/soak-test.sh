@@ -12,17 +12,44 @@
 #     retention across sessions.
 #   - Read-only against the running deployment.
 #
+# PASS verdict semantics:
+#   PASS = no failure signal fired on the test sample. Specifically:
+#     - silent_empty turns: 0 (no HTTP 200 + 0 completion tokens)
+#     - max VRAM growth: under SOAK_MAX_GROWTH_MIB (default 200 MiB)
+#     - TPS retention: first-5 vs last-5 median >= 98%
+#     - request errors / stream interruptions: 0
+#   PASS does NOT mean:
+#     - "Patches in this compose's overlay set are doing useful work."
+#       PASS-on-patched is consistent with patches working OR with patches
+#       not being load-bearing for this workload + topology. Cliff 2 / 2b
+#       mitigations target single-card 24 GB pressure; TP=2 (dual.yml)
+#       structurally escapes Cliff 2 regardless of which patches load.
+#     - "Deeper-context workloads will also pass." Continuous mode ramps
+#       to ~22-25K accumulated tokens by turn 5; it does not push to
+#       model max_ctx. Longer-context regimes can still fail.
+#     - "The configuration is optimally tuned." Soak detects failures,
+#       not whether perf is on the table.
+#   For patch attribution, run the same soak on the same compose with
+#   the overlay bind-mounts stripped (or on a baseline image) and compare
+#   metrics. See https://github.com/noonghunna/club-3090/issues/140.
+#
 # Time budget:
 #   Default SOAK_SESSIONS=20 x SOAK_TURNS=5, capped by SOAK_TIMEOUT_S=1800.
 #   Expect 10-30 minutes depending on config.
 #
-# Usage:
-#   CONTAINER=vllm-qwen36-27b-long-vision bash scripts/soak-test.sh
-#   ENDPOINT=http://localhost:8020 SOAK_SESSIONS=8 bash scripts/soak-test.sh
+# Usage (preferred):
+#   bash scripts/soak-test.sh                         # default fresh mode (20 sessions × 5 turns)
+#   bash scripts/soak-test.sh --continuous            # Cliff 2b detector (5 sessions × 5 turns ramping ctx)
+#   bash scripts/soak-test.sh --quick                 # 8 sessions × 5 turns, fresh mode (~5-8 min)
+#   bash scripts/soak-test.sh --help                  # full help
 #
-# Env:
-#   CONTAINER              Running container. Default: first vllm-qwen36-27b*
-#                          container from `docker ps`.
+# Auto-detect: container + endpoint + model are sniffed from `docker ps` and
+# the running endpoint's /v1/models. Override via env vars if needed.
+#
+# Env (advanced — flags above cover the common cases):
+#   CONTAINER              Running container. Default: the first vllm-/llama-cpp-/
+#                          ik-llama-/beellama-/sglang- container with an engine-port
+#                          mapping (8000/8080/30000) from `docker ps` — model-agnostic.
 #   ENDPOINT / URL         OpenAI endpoint. Default: mapped container port for
 #                          8000/tcp, falling back to http://localhost:8020.
 #   MODEL                  Served model. Default: first id from /v1/models.
@@ -40,6 +67,19 @@
 #                          sessions don't reach the target context size.)
 #   SOAK_MAX_GROWTH_MIB    Fail if max VRAM growth exceeds this after warm
 #                          baseline. Default: 200 MiB.
+#   SOAK_DECODE_GRANULARITY  auto (default) | canvas | autoregressive.
+#                          Canvas-granularity (block-diffusion) models emit one
+#                          chunk per denoised canvas, so short responses arrive
+#                          whole and the decode window is zero-width. On those
+#                          turns the harness derives TPS from wall time and
+#                          LABELS it, instead of printing decode_tps=0.0 (#809).
+#                          "auto" detects the signature and latches; "canvas"
+#                          forces it; "autoregressive" restores the old zeroing.
+#   SOAK_CANVAS_WINDOW_MS  Zero-width bound for the canvas signature, in ms.
+#                          Default: 5. Deliberately far below the 100 ms
+#                          measurability floor — a fast autoregressive rig
+#                          produces narrow-but-real windows (~82 ms on dual
+#                          NVFP4 5090s, #849) that must NOT be reclassified.
 #   SOAK_TIMEOUT_S         Hard wall-clock cap. Default: 1800 seconds.
 #   SOAK_REQ_TIMEOUT_S     Per-request timeout. Default: 600 seconds.
 #   SOAK_OUTPUT            Output dir. Default: results/soak-YYYYmmdd-HHMMSS.
@@ -50,17 +90,133 @@
 #   results/<run>/gpu-log.csv
 #   results/<run>/summary.md
 #
+# VRAM baseline semantics (#829):
+#   The warm VRAM baseline is captured at the END of the first session that
+#   completed with ZERO errored turns — not unconditionally at the end of
+#   session 1. A session that errored (engine death, non-200, stream error)
+#   would baseline a failing engine, and every later reading would then read as
+#   multi-GB growth: #827 reported "VRAM grew 32053 MiB" on a run whose only
+#   fault was an engine crash. Rows recorded BEFORE the anchor session are
+#   excluded from the growth + oscillation analysis. If no session runs clean,
+#   VRAM growth is reported as UNMEASURABLE and the verdict is INCONCLUSIVE —
+#   never a phantom number.
+#
 # Exit codes:
 #   0 pass
 #   1 fail
-#   2 inconclusive / timeout / preflight could not run
+#   2 inconclusive / timeout / no warm VRAM baseline / preflight could not run
+
+# Force Python's UTF-8 mode (PEP 540) for every python3 this script runs.
+# Repo sources are full of unicode (— × → ⚠), and without this a rig on a real
+# non-UTF-8 locale (de_DE.iso88591 and friends) decodes reads, stdout AND argv
+# with the locale codec, which crashes the launcher/emit paths (#779). Python
+# already auto-enables UTF-8 mode for the C/POSIX locale, so this covers the
+# case it does NOT: a genuine non-UTF-8, non-C locale. Exported, so child
+# processes and nested scripts inherit it. Guarded by test-locale-utf8.sh.
+export PYTHONUTF8="${PYTHONUTF8:-1}"
 
 set -euo pipefail
 
-SOAK_SESSIONS="${SOAK_SESSIONS:-20}"
-SOAK_TURNS="${SOAK_TURNS:-5}"
-SOAK_MODE="${SOAK_MODE:-fresh}"
+usage() {
+  cat <<'EOF'
+soak-test.sh — multi-turn VRAM-accretion + Cliff 2b validation
+
+USAGE
+  bash scripts/soak-test.sh [MODE]
+
+MODES
+  (default)         fresh mode: 20 sessions × 5 turns, ~10-25 min
+                    Tests raw per-request VRAM accretion.
+  --continuous      Cliff 2b detector: 5 sessions × 5 turns, ramping context
+                    to ~22-25K accumulated tokens. **The only test that
+                    catches the multi-turn accumulating-context cliff** that
+                    bit hermes/openhands traffic on long-* configs.
+  --quick           8 sessions × 5 turns, fresh mode (~5-8 min)
+  --fresh           Explicit fresh mode (same as default)
+
+OPTIONS
+  -h, --help        Show this help
+
+ENV (advanced — auto-detected by default)
+  CONTAINER         Running container. Default: the first vllm-/llama-cpp-/
+                    ik-llama-/beellama-/sglang- container with an engine-port
+                    mapping (8000/8080/30000) from docker ps — model-agnostic.
+                    Use CONTAINER=none for host-mode engines (e.g. llama.cpp
+                    host build).
+  ENDPOINT / URL    OpenAI endpoint. Default: mapped container port → fallback
+                    http://localhost:8020.
+  MODEL             Served model. Default: first id from /v1/models.
+  SOAK_SESSIONS     Override session count.
+  SOAK_TURNS        Override turn count.
+  SOAK_MAX_GROWTH_MIB   VRAM-growth fail threshold. Default: 200.
+  SOAK_TIMEOUT_S    Hard wall-clock cap. Default: 1800.
+
+EXAMPLES
+  bash scripts/soak-test.sh --continuous          # Cliff 2b detector
+  bash scripts/soak-test.sh --quick               # fast smoke
+  CONTAINER=vllm-gemma-4-31b-mtp bash scripts/soak-test.sh --continuous
+  CONTAINER=none ENDPOINT=http://localhost:8030 bash scripts/soak-test.sh
+
+NOTES
+  Soak-continuous is the only test that surfaces Cliff 2b under
+  multi-turn accumulating-context traffic on single-card configs.
+  If you're filing a bench contribution, run with --continuous and
+  paste the [soak] summary alongside your bench numbers.
+  See docs/CLIFFS.md for context.
+
+PASS VERDICT — WHAT IT DOES AND DOES NOT MEAN
+  PASS = no failure signal on the test sample (silent_empty=0, VRAM
+  growth under threshold, TPS retention >= 98%, zero errors).
+  PASS does NOT validate that patches in the compose's overlay set
+  are load-bearing for the workload — topology alone (e.g. TP=2)
+  can sidestep the failure mode patches target. For patch attribution,
+  re-run the same soak with overlays stripped and compare.
+  Full discussion: docs/CLIFFS.md and issue #140.
+
+EOF
+}
+
+# --- arg parsing -------------------------------------------------------------
+# Set defaults (env vars override; flags override env vars; --help short-circuits)
+MODE_FLAG=""
+QUICK=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --continuous)  MODE_FLAG="continuous"; shift ;;
+    --fresh)       MODE_FLAG="fresh"; shift ;;
+    --quick)       QUICK=1; MODE_FLAG="${MODE_FLAG:-fresh}"; shift ;;
+    -h|--help)     usage; exit 0 ;;
+    *)             echo "✗ unknown argument: $1" >&2
+                   echo "  run 'bash scripts/soak-test.sh --help' for usage." >&2
+                   exit 2 ;;
+  esac
+done
+
+SOAK_MODE="${SOAK_MODE:-${MODE_FLAG:-fresh}}"
+if [[ "$SOAK_MODE" == "continuous" ]]; then
+  # Continuous mode requires the ramping turn shape; sessions=5 is the
+  # standard cross-rig cadence (matches what BENCHMARKS rows cite).
+  SOAK_SESSIONS="${SOAK_SESSIONS:-5}"
+  SOAK_TURNS="${SOAK_TURNS:-5}"
+elif [[ "$QUICK" == "1" ]]; then
+  SOAK_SESSIONS="${SOAK_SESSIONS:-8}"
+  SOAK_TURNS="${SOAK_TURNS:-5}"
+else
+  SOAK_SESSIONS="${SOAK_SESSIONS:-20}"
+  SOAK_TURNS="${SOAK_TURNS:-5}"
+fi
 SOAK_MAX_GROWTH_MIB="${SOAK_MAX_GROWTH_MIB:-200}"
+# Decode-rate granularity (#809). "auto" classifies a turn as canvas when the
+# response arrives in a single chunk (zero-width decode window) with real
+# tokens; the classification then latches for the rest of the run. "canvas"
+# forces it from turn 1; "autoregressive" disables the derivation entirely and
+# restores the pre-#809 behaviour. Exported so soak-helper.py sees it.
+SOAK_DECODE_GRANULARITY="${SOAK_DECODE_GRANULARITY:-auto}"
+case "$SOAK_DECODE_GRANULARITY" in
+  auto|canvas|autoregressive) ;;
+  *) echo "ERROR: SOAK_DECODE_GRANULARITY='${SOAK_DECODE_GRANULARITY}' — must be 'auto', 'canvas' or 'autoregressive'." >&2; exit 2 ;;
+esac
+export SOAK_DECODE_GRANULARITY
 SOAK_TIMEOUT_S="${SOAK_TIMEOUT_S:-1800}"
 SOAK_REQ_TIMEOUT_S="${SOAK_REQ_TIMEOUT_S:-600}"
 SOAK_OUTPUT="${SOAK_OUTPUT:-results/soak-$(date +%Y%m%d-%H%M%S)}"
@@ -81,27 +237,60 @@ cd "$REPO_ROOT"
 log() { printf '[soak] %s\n' "$*"; }
 die() { log "ERROR: $*"; exit 2; }
 need() { command -v "$1" >/dev/null 2>&1 || die "'$1' not found in PATH"; }
+soft_need() { command -v "$1" >/dev/null 2>&1; }
 
 need curl
-need docker
 need nvidia-smi
 need python3
 [[ -x "$HELPER" || -f "$HELPER" ]] || die "missing helper: $HELPER"
 
+# docker is soft-required: only needed for container-mode tracking
+# (docker stats + docker logs scrape). Host engines (e.g. llama.cpp host
+# build, see #85, #87) use CONTAINER=none and run without docker.
+HAVE_DOCKER=0
+if soft_need docker; then HAVE_DOCKER=1; fi
+if [[ "${CONTAINER:-}" == "none" ]]; then
+  HOST_MODE=1
+elif [[ "$HAVE_DOCKER" == "0" ]]; then
+  log "docker not in PATH — running in host mode (CONTAINER=none implied)"
+  HOST_MODE=1
+  CONTAINER="none"
+else
+  HOST_MODE=0
+fi
+
 auto_container() {
-  docker ps --format '{{.Names}}' 2>/dev/null \
-    | grep -E '^vllm-qwen36-27b' \
-    | head -1 || true
+  # Detect a running inference container by its ENGINE-INTERNAL port mapping
+  # (vLLM 8000 / llama.cpp 8080 / sglang 30000), NOT a hardcoded model-name
+  # allowlist — so ANY shipped compose is found regardless of model
+  # (diffusiongemma-26b-a4b, gemma-4-26b-a4b, gemma-4-12b, a BYO container, …).
+  # Re-syncs with the canonical preflight.sh::preflight_autodetect_endpoint, which
+  # this function is meant to mirror: the model allowlist had drifted and silently
+  # failed soak auto-detect for every model not in the list (#405: a shipped
+  # diffusiongemma-26b-a4b compose — same bug class as the #310 preflight fix).
+  # Among port matches, prefer a recognised club-3090 engine-family prefix;
+  # otherwise take the first. The `|| true` is load-bearing under set -euo pipefail.
+  local lines name
+  lines=$(docker ps --format '{{.Names}}|{{.Ports}}' 2>/dev/null \
+    | grep -E '([0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]+->(8000|8080|30000)/tcp' || true)
+  [[ -z "$lines" ]] && return 0
+  name=$(printf '%s\n' "$lines" \
+    | grep -E '^(vllm-|llama-cpp-|ik-llama-|sglang-|beellama-)' | head -1 || true)
+  [[ -z "$name" ]] && name=$(printf '%s\n' "$lines" | head -1)
+  printf '%s\n' "${name%%|*}"
 }
 
 endpoint_from_container() {
   local container="$1"
-  local mapped port
-  mapped="$(docker port "$container" 8000/tcp 2>/dev/null | head -1 || true)"
-  if [[ -n "$mapped" ]]; then
-    port="${mapped##*:}"
-    [[ "$port" =~ ^[0-9]+$ ]] && { printf 'http://localhost:%s\n' "$port"; return 0; }
-  fi
+  local mapped port internal
+  # vllm maps internal 8000, llama.cpp / ik_llama map 8080, sglang maps 30000.
+  for internal in 8000 8080 30000; do
+    mapped="$(docker port "$container" "${internal}/tcp" 2>/dev/null | head -1 || true)"
+    if [[ -n "$mapped" ]]; then
+      port="${mapped##*:}"
+      [[ "$port" =~ ^[0-9]+$ ]] && { printf 'http://localhost:%s\n' "$port"; return 0; }
+    fi
+  done
   printf 'http://localhost:8020\n'
 }
 
@@ -124,8 +313,10 @@ capture_state() {
   local label="$1"
   nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu,power.draw,temperature.gpu \
     --format=csv,noheader,nounits > "${SOAK_OUTPUT}/nvidia-smi-${label}.csv" 2>/dev/null || true
-  docker stats --no-stream --format '{{json .}}' "$CONTAINER" \
-    > "${SOAK_OUTPUT}/docker-stats-${label}.jsonl" 2>/dev/null || true
+  if [[ "$HOST_MODE" == "0" ]]; then
+    docker stats --no-stream --format '{{json .}}' "$CONTAINER" \
+      > "${SOAK_OUTPUT}/docker-stats-${label}.jsonl" 2>/dev/null || true
+  fi
 }
 
 finish() {
@@ -137,13 +328,24 @@ finish() {
 trap finish EXIT
 trap 'log "interrupted"; exit 2' INT TERM
 
-CONTAINER="${CONTAINER:-$(auto_container)}"
-[[ -n "$CONTAINER" ]] || die "no running vllm-qwen36-27b* container found; set CONTAINER=..."
-docker inspect "$CONTAINER" >/dev/null 2>&1 || die "container '$CONTAINER' not found"
-[[ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null || echo false)" == "true" ]] \
-  || die "container '$CONTAINER' is not running"
+if [[ "$HOST_MODE" == "1" ]]; then
+  log "host mode: CONTAINER=none — skipping docker checks (URL must be set or auto-detected)"
+  CONTAINER="none"
+else
+  CONTAINER="${CONTAINER:-$(auto_container)}"
+  [[ -n "$CONTAINER" ]] || die "no running club-3090 inference container found (looked for an engine-port mapping 8000/8080/30000 on a vllm-/llama-cpp-/ik-llama-/beellama-/sglang- container); set CONTAINER=... or CONTAINER=none for host engines"
+  docker inspect "$CONTAINER" >/dev/null 2>&1 || die "container '$CONTAINER' not found (use CONTAINER=none for host engine builds)"
+  [[ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null || echo false)" == "true" ]] \
+    || die "container '$CONTAINER' is not running"
+fi
 
-ENDPOINT="${ENDPOINT:-${URL:-$(endpoint_from_container "$CONTAINER")}}"
+if [[ "$HOST_MODE" == "1" ]]; then
+  # Host mode: URL must be set explicitly (or fall back to localhost:8020).
+  # We can't sniff a port from a container that doesn't exist.
+  ENDPOINT="${ENDPOINT:-${URL:-http://localhost:8020}}"
+else
+  ENDPOINT="${ENDPOINT:-${URL:-$(endpoint_from_container "$CONTAINER")}}"
+fi
 mkdir -p "$SOAK_OUTPUT"
 
 MODELS_JSON="${SOAK_OUTPUT}/models.json"
@@ -159,7 +361,7 @@ RESPONSE_DIR="${SOAK_OUTPUT}/responses"
 STATE_DIR="${SOAK_OUTPUT}/states"
 mkdir -p "$REQUEST_DIR" "$RESPONSE_DIR" "$STATE_DIR"
 
-printf 'session_id,turn_id,t_ms,vram_mib,ttft_ms,decode_tps,status,error\n' > "$TURN_LOG"
+printf 'session_id,turn_id,t_ms,vram_mib,ttft_ms,decode_tps,completion_tokens,status,error,decode_basis\n' > "$TURN_LOG"
 printf 'session_id,turn_id,gpu_index,memory_used_mib,utilization_gpu_pct\n' > "$GPU_LOG"
 
 capture_state "baseline"
@@ -172,10 +374,16 @@ log "output=${SOAK_OUTPUT}"
 
 START_SECONDS="$SECONDS"
 BOOT_VRAM_MIB=""
+# Session the warm VRAM baseline was anchored at the END of; 0 = never anchored
+# (no error-free session), which makes VRAM growth UNMEASURABLE rather than a
+# phantom number (#829).
+BASELINE_SESSION=0
+TURNS_RUN=0
 TIMED_OUT=0
 
 for session in $(seq 1 "$SOAK_SESSIONS"); do
   log "session ${session}/${SOAK_SESSIONS}"
+  session_errors=0
   state_file="${STATE_DIR}/state-s${session}.json"
   if [[ "$SOAK_MODE" == "continuous" ]]; then
     python3 "$HELPER" init-session "$state_file" "$session"
@@ -203,32 +411,73 @@ for session in $(seq 1 "$SOAK_SESSIONS"); do
     append_gpu_snapshot "$session" "$turn"
     python3 "$HELPER" append-log "$TURN_LOG" "$session" "$turn" "$vram" "$metrics_file"
 
-    read -r status t_ms ttft_ms decode_tps < <(python3 "$HELPER" metric "$metrics_file")
-    log "  turn ${turn}/${SOAK_TURNS}: status=${status} wall=${t_ms}ms ttft=${ttft_ms}ms decode_tps=${decode_tps} vram=${vram}MiB"
+    read -r status t_ms ttft_ms decode_tps err_flag decode_basis < <(python3 "$HELPER" metric "$metrics_file")
+    TURNS_RUN=$((TURNS_RUN + 1))
+    [[ "${err_flag:-0}" == "1" ]] && session_errors=$((session_errors + 1))
+    if [[ "${decode_basis:-decode}" == "wall" ]]; then
+      # Canvas-granularity turn (#809): the response arrived in a single chunk,
+      # so the decode window is zero-width and the figure is derived from wall
+      # time. Label it — a wall-derived number includes prefill and must never
+      # be printed as a bare decode rate. Latch the classification for the rest
+      # of the run so later narrow-window turns on the same model are derived
+      # too, instead of alternating between a real figure and a bare 0.0.
+      if [[ "$SOAK_DECODE_GRANULARITY" != "canvas" ]]; then
+        SOAK_DECODE_GRANULARITY=canvas
+        export SOAK_DECODE_GRANULARITY
+        log "  canvas-granularity generation detected (single-chunk response, zero-width decode window)"
+        log "  per-turn figures are wall-derived from here on — wall TPS, includes prefill. See issue #809."
+      fi
+      log "  turn ${turn}/${SOAK_TURNS}: status=${status} wall=${t_ms}ms ttft=${ttft_ms}ms decode_tps=${decode_tps} (wall-derived, canvas) vram=${vram}MiB"
+    else
+      log "  turn ${turn}/${SOAK_TURNS}: status=${status} wall=${t_ms}ms ttft=${ttft_ms}ms decode_tps=${decode_tps} vram=${vram}MiB"
+    fi
   done
 
-  # Capture warm baseline at END of session 1 — after all 5 turn shapes have
-  # run once and prefix cache has filled. Real accretion is measured FROM
-  # this baseline across sessions 2-N, so cache-fill (typically +500-1500
-  # MiB on the first 12K-char tool-result paste) doesn't false-positive.
+  # Capture warm baseline at END of the first CLEAN session — after all 5 turn
+  # shapes have run once and prefix cache has filled. Real accretion is measured
+  # FROM this baseline across the remaining sessions, so cache-fill (typically
+  # +500-1500 MiB on the first 12K-char tool-result paste) doesn't false-positive.
   # Calibration validated 2026-05-03 on long-text @ 0.93 + 180K — sessions
   # 2-10 stayed flat at session-1-end VRAM, confirming the test discriminates
   # cache fill from accretion correctly.
+  #
+  # CLEAN is load-bearing (#829). Anchoring unconditionally at the end of
+  # session 1 is correct only when session 1 succeeded: if the engine died
+  # mid-session, vram_mib() samples a corpse and every later reading reads as
+  # multi-GB growth. #827 printed "VRAM grew 32053 MiB" and "oscillation
+  # 63866 MiB" on a run whose only real fault was an engine crash — the loudest
+  # FAIL in the report, pointing at a leak that did not exist. So we re-anchor
+  # on the first error-free session instead, and if none exists the summary
+  # reports VRAM as UNMEASURABLE rather than inventing a figure.
   if [[ -z "$BOOT_VRAM_MIB" ]]; then
-    BOOT_VRAM_MIB="$(vram_mib)"
-    log "warm baseline after session 1: ${BOOT_VRAM_MIB} MiB"
+    if (( session_errors == 0 )); then
+      BOOT_VRAM_MIB="$(vram_mib)"
+      BASELINE_SESSION="$session"
+      log "warm baseline after session ${session}: ${BOOT_VRAM_MIB} MiB"
+    else
+      log "session ${session} had ${session_errors} errored turn(s) — NOT anchoring the warm VRAM baseline here (would baseline a failing engine); re-anchoring on the first clean session"
+    fi
   fi
 done
 
 if [[ -z "$BOOT_VRAM_MIB" ]]; then
-  BOOT_VRAM_MIB="$(vram_mib)"
-  TIMED_OUT=1
-  log "no completed turns; writing inconclusive summary"
+  # Deliberately do NOT sample vram_mib() here: with no clean session the engine
+  # is by definition unhealthy, and a reading taken now is exactly the corpse
+  # baseline #829 is about. Pass 0 + BASELINE_SESSION=0 so the summary reports
+  # VRAM as UNMEASURABLE.
+  BOOT_VRAM_MIB=0
+  BASELINE_SESSION=0
+  if (( TURNS_RUN == 0 )); then
+    TIMED_OUT=1
+    log "no completed turns; writing inconclusive summary"
+  else
+    log "no error-free session completed — VRAM growth + oscillation are UNMEASURABLE (no warm baseline)"
+  fi
 fi
 
 set +e
 python3 "$HELPER" summary "$TURN_LOG" "$SUMMARY_MD" "$BOOT_VRAM_MIB" \
-  "$SOAK_MAX_GROWTH_MIB" "$TIMED_OUT" "$SOAK_SESSIONS"
+  "$SOAK_MAX_GROWTH_MIB" "$TIMED_OUT" "$SOAK_SESSIONS" "$BASELINE_SESSION"
 rc=$?
 set -e
 exit "$rc"

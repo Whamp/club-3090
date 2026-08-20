@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "format": {
+    "name": "fp4_ds_mla",
+    "nope_values": 448,
+    "nope_encoding": "E2M1 packed low-nibble first, group-32 UE8M0 scales",
+    "rope_values": 64,
+    "rope_encoding": "BF16 unchanged",
+    "token_data_bytes": 352,
+    "scale_bytes": 16,
+    "row_bytes": 368
+  },
+  "runtime_base": {
+    "ref": "club-3090/deepseek-v4-gguf-tp:3ec20ceb",
+    "digest": "sha256:f91e8283e7ad116b8664b4a936dba88ebafcb8910a968dce2a3c34420f010adf"
+  },
+  "vllm": {
+    "repo": "https://github.com/Whamp/vllm.git",
+    "branch": "feat/gguf-tp-q4-kv",
+    "commit": "633815f6889d9d033aefa04bf40cb270d5b6a3f1",
+    "tree": "2230f7d43768e45fab2547bea056c9df160aab45",
+    "runtime_files": [
+      {"path": "vllm/config/cache.py", "sha256": "96e6b6d5fdb4cd15ed9b6c298c9b7f927607727d0df53e8d95f98a8b9c869d3e"},
+      {"path": "vllm/models/deepseek_v4/amd/rocm.py", "sha256": "85ab9c8da252c5fe685fc2fb5ceebaf6ba522d3d8307d14e71ea8370291b6dcb"},
+      {"path": "vllm/models/deepseek_v4/ampere/ampere_sparse.py", "sha256": "e1c26b191669bb165c5582e7770d4e1d54a03ffe77eeb38f35a1052262d8edef"},
+      {"path": "vllm/models/deepseek_v4/attention.py", "sha256": "11b057dfa6c91adb9e0e506f73e5a65b07f5814c9838b7f2e3e05c0af8e9bf9b"},
+      {"path": "vllm/models/deepseek_v4/cache_layout.py", "sha256": "da6483459740c189752b269fa7cf76fece8c50e1500be2415a3435cd3b1a34e2"},
+      {"path": "vllm/models/deepseek_v4/common/ops/cache_utils.py", "sha256": "d52715233fa6dfa05f5b80dbc242a9554a10b97aebfe2fb45c3ce87dff2a33c5"},
+      {"path": "vllm/models/deepseek_v4/common/ops/fused_compress_quant_cache.py", "sha256": "cd87ac9c22229923c35e55ec33913ca717433850557c6088bbc98ebd4e9ee056"},
+      {"path": "vllm/models/deepseek_v4/common/ops/fused_indexer_q.py", "sha256": "f038e9b8fd4214384b1e10524dca8c1c8eab911f4cd8ed9857f10764445a74c2"},
+      {"path": "vllm/models/deepseek_v4/compressor.py", "sha256": "0398181cdea136805b734799c06ae9e5b474d4ee5a2f878ae87b6a83f420a5c9"},
+      {"path": "vllm/models/deepseek_v4/nvidia/flashinfer_sparse.py", "sha256": "ad586007c533a4a726757f4f6f4f5dae39a55e3d21db0e77033c6a6b7ead7f12"},
+      {"path": "vllm/models/deepseek_v4/sparse_mla.py", "sha256": "bd3ba37c07ed8b7de964c19d00df678be4dfc5e960e6d8e9a3d77842316d5aea"},
+      {"path": "vllm/utils/torch_utils.py", "sha256": "4d1dc15cf4e6db74f49920007ccd4f2bf9e2280203b084e6a4ce14f5d94a0b82"},
+      {"path": "vllm/v1/attention/backends/mla/sparse_swa.py", "sha256": "2ad3816f2e36c46bde692228f060a54b8e985000f2ff162a8f72917a94fd749e"},
+      {"path": "vllm/v1/kv_cache_interface.py", "sha256": "7bc797aea7b02f62a012bafeef972a382fbefb3c4d9925d54a2946607937bdaf"}
+    ]
+  },
+  "flash_mla": {
+    "repo": "https://github.com/Whamp/forks-flash-mla-int.git",
+    "branch": "feat/fp4-ds-mla-sm86",
+    "commit": "81a06aa6feb608bcba687a40acf60ee87d14f2da",
+    "tree": "134841dfba0487c3db9f996817c94c16eca972b3",
+    "wheel": "flash_mla-2.0.0-cp39-abi3-linux_x86_64.whl",
+    "wheel_sha256": "c4cb6acaf4f5284f7906f263033f66881838561117fe9918eec265ea554cd8eb",
+    "native_library_sha256": "c8de1fd7f8e02f49151f3e95d4903f4891680dbce4fbd7acd0d164892cd37085",
+    "cuda_arch": "sm_86"
+  },
+  "stable_extension": {
+    "filename": "_C_stable_libtorch.abi3.so",
+    "sha256": "971cfcb9391617889ad29a98f7811eb830fc6704ce2f2bcf9a14e3ccc482389c",
+    "source_commit": "633815f6889d9d033aefa04bf40cb270d5b6a3f1",
+    "cuda_arch": "sm_86"
+  },
+  "image": {
+    "tag": "club-3090/deepseek-v4-gguf-tp:fp4-633815f6",
+    "digest": "sha256:eb94d5049bf4d8d55c335ac1d2445382a811b7312d28e3e73088011a8103e181"
+  },
+  "profile": {
+    "compose": "models/deepseek-v4-flash-0731/vllm/compose/multi4/gguf-tp/fp4.yml",
+    "max_model_len": 148000,
+    "max_num_seqs": 2,
+    "max_num_batched_tokens": 256,
+    "gpu_memory_utilization": 0.98,
+    "kv_cache_dtype": "fp4_ds_mla"
+  }
+}

@@ -94,11 +94,15 @@ n=3 is the empirical sweet spot. n=4 nominally hits higher TPS on code but 4th-p
 ### Power cap
 
 ```bash
-sudo nvidia-smi -pl 230 -i 0    # production default — quiet, cool
-sudo nvidia-smi -pl 330 -i 0    # ~+10% mean TPS during heavy sessions
+sudo nvidia-smi -pm 1            # one-time: enable persistence mode
+sudo nvidia-smi -pl 290 -i 0     # air-cooled default — peak TPS/W (per 10W-resolution sweep)
+sudo nvidia-smi -pl 330 -i 0     # water-cooled default (per @syangsao 3-cap data)
+sudo nvidia-smi -pl 230 -i 0     # thermal-constrained / quiet — NOT a sweet spot, see note
 ```
 
-Past 330W: diminishing returns (SM clocks saturate near 1.9 GHz on 3090s).
+Sweet spot: **290W (air) / 330W (water)** — peak TPS/W efficiency on 3090s and only ~5-7% TPS loss vs unrestricted stock. Past the sweet spot: diminishing returns (SM clocks saturate near 1.9 GHz). Stock TDP is *less* efficient than the sweet-spot cap on Qwen3.6's GDN-attention kernels.
+
+**Note**: 230W is NOT the sweet spot — 290W is. The "230W sweet spot" lore traces back to coarse 3-cap-resolution data; the dense 10W sweep on this rig shows 230W costs ~16% efficiency vs 290W (air-cooled). 230W is a low-power / quiet cap, not a perf-per-watt one. On llama.cpp + Qwen3.6 it costs ~34% TPS (cross-rig data from [@syangsao](https://github.com/noonghunna/club-3090/issues/58#issuecomment-4388766174)) because the GDN forward kernel is genuinely compute-bound. On vLLM the penalty is smaller (~10-15%) because the kernel mix is GEMM-dominated, but 290W is still the better default. See [docs/HARDWARE.md#power](../HARDWARE.md#power) for the full cross-rig table.
 
 ### Genesis env-opt-in patches
 
@@ -117,9 +121,9 @@ If you're running long-ctx tool flows (50K+ tokens with multiple tools active), 
 
 | Workload | Compose | Why |
 |---|---|---|
-| IDE agents (Cline / Cursor / Copilot) + long prompts | `docker-compose.tools-text.yml` | fp8 + 75K + no vision; PN8 closes Cliff 1 |
-| No spec-decode (debugging) | `docker-compose.minimal.yml` | 32K + fp8 + no MTP — simplest stack |
-| Minimal (no Genesis, no spec-decode) | `docker-compose.minimal.yml` | 32K + fp8 — escape hatch if Genesis clone fails |
+| IDE agents (Cline / Cursor / Copilot) + long prompts | `single/autoround-int4/tools-text.yml` | fp8 + 75K + no vision; PN8 closes Cliff 1 |
+| No spec-decode (debugging) | `single/autoround-int4/minimal.yml` | 32K + fp8 + no MTP — simplest stack |
+| Minimal (no Genesis, no spec-decode) | `single/autoround-int4/minimal.yml` | 32K + fp8 — escape hatch if Genesis clone fails |
 
 See [SINGLE_CARD.md](../SINGLE_CARD.md) and [DUAL_CARD.md](../DUAL_CARD.md) for full per-workload guidance.
 

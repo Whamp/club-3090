@@ -1,0 +1,16 @@
+# Build layer 1: GGUF engine sources + stable-ABI extension over the base
+# runtime image. The 21 files under root/ are extracted byte-identically from
+# Whamp/vLLM commit 3ec20cebe (verified; see MANIFEST.json overlaid_sources).
+# The compiled stable extension (_C_stable_libtorch.abi3.so) carries the
+# native SM86 GGUF kernels and must be present at build time, hash-checked
+# against MANIFEST.json. Build via build-image.sh (fail-closed) — do not
+# `docker build` this by hand.
+FROM club-3090/gguf-tp-base:b7766cfe
+
+COPY root/ /workspace/vllm/
+COPY _C_stable_libtorch.abi3.so /workspace/vllm/vllm/_C_stable_libtorch.abi3.so
+
+LABEL org.opencontainers.image.revision="741b3abfb6970da7349c86c43e7135df17c9fb7a" \
+      club3090.vllm.tree="610c29ce719fc14b95074d989a70e6fe30963d09" \
+      club3090.base.image="sha256:eb2884fc60ee332d7adb9d5e424e35acf8817dad0f93c8bb7ea7095cb8f58a0e" \
+      club3090.stable_extension.sha256="9f1315be17cb27752be0eb933538148e2b503580f0712c4386f984529afa45df"

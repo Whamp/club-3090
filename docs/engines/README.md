@@ -11,8 +11,9 @@ This repo's main path is **vLLM** because it has the deepest support for Qwen3-N
 | Engine | Status on this stack | Per-stream TPS (1× 3090) | Max ctx (1× 3090) | Vision | Tool calls | Spec-decode | OpenAI API parity |
 |---|---|---|---|---|---|---|---|
 | **[vLLM](VLLM.md)** ⭐ | **Validated, production-grade** (this repo) | 50-53 narr / 66-70 code | 48K default · 75K IDE-agent · **198K vision · 214K text-only** | ✅ | ✅ | ✅ MTP n=3 | ✅ Full |
-| **[llama.cpp](LLAMA_CPP.md)** | Works mainline + [Luce DFlash fork](https://github.com/Luce-Org/lucebox-hub) for spec-decode | 35-60 (varies by quant + KV type) | **262K** (Q4_K_M + q4_0 KV) | ✅ (via mmproj) | ⚠️ Limited (no auto-tool-choice in server) | ✅ DFlash N=5 in fork | ⚠️ Partial |
-| **[SGLang](SGLANG.md)** | **Blocked** by same Marlin pad-sub-tile-n bug (vllm#40361 / sglang equivalent); EAGLE spec-decode separately blocked by GDN/DeltaNet rollback | n/a (untested at this state) | n/a | ✅ | ✅ | ⚠️ EAGLE blocked on hybrid | ✅ Full |
+| **[llama.cpp](LLAMA_CPP.md)** | Works mainline (MTP merged [PR #22673](https://github.com/ggml-org/llama.cpp/pull/22673), 2026-05-16) | 35-60 (varies by quant + KV type) | **262K** (Q4_K_M + q4_0 KV) | ✅ (via mmproj) | ⚠️ Limited (no auto-tool-choice in server) | ✅ MTP + DFlash both native on mainline (`--spec-type draft-mtp` / `draft-dflash`) | ⚠️ Partial |
+| **[ik_llama.cpp](IK_LLAMA.md)** *advanced quants* | **Shipped — advanced-quant track** | ~50 narr / ~58 code (ties llama.cpp at matched power; edge is **~0.5–0.8 GB leaner VRAM**) | **262K** (IQ4_KS + q4_0 KV) | ✅ (mmproj) | ✅ (template + parser) | ✅ MTP n=2 | ⚠️ Partial (llama.cpp-class) |
+| **[SGLang](../../models/qwen3.6-27b/sglang/README.md)** | **Re-test pending** (May 2026). Historical block partially out-of-date — DFlash + MTP have landed natively on SGLang mainline; Marlin pad-sub-tile-n fix status unknown. See sglang README for re-test plan. | n/a (untested) | n/a | ✅ | ✅ | ✅ DFlash + MTP native upstream (untested here) | ✅ Full |
 
 ---
 
@@ -68,15 +69,20 @@ This repo's main path is **vLLM** because it has the deepest support for Qwen3-N
 - Good support for batched structured output (constraint decoding)
 
 **Cons:**
-- **Currently blocked on this stack by the same Marlin pad-sub-tile-n bug we hit on vLLM TP=2.** Same kernel-line fix applies (would need a similar patch on SGLang's side or for them to pick up the upstream fix).
-- EAGLE spec-decode (their MTP equivalent) is separately blocked by the DeltaNet/GDN hybrid layer not supporting KV rollback — this is a Qwen3-Next architectural issue, not SGLang-specific.
+- **Last attempt (early 2026): blocked by Marlin pad-sub-tile-n bug** (same kernel-line issue as our [vllm#40361](https://github.com/vllm-project/vllm/pull/40361)). Whether SGLang has picked up the fix on current main is **unverified** — needs re-test. Bug is INT4-specific; FP16/bf16 weights work fine.
+- EAGLE spec-decode was separately blocked by the DeltaNet/GDN hybrid layer not supporting KV rollback. Status on current SGLang main: also unverified, but DFlash and MTP support has landed natively (per z-lab + LMSYS) so spec-decode on Qwen3-Next is at least *intended* to work.
+- TurboQuant 3-bit KV is WIP on SGLang ([Issue #21618](https://github.com/sgl-project/sglang/issues/21618)) — not yet merged.
 - Smaller community than vLLM; fewer eyes on Qwen3-Next bugs.
 
-**When to pick:** Production multi-tenant serving on models that work cleanly on it (not yet Qwen3.6-27B-int4-AutoRound — track the unblock list below).
+**When to pick:** if a contributor with current SGLang main re-runs the boot test on Qwen3.6-27B-INT4 + TP=2 and it works. See the [re-test plan in the per-engine page](../../models/qwen3.6-27b/sglang/README.md). For an FP16/bf16 weight variant, it likely works today.
 
-**Watch list to unblock SGLang on this stack:**
-- Marlin pad-sub-tile-n landing (we [filed PR #40361 on vLLM](https://github.com/vllm-project/vllm/pull/40361); the same fix applies to SGLang's Marlin call site)
-- DeltaNet KV rollback support upstream (vllm#39931 / issue #40124 land would unblock EAGLE on Qwen3-Next family across engines)
+**Re-test plan (pending):**
+1. Pull latest SGLang container/main → smoke-boot at TP=2 + AutoRound INT4 + no spec-decode + fp8/q4 KV (NOT TurboQuant — WIP upstream)
+2. If boot clean: validate verify-stress 7/7
+3. Add DFlash spec-decode (preferred over MTP — higher acceptance rate, z-lab maintains the SGLang integration; Qwen3.6-27B draft at [`z-lab/Qwen3.6-27B-DFlash`](https://huggingface.co/z-lab/Qwen3.6-27B-DFlash))
+4. If competitive vs vLLM `dual-dflash.yml` (78-82 narr / 125-127 code TPS) → ship as a polished compose
+
+Full plan in [models/qwen3.6-27b/sglang/README.md](../../models/qwen3.6-27b/sglang/README.md#re-test-plan).
 
 ---
 
@@ -86,16 +92,17 @@ This repo's main path is **vLLM** because it has the deepest support for Qwen3-N
 |---|---|---|
 | **Full feature set, MTP spec-decode, OpenAI API parity** | vLLM + Lorbus AutoRound | This repo's path. 51-70 TPS depending on workload, all features, prefill-safe at 48K default. |
 | **Maximum context (262K) on one 3090** | llama.cpp + UD-Q3_K_XL or Q4_K_M + q4_0 KV | Smaller quants leave 8-10 GB headroom for KV at 262K. ~35-45 TPS sustained. |
-| **Best concurrent throughput on dual 3090** | vLLM TP=2 + Turbo (TQ3) | 4 streams at full 262K, ~200 TPS aggregate. See [companion repo](https://github.com/noonghunna/qwen36-dual-3090). |
+| **Leanest VRAM / best quality-per-bit GGUF on one 3090** | ik_llama + IQ4_KS + MTP | Fork-exclusive IQK imatrix quant, 262K ctx. Ties llama.cpp on TPS + quality at matched power; its edge is a ~0.5–0.8 GB leaner footprint (best when VRAM-tight). Two-stage ngram+MTP for code workloads. See [IK_LLAMA.md](IK_LLAMA.md). |
+| **Best concurrent throughput on dual 3090** | vLLM TP=2 + Turbo (TQ3) | 4 streams at full 262K, ~200 TPS aggregate. See [`dual-turbo.yml`](../models/qwen3.6-27b/vllm/compose/dual/autoround-int4/turbo.yml) in this repo. |
 | **Non-NVIDIA hardware (AMD / Intel / Apple)** | llama.cpp | Only engine with cross-platform support. |
 | **Lightest setup, fastest cold start** | llama.cpp | Single binary, ~30s cold start. Good for embedded use, quick experiments. |
-| **High-throughput multi-tenant serving** | SGLang (when unblocked — currently blocked on Qwen3.6) | RadixAttention prefix sharing wins at scale. Watch list in SGLANG.md. |
+| **High-throughput multi-tenant serving** | SGLang (re-test pending — DFlash + MTP native upstream as of May 2026; Marlin INT4 fix verification needed) | RadixAttention prefix sharing wins at scale. Re-test plan in [sglang/README.md](../../models/qwen3.6-27b/sglang/README.md). |
 
 ---
 
 ## Quant choice (orthogonal to engine choice)
 
-The model itself comes in several quant formats. Engine-quant compatibility:
+The model itself comes in several quant formats. Engine-quant compatibility (full primer: **[QUANTIZATION.md](../QUANTIZATION.md)**):
 
 | Quant | Disk size | Engine fit | Notes |
 |---|---|---|---|
@@ -105,6 +112,7 @@ The model itself comes in several quant formats. Engine-quant compatibility:
 | GGUF Q4_K_M | ~16.8 GB | llama.cpp ✅ · vLLM ⚠️ experimental · SGLang ❌ | The default GGUF mid-range quant. Strong quality, broad ecosystem (Ollama, LM Studio, etc). |
 | GGUF UD-Q3_K_XL ([Unsloth](https://huggingface.co/unsloth/Qwen3.6-27B-GGUF)) | **~14.5 GB** | llama.cpp ✅ | Smaller than 4-bit options. Quality cost is small on Qwen3.6 (quantization-friendly), buys substantial KV cache room. |
 | GGUF Q3_K_M | ~13.6 GB | llama.cpp ✅ | More aggressive 3-bit; quality cost real but acceptable for many workloads. |
+| **GGUF IQ4_KS (imatrix)** ⭐ ([ubergarm](https://huggingface.co/ubergarm/Qwen3.6-27B-GGUF)) | **~15.1 GB** | **[ik_llama.cpp](IK_LLAMA.md) only** · llama.cpp ❌ · vLLM ❌ | Best quality-per-bit GGUF (imatrix + kernels co-designed for IQK grids). Smaller than Q4_K_M → **262K single-card**. Fork-exclusive — see [QUANTIZATION.md](../QUANTIZATION.md). |
 
 ### AutoRound vs GPTQ vs AWQ (within vLLM)
 
@@ -131,6 +139,7 @@ If MTP isn't a priority for your workload, GPTQ or AWQ are equally valid.
 - **[VLLM.md](VLLM.md)** — current setup (what this repo ships). Brief recap + tuning levers.
 - **[LLAMA_CPP.md](LLAMA_CPP.md)** — quick GGUF recipe, vision via mmproj, Luce DFlash fork pointer for spec-decode, gotchas around server feature parity.
 - **[SGLANG.md](SGLANG.md)** — current blocked state, what would unblock, when to revisit. TBD recipe placeholder until either Marlin pad lands upstream or DeltaNet rollback lands.
+- **[IK_LLAMA.md](IK_LLAMA.md)** ⭐ — the advanced-quant engine: fork-exclusive IQK imatrix quants (`IQ4_KS`), 262K single-card, MTP + two-stage ngram+MTP, `-khad` / `-vhad` / `--merge-qkv`, `--parallel-tool-calls`. Pairs with [QUANTIZATION.md](../QUANTIZATION.md).
 
 ---
 

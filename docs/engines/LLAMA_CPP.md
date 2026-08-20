@@ -13,7 +13,7 @@ If you want a lighter-weight setup, run on non-NVIDIA hardware, or just prefer l
 - ✅ **Best path for 262K context on a single 3090** — see "Going to 262K" recipe below
 - ⚠️ Server feature parity behind vLLM (no auto-tool-choice in upstream `server` binary; need a wrapper)
 - ⚠️ Concurrent serving is single-threaded (forks per request) → sluggish UX under load
-- ⚠️ No spec-decode in mainline (Luce DFlash fork has it; mainline doesn't yet)
+- ✅ MTP spec-decode merged on mainline ([PR #22673](https://github.com/ggml-org/llama.cpp/pull/22673), 2026-05-16). Luce DFlash fork also available for N=5 code workloads.
 
 ---
 
@@ -62,7 +62,8 @@ This is exactly why our launch frame is **two routes, not one** ([README](../../
 | **GGUF format** | Many quant options (Q4_K_M, Q5_K_S, IQ4_XS, etc.). Easy to swap. |
 | **Cross-platform** | Works on AMD (ROCm), Intel (oneAPI), Apple Silicon (Metal), CPU-only. vLLM is NVIDIA-only. |
 | **Active community** | Lots of distros — Ollama, LM Studio, LocalAI, koboldcpp, etc. |
-| **Luce DFlash fork available** | If you want spec-decode equivalent to MTP, [Luce's fork](https://github.com/Luce-Org/lucebox-hub) ships DFlash N=5 for Qwen3.6-27B. |
+| **MTP spec-decode on mainline** | [PR #22673](https://github.com/ggml-org/llama.cpp/pull/22673) merged 2026-05-16. Qwen3-Next MTP head loads natively with `--multi-token-prediction --draft-max N`. No fork needed. |
+| **Luce DFlash fork available** | For N=5 code workloads, [Luce's fork](https://github.com/Luce-Org/lucebox-hub) ships DFlash N=5. Requires source build. |
 
 ## Cons
 
@@ -72,7 +73,7 @@ This is exactly why our launch frame is **two routes, not one** ([README](../../
 | **Server feature parity behind vLLM** | Upstream `llama-server` doesn't expose `--enable-auto-tool-choice`. Need a wrapper (Open WebUI, LM Studio, Ollama with custom modelfile) for tool-call extraction. |
 | **No TurboQuant equivalent** | KV cache is fp16 / fp8 / q4_0 / q5_1 / q8_0 / **turbo3 (in Tom's fork)**. None as compact as vLLM's TQ3 → max usable ctx is ~64K with Q4_K_M on a single 3090. |
 | **Concurrent serving is sluggish** | `llama-server` forks per request. Two simultaneous requests → second waits or both slow. Not designed for multi-tenant. |
-| **DFlash needs a fork** | The Luce DFlash fork is server-only and forks per request — sluggish chat UX, fine for long generation. Mainline llama.cpp doesn't have spec-decode for Qwen3-Next family yet. |
+| **MTP now on mainline** | [PR #22673](https://github.com/ggml-org/llama.cpp/pull/22673) merged 2026-05-16 — Qwen3-Next MTP head loads natively. For N=5 code workloads, Luce DFlash fork is still available but requires a source build. |
 
 ---
 
@@ -86,8 +87,10 @@ This is exactly why our launch frame is **two routes, not one** ([README](../../
 
 ```bash
 # Use hf CLI (pip install 'huggingface-hub[hf_transfer]')
-hf download unsloth/Qwen3.6-27B-GGUF Qwen3.6-27B-Q4_K_M.gguf --local-dir /mnt/models/gguf/qwen3.6-27b/
+hf download unsloth/Qwen3.6-27B-GGUF Qwen3.6-27B-Q4_K_M.gguf --local-dir $MODEL_DIR/qwen3.6-27b-gguf/
 ```
+
+> **Easier:** `WEIGHTS=gguf bash scripts/setup.sh qwen3.6-27b` does this download for you — Q4_K_M + mmproj, SHA-verified, into the path the composes expect — and skips Genesis (llama.cpp doesn't need it).
 
 Confirm size matches the HuggingFace listing. If a `sha256` is published, verify it.
 
@@ -108,7 +111,7 @@ For a sane mid-context default (65K, plenty for chat + light agent work):
 
 ```bash
 /opt/llama.cpp/build/bin/llama-server \
-  -m /mnt/models/gguf/qwen3.6-27b/Qwen3.6-27B-Q4_K_M.gguf \
+  -m $MODEL_DIR/qwen3.6-27b-gguf/Qwen3.6-27B-Q4_K_M.gguf \
   -c 65536 \
   --host 0.0.0.0 --port 8020 \
   -ngl 999 \
@@ -131,7 +134,7 @@ Recipe (community-reported, validated by multiple users on r/LocalLLaMA):
 
 ```bash
 /opt/llama.cpp/build/bin/llama-server \
-  -m /mnt/models/gguf/qwen3.6-27b/Qwen3.6-27B-Q4_K_M.gguf \
+  -m $MODEL_DIR/qwen3.6-27b-gguf/Qwen3.6-27B-Q4_K_M.gguf \
   -ngl 99 \
   -c 262144 \
   -np 1 \
@@ -154,12 +157,12 @@ Sustained throughput at 262K with this config is typically **35-45 tok/s** on a 
 
 Download the `mmproj` model:
 ```bash
-hf download unsloth/Qwen3.6-27B-GGUF mmproj-F16.gguf --local-dir /mnt/models/gguf/qwen3.6-27b/
+hf download unsloth/Qwen3.6-27B-GGUF mmproj-F16.gguf --local-dir $MODEL_DIR/qwen3.6-27b-gguf/
 ```
 
 Add to launch:
 ```bash
---mmproj /mnt/models/gguf/qwen3.6-27b/mmproj-F16.gguf
+--mmproj $MODEL_DIR/qwen3.6-27b-gguf/mmproj-F16.gguf
 ```
 
 ### 5. Tool calls (limited)
@@ -174,7 +177,13 @@ For first-class tool calls in OpenAI format, vLLM is still the easiest option.
 
 ---
 
-## Recipe — DFlash N=5 via Luce fork (for code workloads)
+## Recipe — DFlash spec-decode (for code workloads)
+
+> **Updated 2026-07-26 (#759): prefer mainline.** DFlash is native on mainline
+> (`--spec-type draft-dflash`) and needs no fork — see
+> [`models/qwen3.6-27b/llama-cpp/README.md`](../../models/qwen3.6-27b/llama-cpp/README.md#dflash-spec-decode--native-on-mainline-no-fork-needed)
+> for the mainline recipe, the measured numbers, and the context cost. The Luce
+> fork recipe below is retained as an **alternative**, not the only path.
 
 If you want spec-decode equivalent to vLLM's MTP path:
 
@@ -185,12 +194,12 @@ cmake -B build -DGGML_CUDA=ON
 cmake --build build --config Release -j
 
 # Download draft model (~500 MB)
-hf download z-lab/Qwen3.6-27B-DFlash --local-dir /mnt/models/huggingface/z-lab/Qwen3.6-27B-DFlash/
+hf download z-lab/Qwen3.6-27B-DFlash --local-dir $MODEL_DIR/z-lab/Qwen3.6-27B-DFlash/
 
 # Launch
 /opt/lucebox-hub/build/bin/llama-server \
-  -m /mnt/models/gguf/qwen3.6-27b/Qwen3.6-27B-Q4_K_M.gguf \
-  --draft /mnt/models/gguf/qwen3.6-27b-dflash/dflash-N5.gguf \
+  -m $MODEL_DIR/qwen3.6-27b-gguf/Qwen3.6-27B-Q4_K_M.gguf \
+  --draft $MODEL_DIR/qwen3.6-27b-dflash-gguf/dflash-N5.gguf \
   --draft-max 5 \
   --draft-min 1 \
   -c 65536 \
@@ -202,6 +211,30 @@ hf download z-lab/Qwen3.6-27B-DFlash --local-dir /mnt/models/huggingface/z-lab/Q
 Measured on this stack (single 3090, Q4_K_M main + DFlash N=5 draft, code prompts): **~106 TPS mean code TPS**, AL 4.74, accept 30.6%. Matches Luce's published README numbers.
 
 **Trade-off:** the server forks per request, so chat UX feels sluggish (second request waits on first). For long generation tasks (single-shot code synthesis, document summarization), the per-request fork is fine.
+
+### 🆕 Dual-GPU split (lucebox-hub PRs #78 + #80, May 2026)
+
+If you have two GPUs (e.g. 2× 3090), lucebox-hub now supports a heterogeneous-spec-decode topology — **target on GPU 0, draft on GPU 1, no TP weight-sharding**. This removes the single-card 65K max_ctx ceiling we previously documented (target + draft + KV all competing for 24 GB).
+
+```bash
+# Target on GPU 0, DFlash draft on GPU 1
+/opt/lucebox-hub/build/bin/llama-server \
+  -m $MODEL_DIR/qwen3.5-27b-gguf/Qwen3.5-27B-Q4_K_M.gguf \
+  --draft $MODEL_DIR/qwen3.5-27b-dflash-gguf/dflash-N5.gguf \
+  --target-gpu 0 --draft-gpu 1 \
+  --draft-max 16 --draft-min 1 \
+  -c 262144 \
+  --host 0.0.0.0 --port 8004 \
+  --jinja
+```
+
+Or pin PFlash drafter to its own GPU via `--pflash-gpu` (separate `pflash_daemon` workflow — see [Luce-Org/lucebox-hub PR #78](https://github.com/Luce-Org/lucebox-hub/pull/78)).
+
+**@weicj's measured result on dual RTX 2080 Ti 22 GB**:
+- DFlash dual-GPU: **51.86 tok/s** HumanEval 10-prompt, AL 7.09, 44.3% accept (Qwen3.5-27B Q4 target + z-lab DFlash draft)
+- PFlash phase-split: **passing NIAH source ctx 24K → 262K (10.7×)** vs single-card co-resident
+
+**Recommended for our 2× 3090 stack today**: only with **Qwen3.5-27B** — the Qwen3.6-27B DFlash draft is still under training (per Luce-Org/lucebox-hub README 2026-04-26 snapshot). Untested on 2× 3090; tracked at club-3090 task #229.
 
 ---
 
@@ -246,7 +279,7 @@ The q8 → q4_0 jump is **counter-intuitive** because q8 is "higher precision" �
 - You need full OpenAI API parity (tools, streaming, structured output)
 - You want max context (>214K) on a single 3090 — vLLM single-card now ships 214K text-only / 198K with vision since the 2026-05-01 v0.20 + Genesis v7.65 dev tip migration (see [docs/CLIFFS.md](../CLIFFS.md) "v0.20 unblock"); llama.cpp goes to 262K
 - You need concurrent serving (multi-tenant)
-- You want MTP spec-decode (the integrated head, not DFlash)
+- You want vLLM's MTP with continuous batching (multi-tenant)
 - You're hitting llama.cpp's Qwen3-Next limitations and want the actively-developed path
 
 ---
@@ -254,8 +287,8 @@ The q8 → q4_0 jump is **counter-intuitive** because q8 is "higher precision" �
 ## Watch list (when llama.cpp catches up)
 
 - [llama.cpp PR #21089](https://github.com/ggerganov/llama.cpp/pull/21089) — TurboQuant KV cache landing (CPU first, CUDA follow-on). When CUDA path lands, `turbo3` becomes a first-class option on llama.cpp.
-- Mainline Qwen3-Next dense / hybrid attention support — track upstream issues if you're hitting bugs.
-- DFlash mainline integration — currently fork-only.
+- **MTP spec-decode** — ✅ merged on mainline ([PR #22673](https://github.com/ggml-org/llama.cpp/pull/22673), 2026-05-16). No longer pending.
+- **DFlash spec-decode** — ✅ native on mainline (`--spec-type draft-dflash`, impl in `common/speculative.cpp`; verified on b10066/b10088/b10103). No longer fork-only. Loads the published [Anbeeld DFlash GGUFs](https://huggingface.co/Anbeeld/Qwen3.6-27B-DFlash-GGUF) directly. Community-measured ~2.37× on 1× 3090 Ti (#759). ⚠️ Enabling it costs context — the drafter inherits `-c` and mainline has no `-cd`-style cap.
 
 ---
 

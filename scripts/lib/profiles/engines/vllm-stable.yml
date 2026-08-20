@@ -1,0 +1,73 @@
+schema_version: 1
+id: vllm-stable
+display_name: vLLM stable v0.25.1 (overlay-free)
+type: vllm
+stability: stable
+install:
+  method: docker_image
+  spec: vllm/vllm-openai:v0.25.1
+min_sm: 7.5
+supported_model_families:
+  - dense
+  - gemma4-swa-dense
+  - gemma4-swa-moe
+  - gemma4-unified   # Gemma-4-12B unified arch — NATIVE in v0.24.0 (PR #44429 merged) → folds off
+                     # the ephemeral vllm-gemma4-unified image onto this engine (2026-07-01).
+  - qwen3-next-hybrid
+  - qwen3-next-moe
+  - qwen35-dense     # Tess-4-27B (qwen3_5 hybrid) — LIVE-VALIDATED on stock v0.24.0
+                     # 2026-07-11 (62.4 tok/s TP=2, forensics-week boots; slug
+                     # vllm/tess-dual-nvfp4). Family also covers Deckard-40B if a
+                     # vLLM path is ever added there.
+  - nemotron-h-puzzle-moe   # Nemotron-3 Puzzle 75B-A9B (NemotronHPuzzleForCausalLM, hybrid
+                            # Mamba2+attn MoE) — arch aliases to the NemotronH loader (registered
+                            # in v0.24.0 + v0.25.0; NVIDIA card tested v0.20.0). UNVERIFIED on-rig
+                            # (Blackwell/Hopper-only per NVIDIA; needs 4x3090) — drives the 🧪
+                            # community-float slug vllm/nemotron-75b-multi-mtp.
+features:
+  int8_per_token_head: true    # NATIVE for qwen3-next (uniform head dims) since v0.22.0 — that's why the
+                               # flag is true. NOT correct for Gemma-4 (hetero heads): on v0.24.0 int8-PTH
+                               # allocates the pool but SILENTLY craters recall past ~32K (needs #40391,
+                               # open/conflicting upstream) → gemma-31b-dual ships BF16 here, not int8-PTH.
+                               # (verified 2026-07-01; corrects the earlier "gemma native @262K" claim.)
+  turboquant_3bit_nc: false
+  marlin_pad_sub_tile_n: false
+  qwen3_coder_tool_parser: false
+supported_kv_formats:
+  - bf16
+  - fp16
+  - fp8_e4m3
+  - fp8_e5m2
+  - int8_per_token_head   # NATIVE for uniform-head-dim models (qwen3-next) since v0.22.0. Gemma-4 (hetero
+                          # head dims) needs the #40391 page-align overlay for CORRECT recall — and #40391 is
+                          # NOT native in v0.24.0 (it allocates the pool but recall craters past ~32K). So
+                          # Gemma-4 uses BF16 KV on THIS engine (gemma-31b-dual); int8-PTH here = qwen3-next
+                          # only. Gemma int8-PTH+#40391 (262K) stays on vllm-gemma-stable. (corrected 2026-07-01)
+supported_drafters:
+  - mtp
+  - mtp_assistant
+supported_weight_formats:
+  - bf16
+  - fp16
+  - autoround
+  - awq
+  - gptq
+  - compressed-tensors
+  - fp8                   # qwen3.6-27b-fp8 (official e4m3 release) — Marlin W8A16 on Ampere sm_86
+                          # (memory win, no FP8 compute speedup). Drives the qwen "max accuracy" tier.
+  - modelopt              # nvidia modelopt checkpoints (NVFP4 / MIXED_PRECISION) — stock vLLM
+                          # supports --quantization modelopt; the FP4 KERNELS need Hopper/Blackwell,
+                          # which is encoded per-slug via required_sm=9.0 (vllm/qwen-27b-*-nvfp4),
+                          # NOT here (the loader itself is arch-agnostic).
+required_overlays: []
+# OVERLAY-FREE BY DESIGN. This is the load-bearing distinction (#254, 2026-06-05):
+# `derived_emittable` (CONTRACT-5) refuses any engine with vendored_overlays != []
+# as a derived-emission base, and vllm-stable IS used as the overlay-free base for
+# uncurated derives (profile-like). Overlay-CARRYING paths (Gemma int8 #40391, Gemma
+# duals #42006) live on the separate `vllm-gemma-stable` engine, which declares the
+# overlay provenance for diagnose-profile. Compose owns patch APPLICATION; engine owns
+# provenance — and a single engine cannot be both overlay-free (for derived bases) and
+# overlay-carrying (for Gemma's provenance), hence the two-engine split.
+vendored_overlays: []
+required_genesis: false
+notes: "Overlay-free stable vLLM — the broad engine for Qwen3-Next (hybrid 27B + MoE 35B-A3B), generic `dense` transformers, and uncurated derived-emission bases. 24 slugs route here. ⚠️ DO NOT restate the image tag in this note: the VERSION lives ONLY in install.spec (display_name mirrors it for humans). Bump install.spec on the next stable; the engine NAME never changes ('keep the tag, change the number'; #254 2026-06-05). This paragraph said 'docker vllm/vllm-openai:v0.22.0' until 2026-07-26 while install.spec had moved on TWICE (v0.24.0, then v0.25.1 in #682) — a duplicated version string is a drift generator, so it is deliberately gone. Read install.spec, and cross-check a RUNNING container with `docker inspect <c> --format '{{.Config.Image}}'` (the launchers inject the engine-profile image over the compose default, #254, and vllm.__version__ can lag its own docker tag). OVERLAY-FREE IS A CONTRACT, not an accident (CONTRACT-5): it is what makes this engine usable as a derived-emission base, and it is why the #682 pin bump needed no patch re-validation — the step that normally dominates an engine bump. Gemma 4 paths therefore stay on `vllm-gemma-stable`, which carries the #40391 per-head-KV + #42006 tool-parser overlays; DiffusionGemma stays on `vllm-diffusion-gemma`, which carries the gemma-image-fixes mount. An overlay-carrying engine cannot be a derived base, so those must remain separate — and note 'we went overlay-free on vLLM' is true of THIS engine only, not of the vLLM family. The pip `dense` lower-bound is `vllm-pip-baseline`. HISTORY: originally the successor to `vllm-nightly-clean` (image nightly-bf610c2f purged from Docker Hub); that migration COMPLETED — nightly-clean has zero registry users and was deprecated 2026-06-06 (#326), closing out the nightly-engine cleanup. Validation on the current pin is partial by maintainer decision: #682 waived the arm-first hold and moved slug-level gates post-merge (single-card 27B autoround live-boot + bench parity vs v0.24.0 at merge; dual `dual.yml` and the fast-vs-max 262K A/B have since landed in BENCHMARKS). MoE boot, and per-slug verify/stress/soak for the long tail, remain deferred — do not read 'shipped on this pin' as 'gated on this pin'. VLLM_IMAGE override still works."

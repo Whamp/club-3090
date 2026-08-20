@@ -21,19 +21,20 @@ body:
 
         ## If you've run the ladder and still hit a real bug — paste a rig report
 
-        ```bash
-        bash scripts/report.sh > my-rig.md
-        ```
+        Pick the variant that matches your bug:
 
-        ...and paste the contents into the report field below. That single command
-        captures hardware, GPU details (incl. power caps), container state, Genesis
-        patch status, KV pool sizing, and the engine config — everything we'd
-        otherwise have to ask for individually. Add `--verify` to include
-        `verify-full.sh` output in the same dump:
+        | Bug type | Command | Time |
+        |---|---|---|
+        | Boot crash, wrong output, tool-call regression | `bash scripts/report.sh --verify > my-rig.md` | ~2 min |
+        | OOM mid-conversation, hermes/openhands/IDE-agent failures, multi-turn cliff | `bash scripts/report.sh --soak > my-rig.md` | ~25 min — runs `SOAK_MODE=continuous` which is the **only** test that catches Cliff 2b |
+        | TPS regression / cross-rig perf comparison | `bash scripts/report.sh --bench > my-rig.md` | ~5 min |
+        | AI Studio — image / video / audio generation fails ("ComfyUI generation error", lane error) | `bash scripts/report.sh --studio > my-rig.md` | ~5 sec — adds the ComfyUI + director container log tails (the actual generation error) |
+        | Not sure / want to capture everything | `bash scripts/report.sh --full > my-rig.md` | ~35 min — verify + stress + soak + bench |
 
-        ```bash
-        bash scripts/report.sh --verify > my-rig.md
-        ```
+        Whichever you pick, that single command captures hardware, GPU details
+        (incl. power caps), container state, Genesis patch status, KV pool sizing,
+        and the engine config — everything we'd otherwise have to ask for
+        individually.
 
         Paths under your home, hostname, username, and any HF tokens are redacted
         by default before output. Use `--no-redact` only for internal sharing.
@@ -57,7 +58,7 @@ body:
       description: Exact commands. The `compose up` line, the curl/openai-client request, etc.
       placeholder: |
         cd models/qwen3.6-27b/vllm/compose
-        docker compose -f docker-compose.dual-turbo.yml up -d
+        docker compose -f dual/autoround-int4/turbo.yml up -d
         # then this curl request:
         curl -s http://localhost:8020/v1/chat/completions -d '...'
       render: bash
@@ -67,10 +68,10 @@ body:
   - type: textarea
     id: rig-report
     attributes:
-      label: Rig report — paste contents of `bash scripts/report.sh`
+      label: Rig report — paste contents of `bash scripts/report.sh [--verify | --soak | --bench | --studio | --full]`
       description: |
-        Run `bash scripts/report.sh > my-rig.md` from the repo root, then paste
-        the contents here. Add `--verify` if you want verify-full output included.
+        Pick the flag that matches your bug type (see table above). Run from the
+        repo root, then paste the contents here.
 
         If you can't run the script (no shell access on the rig, etc.), note that
         in "Anything else?" below and share whatever you have.

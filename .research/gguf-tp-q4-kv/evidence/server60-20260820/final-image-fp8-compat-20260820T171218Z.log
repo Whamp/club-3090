@@ -1,0 +1,50 @@
+dsv4-gguf-tp-prod
+ Network gguf-tp-fp8-final_default Creating
+ Network gguf-tp-fp8-final_default Created
+ Container dsv4-gguf-tp-fp8-final Creating
+ Container dsv4-gguf-tp-fp8-final Created
+ Container dsv4-gguf-tp-fp8-final Starting
+ Container dsv4-gguf-tp-fp8-final Started
+image=sha256:20ad3a698bc6934d5abb12ccd32ebfa510ac3d0baa4660681226072ec362e164
+(APIServer pid=1) INFO 08-20 17:12:37 [api_utils.py:273] non-default args: {'model_tag': '/runtime-model', 'enable_auto_tool_choice': True, 'tool_call_parser': 'deepseek_v4', 'host': '0.0.0.0', 'model': '/runtime-model', 'trust_remote_code': True, 'max_model_len': 148000, 'quantization': 'gguf_dsv4', 'served_model_name': ['deepseek-v4-flash-0731-gguf-tp'], 'load_format': 'gguf_dsv4', 'model_loader_extra_config': {'gguf_path': '/model.gguf', 'sha256': 'ca22ae2f838e14077c22bc1c1417b71b45b5e5a3687bd96c2ac6e17fdb6261c0', 'file_size': 86720111488, 'tensor_count': 1328}, 'reasoning_parser': 'deepseek_v4', 'tensor_parallel_size': 4, 'disable_custom_all_reduce': True, 'gpu_memory_utilization': 0.98, 'kv_cache_dtype': 'fp8_ds_mla', 'max_num_batched_tokens': 256, 'max_num_seqs': 2}
+(APIServer pid=1) INFO 08-20 17:12:57 [cache.py:297] Using fp8_ds_mla data type to store kv cache. It reduces the GPU memory footprint and boosts the performance. Meanwhile, it may cause accuracy drop without a proper scaling factor
+(EngineCore pid=207) INFO 08-20 17:13:06 [core.py:121] Initializing a V1 LLM engine (v0.1.dev4+g2a3dd2ea7) with config: model='/runtime-model', speculative_config=None, tokenizer='/runtime-model', skip_tokenizer_init=False, tokenizer_mode=deepseek_v4, revision=None, tokenizer_revision=None, trust_remote_code=True, dtype=torch.bfloat16, max_seq_len=148000, download_dir=None, load_format=gguf_dsv4, tensor_parallel_size=4, pipeline_parallel_size=1, data_parallel_size=1, decode_context_parallel_size=1, dcp_comm_backend=ag_rs, disable_custom_all_reduce=True, quantization=gguf_dsv4, quantization_config=None, enforce_eager=False, enable_return_routed_experts=False, kv_cache_dtype=fp8_ds_mla, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='deepseek_v4', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, kv_cache_metrics=False, kv_cache_metrics_sample=0.01, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False, jit_monitor_mode='warn', jit_monitor_verbose=False), seed=0, served_model_name=deepseek-v4-flash-0731-gguf-tp, enable_prefix_caching=True, enable_chunked_prefill=True, pooler_config=None, compilation_config={'mode': <CompilationMode.NONE: 0>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['all'], 'ir_enable_torch_wrap': False, 'splitting_ops': [], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_vision_items_per_batch': 0, 'encoder_cudagraph_max_frames_per_batch': None, 'compile_sizes': [], 'compile_ranges_endpoints': [256], 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.FULL_AND_PIECEWISE: (2, 1)>, 'cudagraph_num_of_warmups': 1, 'cudagraph_capture_sizes': [1, 2, 4], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': True, 'fuse_act_quant': True, 'fuse_attn_quant': False, 'enable_sp': False, 'fuse_gemm_comms': False, 'fuse_allreduce_rms': False, 'enable_qk_norm_rope_fusion': False, 'fuse_rope_kvcache_cat_mla': False, 'fuse_act_padding': False, 'fuse_qk_norm_rope_kvcache': False}, 'max_cudagraph_capture_size': 4, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': False, 'static_all_moe_layers': []}, kernel_config=KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=['vllm_c', 'native'], fused_add_rms_norm=['vllm_c', 'native']), enable_flashinfer_autotune=True, enable_cutedsl_warmup=True, enable_jit_warmup=True, enable_bf16x3_router_gemm=False, moe_backend='auto', linear_backend='auto')
+(Worker_TP0 pid=228) INFO 08-20 17:13:20 [ampere_sparse.py:127] Using native Ampere FlashMLA sparse decode for fp8_ds_mla.
+(EngineCore pid=207) INFO 08-20 17:20:22 [kv_cache_utils.py:2235] GPU KV cache size: 156,738 tokens
+(EngineCore pid=207) INFO 08-20 17:20:22 [kv_cache_utils.py:2236] Maximum concurrency for 148,000 tokens per request: 1.06x
+{"id":"chatcmpl-85dd8c71a390dfca","object":"chat.completion","created":1787246452,"model":"deepseek-v4-flash-0731-gguf-tp","choices":[{"index":0,"message":{"role":"assistant","content":"FP8-COMPAT-8421","refusal":null,"annotations":null,"audio":null,"function_call":null,"reasoning":null},"logprobs":null,"finish_reason":"stop","stop_reason":null,"token_ids":null,"routed_experts":null}],"service_tier":null,"system_fingerprint":"vllm-0.1.dev4+g2a3dd2ea7-tp4-0fa5cb76","usage":{"prompt_tokens":15,"total_tokens":24,"completion_tokens":9,"prompt_tokens_details":null},"prompt_logprobs":null,"prompt_token_ids":null,"prompt_text":null,"kv_transfer_params":null,"ec_transfer_params":null,"metrics":null}Running FULL functional test against http://127.0.0.1:8034
+  model=deepseek-v4-flash-0731-gguf-tp  container=dsv4-gguf-tp-fp8-final  engine=vllm
+
+[1/9] Server reachable on /v1/models ...
+  [32m✓[0m server is serving
+[2/9] Genesis patches applied ...
+  [33m⊘[0m no Genesis marker in logs (container restarted, or Genesis not loaded) (skipped)
+[warmup] priming engine (cold cudagraph/JIT, up to 180s, not scored) ...
+[warmup] engine warm
+[3/9] Basic completion — capital of France ...
+  [32m✓[0m reply contains 'Paris'
+[4/9] Tool calling ...
+  [32m✓[0m tool_calls[] populated with get_weather
+[5/9] Streaming (SSE) ...
+  [32m✓[0m streamed 19 chunks, 65 chars:  A red error   blooms in the terminal—   I prune the code's roots. ...
+[6/9] Streaming tool-calls (thinking-on) ...
+  [32m✓[0m streamed delta.tool_calls (get_weather) + finish_reason=tool_calls, no <tool_call> leak
+[7/9] Thinking / reasoning mode ...
+  [32m✓[0m reasoning 109 chars, content 1 chars (finish=stop)
+    [2mreasoning:[0m 1. The user asks "What is 2+2?" and specifically requests a ...
+    [2mcontent:  [0m 4...
+[8/9] Output quality / cascade detection (2K-token completion) ...
+  [32m✓[0m output OK — 10160 chars, variety=0.655, max_line_repeat=0, finish=length
+[9/9] MTP acceptance length threshold ...
+  [33m⊘[0m no SpecDecoding metrics in logs (compose may not have spec-decode enabled) (skipped)
+
+[32mAll checks passed.[0m Stack is ready for full-functionality use.
+state=running health=healthy restarts=0 restart=no
+final_image_fp8_pid_swap_kb=0
+production_state=running production_health=healthy production_restarts=0 production_restart=unless-stopped production_image=sha256:f91e8283e7ad116b8664b4a936dba88ebafcb8910a968dce2a3c34420f010adf
+production_pid_swap_kb=0
+0, 230.00, 1650, 24026, 101
+1, 230.00, 1650, 24026, 101
+2, 230.00, 1650, 24026, 101
+3, 230.00, 1650, 24026, 102
+evidence=/home/will/build/vllm-fp4/final-image-fp8-compat-20260820T171218Z.log

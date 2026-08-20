@@ -1,0 +1,476 @@
+Using Python 3.12.3 environment at: /opt/venv
+Resolved 3 packages in 25ms
+Installed 1 package in 10ms
+ + wheel==0.48.0
+Building wheel...
+W0820 16:33:54.186000 50 torch/utils/cpp_extension.py:178] No CUDA runtime is found, using CUDA_HOME='/usr/local/cuda'
+fatal: not a git repository (or any parent up to mount point /)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+running bdist_wheel
+running build
+running build_py
+creating build/lib.linux-x86_64-cpython-312/flash_mla
+copying flash_mla/flash_mla_interface.py -> build/lib.linux-x86_64-cpython-312/flash_mla
+copying flash_mla/int8_sparse_mla.py -> build/lib.linux-x86_64-cpython-312/flash_mla
+copying flash_mla/__init__.py -> build/lib.linux-x86_64-cpython-312/flash_mla
+running build_ext
+building 'flash_mla_cuda' extension
+creating /src/build/temp.linux-x86_64-cpython-312/csrc
+[1/10] /usr/local/cuda/bin/nvcc --generate-dependencies-with-compile --dependency-output /src/build/temp.linux-x86_64-cpython-312/csrc/debug_imma_sm80.o.d -I/src/csrc -I/src/csrc/cutlass/include -I/opt/venv/lib/python3.12/site-packages/torch/include -I/opt/venv/lib/python3.12/site-packages/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/opt/venv/include -I/usr/include/python3.12 -c -c /src/csrc/debug_imma_sm80.cu -o /src/build/temp.linux-x86_64-cpython-312/csrc/debug_imma_sm80.o -D__CUDA_NO_HALF_OPERATORS__ -D__CUDA_NO_HALF_CONVERSIONS__ -D__CUDA_NO_BFLOAT16_CONVERSIONS__ -D__CUDA_NO_HALF2_OPERATORS__ --expt-relaxed-constexpr --compiler-options ''"'"'-fPIC'"'"'' -O3 -std=c++17 -D_USE_MATH_DEFINES -Wno-deprecated-declarations -U__CUDA_NO_HALF_OPERATORS__ -U__CUDA_NO_HALF_CONVERSIONS__ -U__CUDA_NO_HALF2_OPERATORS__ -U__CUDA_NO_BFLOAT16_CONVERSIONS__ --expt-relaxed-constexpr --expt-extended-lambda -DNDEBUG --use_fast_math --ptxas-options=-v,--register-usage-level=10 --threads 2 -DPy_LIMITED_API=0x03090000 -DTORCH_STABLE_ONLY -DUSE_CUDA -DTORCH_API_INCLUDE_EXTENSION_H -DPy_LIMITED_API=0x030A0000 -DTORCH_EXTENSION_NAME=flash_mla_cuda -gencode arch=compute_86,code=sm_86
+<command-line>: warning: "Py_LIMITED_API" redefined
+<command-line>: note: this is the location of the previous definition
+<command-line>: warning: "Py_LIMITED_API" redefined
+<command-line>: note: this is the location of the previous definition
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN51_GLOBAL__N__af6a6b06_18_debug_imma_sm80_cu_d018aabf31debug_imma_m16n8k32_s8s8_kernelEPKaS1_Pi' for 'sm_86'
+ptxas info    : Function properties for _ZN51_GLOBAL__N__af6a6b06_18_debug_imma_sm80_cu_d018aabf31debug_imma_m16n8k32_s8s8_kernelEPKaS1_Pi
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 33 registers, used 0 barriers, 376 bytes cmem[0]
+ptxas info    : Compile time = 4.186 ms
+[2/10] /usr/local/cuda/bin/nvcc --generate-dependencies-with-compile --dependency-output /src/build/temp.linux-x86_64-cpython-312/csrc/flash_api_dispatch.o.d -I/src/csrc -I/src/csrc/cutlass/include -I/opt/venv/lib/python3.12/site-packages/torch/include -I/opt/venv/lib/python3.12/site-packages/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/opt/venv/include -I/usr/include/python3.12 -c -c /src/csrc/flash_api_dispatch.cu -o /src/build/temp.linux-x86_64-cpython-312/csrc/flash_api_dispatch.o -D__CUDA_NO_HALF_OPERATORS__ -D__CUDA_NO_HALF_CONVERSIONS__ -D__CUDA_NO_BFLOAT16_CONVERSIONS__ -D__CUDA_NO_HALF2_OPERATORS__ --expt-relaxed-constexpr --compiler-options ''"'"'-fPIC'"'"'' -O3 -std=c++17 -D_USE_MATH_DEFINES -Wno-deprecated-declarations -U__CUDA_NO_HALF_OPERATORS__ -U__CUDA_NO_HALF_CONVERSIONS__ -U__CUDA_NO_HALF2_OPERATORS__ -U__CUDA_NO_BFLOAT16_CONVERSIONS__ --expt-relaxed-constexpr --expt-extended-lambda -DNDEBUG --use_fast_math --ptxas-options=-v,--register-usage-level=10 --threads 2 -DPy_LIMITED_API=0x03090000 -DTORCH_STABLE_ONLY -DUSE_CUDA -DTORCH_API_INCLUDE_EXTENSION_H -DPy_LIMITED_API=0x030A0000 -DTORCH_EXTENSION_NAME=flash_mla_cuda -gencode arch=compute_90a,code=sm_90a -gencode arch=compute_86,code=sm_86
+<command-line>: warning: "Py_LIMITED_API" redefined
+<command-line>: note: this is the location of the previous definition
+<command-line>: warning: "Py_LIMITED_API" redefined
+<command-line>: note: this is the location of the previous definition
+<command-line>: warning: "Py_LIMITED_API" redefined
+<command-line>: note: this is the location of the previous definition
+ptxas info    : 0 bytes gmem
+ptxas info    : 0 bytes gmem
+[3/10] c++ -MMD -MF /src/build/temp.linux-x86_64-cpython-312/csrc/flash_api.o.d -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -I/src/csrc -I/src/csrc/cutlass/include -I/opt/venv/lib/python3.12/site-packages/torch/include -I/opt/venv/lib/python3.12/site-packages/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/opt/venv/include -I/usr/include/python3.12 -c -c /src/csrc/flash_api.cpp -o /src/build/temp.linux-x86_64-cpython-312/csrc/flash_api.o -O3 -std=c++17 -DNDEBUG -Wno-deprecated-declarations -DPy_LIMITED_API=0x03090000 -DTORCH_STABLE_ONLY -DUSE_CUDA -DTORCH_API_INCLUDE_EXTENSION_H -DPy_LIMITED_API=0x030A0000 -DTORCH_EXTENSION_NAME=flash_mla_cuda
+<command-line>: warning: "Py_LIMITED_API" redefined
+<command-line>: note: this is the location of the previous definition
+[4/10] /usr/local/cuda/bin/nvcc --generate-dependencies-with-compile --dependency-output /src/build/temp.linux-x86_64-cpython-312/csrc/flash_fwd_mla_bf16_sm90.o.d -I/src/csrc -I/src/csrc/cutlass/include -I/opt/venv/lib/python3.12/site-packages/torch/include -I/opt/venv/lib/python3.12/site-packages/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/opt/venv/include -I/usr/include/python3.12 -c -c /src/csrc/flash_fwd_mla_bf16_sm90.cu -o /src/build/temp.linux-x86_64-cpython-312/csrc/flash_fwd_mla_bf16_sm90.o -D__CUDA_NO_HALF_OPERATORS__ -D__CUDA_NO_HALF_CONVERSIONS__ -D__CUDA_NO_BFLOAT16_CONVERSIONS__ -D__CUDA_NO_HALF2_OPERATORS__ --expt-relaxed-constexpr --compiler-options ''"'"'-fPIC'"'"'' -O3 -std=c++17 -D_USE_MATH_DEFINES -Wno-deprecated-declarations -U__CUDA_NO_HALF_OPERATORS__ -U__CUDA_NO_HALF_CONVERSIONS__ -U__CUDA_NO_HALF2_OPERATORS__ -U__CUDA_NO_BFLOAT16_CONVERSIONS__ --expt-relaxed-constexpr --expt-extended-lambda -DNDEBUG --use_fast_math --ptxas-options=-v,--register-usage-level=10 -gencode arch=compute_90a,code=sm_90a --threads 2 -DPy_LIMITED_API=0x03090000 -DTORCH_STABLE_ONLY -DUSE_CUDA -DTORCH_API_INCLUDE_EXTENSION_H -DPy_LIMITED_API=0x030A0000 -DTORCH_EXTENSION_NAME=flash_mla_cuda
+<command-line>: warning: "Py_LIMITED_API" redefined
+<command-line>: note: this is the location of the previous definition
+<command-line>: warning: "Py_LIMITED_API" redefined
+<command-line>: note: this is the location of the previous definition
+ptxas info    : 111 bytes gmem
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi160EEEv20Flash_fwd_mla_params' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi160EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 24 bytes cumulative stack size, 640 bytes smem
+ptxas info    : Compile time = 31.514 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi128EEEv20Flash_fwd_mla_params' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi128EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 24 bytes cumulative stack size, 512 bytes smem
+ptxas info    : Compile time = 23.377 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi96EEEv20Flash_fwd_mla_params' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi96EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 24 bytes cumulative stack size, 384 bytes smem
+ptxas info    : Compile time = 22.814 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi64EEEv20Flash_fwd_mla_params' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi64EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 24 bytes cumulative stack size, 256 bytes smem
+ptxas info    : Compile time = 20.983 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi32EEEv20Flash_fwd_mla_params' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi32EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 24 bytes cumulative stack size, 128 bytes smem
+ptxas info    : Compile time = 20.039 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi64ELi64ELi8EN7cutlass10bfloat16_tELi512EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi64ELi64ELi8EN7cutlass10bfloat16_tELi512EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 240 registers, used 9 barriers
+ptxas info    : Compile time = 582.518 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi64ELi64ELi8EN7cutlass10bfloat16_tELi512EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi64ELi64ELi8EN7cutlass10bfloat16_tELi512EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 236 registers, used 9 barriers
+ptxas info    : Compile time = 579.137 ms
+[5/10] /usr/local/cuda/bin/nvcc --generate-dependencies-with-compile --dependency-output /src/build/temp.linux-x86_64-cpython-312/csrc/flash_fwd_mla_fp16_sm90.o.d -I/src/csrc -I/src/csrc/cutlass/include -I/opt/venv/lib/python3.12/site-packages/torch/include -I/opt/venv/lib/python3.12/site-packages/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/opt/venv/include -I/usr/include/python3.12 -c -c /src/csrc/flash_fwd_mla_fp16_sm90.cu -o /src/build/temp.linux-x86_64-cpython-312/csrc/flash_fwd_mla_fp16_sm90.o -D__CUDA_NO_HALF_OPERATORS__ -D__CUDA_NO_HALF_CONVERSIONS__ -D__CUDA_NO_BFLOAT16_CONVERSIONS__ -D__CUDA_NO_HALF2_OPERATORS__ --expt-relaxed-constexpr --compiler-options ''"'"'-fPIC'"'"'' -O3 -std=c++17 -D_USE_MATH_DEFINES -Wno-deprecated-declarations -U__CUDA_NO_HALF_OPERATORS__ -U__CUDA_NO_HALF_CONVERSIONS__ -U__CUDA_NO_HALF2_OPERATORS__ -U__CUDA_NO_BFLOAT16_CONVERSIONS__ --expt-relaxed-constexpr --expt-extended-lambda -DNDEBUG --use_fast_math --ptxas-options=-v,--register-usage-level=10 -gencode arch=compute_90a,code=sm_90a --threads 2 -DPy_LIMITED_API=0x03090000 -DTORCH_STABLE_ONLY -DUSE_CUDA -DTORCH_API_INCLUDE_EXTENSION_H -DPy_LIMITED_API=0x030A0000 -DTORCH_EXTENSION_NAME=flash_mla_cuda
+<command-line>: warning: "Py_LIMITED_API" redefined
+<command-line>: note: this is the location of the previous definition
+<command-line>: warning: "Py_LIMITED_API" redefined
+<command-line>: note: this is the location of the previous definition
+ptxas info    : 111 bytes gmem
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass6half_tEflLi512ELi160EEEv20Flash_fwd_mla_params' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass6half_tEflLi512ELi160EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 24 bytes cumulative stack size, 640 bytes smem
+ptxas info    : Compile time = 28.187 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass6half_tEflLi512ELi128EEEv20Flash_fwd_mla_params' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass6half_tEflLi512ELi128EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 24 bytes cumulative stack size, 512 bytes smem
+ptxas info    : Compile time = 24.342 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass6half_tEflLi512ELi96EEEv20Flash_fwd_mla_params' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass6half_tEflLi512ELi96EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 24 bytes cumulative stack size, 384 bytes smem
+ptxas info    : Compile time = 24.208 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass6half_tEflLi512ELi64EEEv20Flash_fwd_mla_params' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass6half_tEflLi512ELi64EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 24 bytes cumulative stack size, 256 bytes smem
+ptxas info    : Compile time = 23.118 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass6half_tEflLi512ELi32EEEv20Flash_fwd_mla_params' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass6half_tEflLi512ELi32EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 48 registers, used 1 barriers, 24 bytes cumulative stack size, 128 bytes smem
+ptxas info    : Compile time = 22.028 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi64ELi64ELi8EN7cutlass6half_tELi512EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi64ELi64ELi8EN7cutlass6half_tELi512EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 240 registers, used 9 barriers
+ptxas info    : Compile time = 594.272 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi64ELi64ELi8EN7cutlass6half_tELi512EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_90a'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi64ELi64ELi8EN7cutlass6half_tELi512EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 236 registers, used 9 barriers
+ptxas info    : Compile time = 575.671 ms
+[6/10] /usr/local/cuda/bin/nvcc --generate-dependencies-with-compile --dependency-output /src/build/temp.linux-x86_64-cpython-312/csrc/flash_fwd_mla_metadata.o.d -I/src/csrc -I/src/csrc/cutlass/include -I/opt/venv/lib/python3.12/site-packages/torch/include -I/opt/venv/lib/python3.12/site-packages/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/opt/venv/include -I/usr/include/python3.12 -c -c /src/csrc/flash_fwd_mla_metadata.cu -o /src/build/temp.linux-x86_64-cpython-312/csrc/flash_fwd_mla_metadata.o -D__CUDA_NO_HALF_OPERATORS__ -D__CUDA_NO_HALF_CONVERSIONS__ -D__CUDA_NO_BFLOAT16_CONVERSIONS__ -D__CUDA_NO_HALF2_OPERATORS__ --expt-relaxed-constexpr --compiler-options ''"'"'-fPIC'"'"'' -O3 -std=c++17 -D_USE_MATH_DEFINES -Wno-deprecated-declarations -U__CUDA_NO_HALF_OPERATORS__ -U__CUDA_NO_HALF_CONVERSIONS__ -U__CUDA_NO_HALF2_OPERATORS__ -U__CUDA_NO_BFLOAT16_CONVERSIONS__ --expt-relaxed-constexpr --expt-extended-lambda -DNDEBUG --use_fast_math --ptxas-options=-v,--register-usage-level=10 --threads 2 -DPy_LIMITED_API=0x03090000 -DTORCH_STABLE_ONLY -DUSE_CUDA -DTORCH_API_INCLUDE_EXTENSION_H -DPy_LIMITED_API=0x030A0000 -DTORCH_EXTENSION_NAME=flash_mla_cuda -gencode arch=compute_90a,code=sm_90a -gencode arch=compute_86,code=sm_86
+<command-line>: warning: "Py_LIMITED_API" redefined
+<command-line>: note: this is the location of the previous definition
+<command-line>: warning: "Py_LIMITED_API" redefined
+<command-line>: note: this is the location of the previous definition
+<command-line>: warning: "Py_LIMITED_API" redefined
+<command-line>: note: this is the location of the previous definition
+ptxas info    : 139 bytes gmem, 104 bytes cmem[4]
+ptxas info    : Compiling entry function '_Z23get_mla_metadata_kernel19Mla_metadata_params' for 'sm_86'
+ptxas info    : Function properties for _Z23get_mla_metadata_kernel19Mla_metadata_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 32 registers, used 0 barriers, 24 bytes cumulative stack size, 32768 bytes smem, 392 bytes cmem[0]
+ptxas info    : Compile time = 22.935 ms
+ptxas info    : 139 bytes gmem
+ptxas info    : Compiling entry function '_Z23get_mla_metadata_kernel19Mla_metadata_params' for 'sm_90a'
+ptxas info    : Function properties for _Z23get_mla_metadata_kernel19Mla_metadata_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 32 registers, used 0 barriers, 24 bytes cumulative stack size, 32768 bytes smem
+ptxas info    : Compile time = 25.665 ms
+[7/10] /usr/local/cuda/bin/nvcc --generate-dependencies-with-compile --dependency-output /src/build/temp.linux-x86_64-cpython-312/csrc/flash_sparse_mla_decode_sm80.o.d -I/src/csrc -I/src/csrc/cutlass/include -I/opt/venv/lib/python3.12/site-packages/torch/include -I/opt/venv/lib/python3.12/site-packages/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/opt/venv/include -I/usr/include/python3.12 -c -c /src/csrc/flash_sparse_mla_decode_sm80.cu -o /src/build/temp.linux-x86_64-cpython-312/csrc/flash_sparse_mla_decode_sm80.o -D__CUDA_NO_HALF_OPERATORS__ -D__CUDA_NO_HALF_CONVERSIONS__ -D__CUDA_NO_BFLOAT16_CONVERSIONS__ -D__CUDA_NO_HALF2_OPERATORS__ --expt-relaxed-constexpr --compiler-options ''"'"'-fPIC'"'"'' -O3 -std=c++17 -D_USE_MATH_DEFINES -Wno-deprecated-declarations -U__CUDA_NO_HALF_OPERATORS__ -U__CUDA_NO_HALF_CONVERSIONS__ -U__CUDA_NO_HALF2_OPERATORS__ -U__CUDA_NO_BFLOAT16_CONVERSIONS__ --expt-relaxed-constexpr --expt-extended-lambda -DNDEBUG --use_fast_math --ptxas-options=-v,--register-usage-level=10 --threads 2 -DPy_LIMITED_API=0x03090000 -DTORCH_STABLE_ONLY -DUSE_CUDA -DTORCH_API_INCLUDE_EXTENSION_H -DPy_LIMITED_API=0x030A0000 -DTORCH_EXTENSION_NAME=flash_mla_cuda -gencode arch=compute_86,code=sm_86
+<command-line>: warning: "Py_LIMITED_API" redefined
+<command-line>: note: this is the location of the previous definition
+<command-line>: warning: "Py_LIMITED_API" redefined
+<command-line>: note: this is the location of the previous definition
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN64_GLOBAL__N__e5dccf7c_31_flash_sparse_mla_decode_sm80_cu_e1fbc6fa6mma_pf29sparse_mla_prefill_mma_kernelE24Sparse_mla_decode_params' for 'sm_86'
+ptxas info    : Function properties for _ZN64_GLOBAL__N__e5dccf7c_31_flash_sparse_mla_decode_sm80_cu_e1fbc6fa6mma_pf29sparse_mla_prefill_mma_kernelE24Sparse_mla_decode_params
+    96 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 125 registers, used 1 barriers, 96 bytes cumulative stack size, 632 bytes cmem[0]
+ptxas info    : Compile time = 101.391 ms
+ptxas info    : Compiling entry function '_ZN64_GLOBAL__N__e5dccf7c_31_flash_sparse_mla_decode_sm80_cu_e1fbc6fa7mma_dec28sparse_mla_decode_mma_kernelILb0EEEv24Sparse_mla_decode_params' for 'sm_86'
+ptxas info    : Function properties for _ZN64_GLOBAL__N__e5dccf7c_31_flash_sparse_mla_decode_sm80_cu_e1fbc6fa7mma_dec28sparse_mla_decode_mma_kernelILb0EEEv24Sparse_mla_decode_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 98 registers, used 1 barriers, 632 bytes cmem[0]
+ptxas info    : Compile time = 101.438 ms
+ptxas info    : Compiling entry function '_ZN64_GLOBAL__N__e5dccf7c_31_flash_sparse_mla_decode_sm80_cu_e1fbc6fa7mma_dec28sparse_mla_decode_mma_kernelILb1EEEv24Sparse_mla_decode_params' for 'sm_86'
+ptxas info    : Function properties for _ZN64_GLOBAL__N__e5dccf7c_31_flash_sparse_mla_decode_sm80_cu_e1fbc6fa7mma_dec28sparse_mla_decode_mma_kernelILb1EEEv24Sparse_mla_decode_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 118 registers, used 1 barriers, 16 bytes smem, 632 bytes cmem[0]
+ptxas info    : Compile time = 128.597 ms
+ptxas info    : Compiling entry function '_ZN64_GLOBAL__N__e5dccf7c_31_flash_sparse_mla_decode_sm80_cu_e1fbc6fa7mma_dec25sparse_mla_combine_kernelE24Sparse_mla_decode_params' for 'sm_86'
+ptxas info    : Function properties for _ZN64_GLOBAL__N__e5dccf7c_31_flash_sparse_mla_decode_sm80_cu_e1fbc6fa7mma_dec25sparse_mla_combine_kernelE24Sparse_mla_decode_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 56 registers, used 0 barriers, 632 bytes cmem[0]
+ptxas info    : Compile time = 18.090 ms
+ptxas info    : Compiling entry function '_ZN64_GLOBAL__N__e5dccf7c_31_flash_sparse_mla_decode_sm80_cu_e1fbc6fa30sparse_mla_decode_split_kernelE24Sparse_mla_decode_params' for 'sm_86'
+ptxas info    : Function properties for _ZN64_GLOBAL__N__e5dccf7c_31_flash_sparse_mla_decode_sm80_cu_e1fbc6fa30sparse_mla_decode_split_kernelE24Sparse_mla_decode_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 63 registers, used 1 barriers, 35728 bytes smem, 632 bytes cmem[0]
+ptxas info    : Compile time = 84.639 ms
+ptxas info    : Compiling entry function '_ZN64_GLOBAL__N__e5dccf7c_31_flash_sparse_mla_decode_sm80_cu_e1fbc6fa36sparse_mla_decode_fused_split_kernelE24Sparse_mla_decode_params' for 'sm_86'
+ptxas info    : Function properties for _ZN64_GLOBAL__N__e5dccf7c_31_flash_sparse_mla_decode_sm80_cu_e1fbc6fa36sparse_mla_decode_fused_split_kernelE24Sparse_mla_decode_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 58 registers, used 1 barriers, 32784 bytes smem, 632 bytes cmem[0]
+ptxas info    : Compile time = 54.054 ms
+ptxas info    : Compiling entry function '_ZN64_GLOBAL__N__e5dccf7c_31_flash_sparse_mla_decode_sm80_cu_e1fbc6fa35sparse_mla_selection_dequant_kernelE24Sparse_mla_decode_params' for 'sm_86'
+ptxas info    : Function properties for _ZN64_GLOBAL__N__e5dccf7c_31_flash_sparse_mla_decode_sm80_cu_e1fbc6fa35sparse_mla_selection_dequant_kernelE24Sparse_mla_decode_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers, 632 bytes cmem[0]
+ptxas info    : Compile time = 17.744 ms
+[8/10] /usr/local/cuda/bin/nvcc --generate-dependencies-with-compile --dependency-output /src/build/temp.linux-x86_64-cpython-312/csrc/flash_sparse_mla_prefill_fused_sm80.o.d -I/src/csrc -I/src/csrc/cutlass/include -I/opt/venv/lib/python3.12/site-packages/torch/include -I/opt/venv/lib/python3.12/site-packages/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/opt/venv/include -I/usr/include/python3.12 -c -c /src/csrc/flash_sparse_mla_prefill_fused_sm80.cu -o /src/build/temp.linux-x86_64-cpython-312/csrc/flash_sparse_mla_prefill_fused_sm80.o -D__CUDA_NO_HALF_OPERATORS__ -D__CUDA_NO_HALF_CONVERSIONS__ -D__CUDA_NO_BFLOAT16_CONVERSIONS__ -D__CUDA_NO_HALF2_OPERATORS__ --expt-relaxed-constexpr --compiler-options ''"'"'-fPIC'"'"'' -O3 -std=c++17 -D_USE_MATH_DEFINES -Wno-deprecated-declarations -U__CUDA_NO_HALF_OPERATORS__ -U__CUDA_NO_HALF_CONVERSIONS__ -U__CUDA_NO_HALF2_OPERATORS__ -U__CUDA_NO_BFLOAT16_CONVERSIONS__ --expt-relaxed-constexpr --expt-extended-lambda -DNDEBUG --use_fast_math --ptxas-options=-v,--register-usage-level=10 --threads 2 -DPy_LIMITED_API=0x03090000 -DTORCH_STABLE_ONLY -DUSE_CUDA -DTORCH_API_INCLUDE_EXTENSION_H -DPy_LIMITED_API=0x030A0000 -DTORCH_EXTENSION_NAME=flash_mla_cuda -gencode arch=compute_86,code=sm_86
+<command-line>: warning: "Py_LIMITED_API" redefined
+<command-line>: note: this is the location of the previous definition
+<command-line>: warning: "Py_LIMITED_API" redefined
+<command-line>: note: this is the location of the previous definition
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN71_GLOBAL__N__0baeff26_38_flash_sparse_mla_prefill_fused_sm80_cu_e935b44431sparse_prefill_fused_mma_kernelIL23Sparse_mla_cache_format0EEEv25Sparse_mla_prefill_paramsii' for 'sm_86'
+ptxas info    : Function properties for _ZN71_GLOBAL__N__0baeff26_38_flash_sparse_mla_prefill_fused_sm80_cu_e935b44431sparse_prefill_fused_mma_kernelIL23Sparse_mla_cache_format0EEEv25Sparse_mla_prefill_paramsii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 96 registers, used 1 barriers, 600 bytes cmem[0]
+ptxas info    : Compile time = 88.920 ms
+ptxas info    : Compiling entry function '_ZN71_GLOBAL__N__0baeff26_38_flash_sparse_mla_prefill_fused_sm80_cu_e935b44431sparse_prefill_fused_mma_kernelIL23Sparse_mla_cache_format2EEEv25Sparse_mla_prefill_paramsii' for 'sm_86'
+ptxas info    : Function properties for _ZN71_GLOBAL__N__0baeff26_38_flash_sparse_mla_prefill_fused_sm80_cu_e935b44431sparse_prefill_fused_mma_kernelIL23Sparse_mla_cache_format2EEEv25Sparse_mla_prefill_paramsii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 125 registers, used 1 barriers, 600 bytes cmem[0]
+ptxas info    : Compile time = 104.313 ms
+ptxas info    : Compiling entry function '_ZN71_GLOBAL__N__0baeff26_38_flash_sparse_mla_prefill_fused_sm80_cu_e935b44431sparse_prefill_fused_mma_kernelIL23Sparse_mla_cache_format1EEEv25Sparse_mla_prefill_paramsii' for 'sm_86'
+ptxas info    : Function properties for _ZN71_GLOBAL__N__0baeff26_38_flash_sparse_mla_prefill_fused_sm80_cu_e935b44431sparse_prefill_fused_mma_kernelIL23Sparse_mla_cache_format1EEEv25Sparse_mla_prefill_paramsii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 124 registers, used 1 barriers, 600 bytes cmem[0]
+ptxas info    : Compile time = 101.014 ms
+ptxas info    : Compiling entry function '_ZN71_GLOBAL__N__0baeff26_38_flash_sparse_mla_prefill_fused_sm80_cu_e935b44420dequant_cache_kernelE25Sparse_mla_prefill_paramsii' for 'sm_86'
+ptxas info    : Function properties for _ZN71_GLOBAL__N__0baeff26_38_flash_sparse_mla_prefill_fused_sm80_cu_e935b44420dequant_cache_kernelE25Sparse_mla_prefill_paramsii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 24 registers, used 0 barriers, 600 bytes cmem[0]
+ptxas info    : Compile time = 9.483 ms
+[9/10] /usr/local/cuda/bin/nvcc --generate-dependencies-with-compile --dependency-output /src/build/temp.linux-x86_64-cpython-312/csrc/flash_fwd_mla_bf16_sm80.o.d -I/src/csrc -I/src/csrc/cutlass/include -I/opt/venv/lib/python3.12/site-packages/torch/include -I/opt/venv/lib/python3.12/site-packages/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/opt/venv/include -I/usr/include/python3.12 -c -c /src/csrc/flash_fwd_mla_bf16_sm80.cu -o /src/build/temp.linux-x86_64-cpython-312/csrc/flash_fwd_mla_bf16_sm80.o -D__CUDA_NO_HALF_OPERATORS__ -D__CUDA_NO_HALF_CONVERSIONS__ -D__CUDA_NO_BFLOAT16_CONVERSIONS__ -D__CUDA_NO_HALF2_OPERATORS__ --expt-relaxed-constexpr --compiler-options ''"'"'-fPIC'"'"'' -O3 -std=c++17 -D_USE_MATH_DEFINES -Wno-deprecated-declarations -U__CUDA_NO_HALF_OPERATORS__ -U__CUDA_NO_HALF_CONVERSIONS__ -U__CUDA_NO_HALF2_OPERATORS__ -U__CUDA_NO_BFLOAT16_CONVERSIONS__ --expt-relaxed-constexpr --expt-extended-lambda -DNDEBUG --use_fast_math --ptxas-options=-v,--register-usage-level=10 --threads 2 -DPy_LIMITED_API=0x03090000 -DTORCH_STABLE_ONLY -DUSE_CUDA -DTORCH_API_INCLUDE_EXTENSION_H -DPy_LIMITED_API=0x030A0000 -DTORCH_EXTENSION_NAME=flash_mla_cuda -gencode arch=compute_86,code=sm_86
+<command-line>: warning: "Py_LIMITED_API" redefined
+<command-line>: note: this is the location of the previous definition
+<command-line>: warning: "Py_LIMITED_API" redefined
+<command-line>: note: this is the location of the previous definition
+ptxas info    : 111 bytes gmem, 120 bytes cmem[4]
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi512ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi1EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi512ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi1EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 230 registers, used 1 barriers, 624 bytes cmem[0]
+ptxas info    : Compile time = 644.322 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi512ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi1EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi512ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi1EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 242 registers, used 1 barriers, 624 bytes cmem[0]
+ptxas info    : Compile time = 773.465 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi512ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi2EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi512ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi2EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 170 registers, used 1 barriers, 624 bytes cmem[0]
+ptxas info    : Compile time = 649.961 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi512ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi2EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi512ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi2EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 172 registers, used 1 barriers, 624 bytes cmem[0]
+ptxas info    : Compile time = 1021.517 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi576ELi1EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi576ELi1EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 244 registers, used 1 barriers, 624 bytes cmem[0]
+ptxas info    : Compile time = 717.952 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi576ELi1EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi576ELi1EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 246 registers, used 1 barriers, 624 bytes cmem[0]
+ptxas info    : Compile time = 917.535 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi576ELi160EEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi576ELi160EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 38 registers, used 1 barriers, 24 bytes cumulative stack size, 640 bytes smem, 624 bytes cmem[0]
+ptxas info    : Compile time = 32.528 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi576ELi128EEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi576ELi128EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 38 registers, used 1 barriers, 24 bytes cumulative stack size, 512 bytes smem, 624 bytes cmem[0]
+ptxas info    : Compile time = 34.508 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi576ELi96EEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi576ELi96EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 38 registers, used 1 barriers, 24 bytes cumulative stack size, 384 bytes smem, 624 bytes cmem[0]
+ptxas info    : Compile time = 29.489 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi576ELi64EEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi576ELi64EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 38 registers, used 1 barriers, 24 bytes cumulative stack size, 256 bytes smem, 624 bytes cmem[0]
+ptxas info    : Compile time = 28.172 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi576ELi32EEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi576ELi32EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 38 registers, used 1 barriers, 24 bytes cumulative stack size, 128 bytes smem, 624 bytes cmem[0]
+ptxas info    : Compile time = 27.603 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi576ELi2EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi576ELi2EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 172 registers, used 1 barriers, 624 bytes cmem[0]
+ptxas info    : Compile time = 774.801 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi576ELi2EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi576ELi2EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 174 registers, used 1 barriers, 624 bytes cmem[0]
+ptxas info    : Compile time = 1244.142 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi1EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi1EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 232 registers, used 1 barriers, 624 bytes cmem[0]
+ptxas info    : Compile time = 708.448 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi1EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi1EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 240 registers, used 1 barriers, 624 bytes cmem[0]
+ptxas info    : Compile time = 845.388 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi160EEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi160EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 36 registers, used 1 barriers, 24 bytes cumulative stack size, 640 bytes smem, 624 bytes cmem[0]
+ptxas info    : Compile time = 26.407 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi128EEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi128EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 36 registers, used 1 barriers, 24 bytes cumulative stack size, 512 bytes smem, 624 bytes cmem[0]
+ptxas info    : Compile time = 25.643 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi96EEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi96EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 36 registers, used 1 barriers, 24 bytes cumulative stack size, 384 bytes smem, 624 bytes cmem[0]
+ptxas info    : Compile time = 23.982 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi64EEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi64EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 36 registers, used 1 barriers, 24 bytes cumulative stack size, 256 bytes smem, 624 bytes cmem[0]
+ptxas info    : Compile time = 22.477 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi32EEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi32EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 36 registers, used 1 barriers, 24 bytes cumulative stack size, 128 bytes smem, 624 bytes cmem[0]
+ptxas info    : Compile time = 21.420 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi2EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi2EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 168 registers, used 1 barriers, 624 bytes cmem[0]
+ptxas info    : Compile time = 711.390 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi2EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi2EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 172 registers, used 1 barriers, 624 bytes cmem[0]
+ptxas info    : Compile time = 1081.992 ms
+[10/10] /usr/local/cuda/bin/nvcc --generate-dependencies-with-compile --dependency-output /src/build/temp.linux-x86_64-cpython-312/csrc/flash_fwd_mla_bf16_ws_sm80.o.d -I/src/csrc -I/src/csrc/cutlass/include -I/opt/venv/lib/python3.12/site-packages/torch/include -I/opt/venv/lib/python3.12/site-packages/torch/include/torch/csrc/api/include -I/usr/local/cuda/include -I/opt/venv/include -I/usr/include/python3.12 -c -c /src/csrc/flash_fwd_mla_bf16_ws_sm80.cu -o /src/build/temp.linux-x86_64-cpython-312/csrc/flash_fwd_mla_bf16_ws_sm80.o -D__CUDA_NO_HALF_OPERATORS__ -D__CUDA_NO_HALF_CONVERSIONS__ -D__CUDA_NO_BFLOAT16_CONVERSIONS__ -D__CUDA_NO_HALF2_OPERATORS__ --expt-relaxed-constexpr --compiler-options ''"'"'-fPIC'"'"'' -O3 -std=c++17 -D_USE_MATH_DEFINES -Wno-deprecated-declarations -U__CUDA_NO_HALF_OPERATORS__ -U__CUDA_NO_HALF_CONVERSIONS__ -U__CUDA_NO_HALF2_OPERATORS__ -U__CUDA_NO_BFLOAT16_CONVERSIONS__ --expt-relaxed-constexpr --expt-extended-lambda -DNDEBUG --use_fast_math --ptxas-options=-v,--register-usage-level=10 --threads 2 -DPy_LIMITED_API=0x03090000 -DTORCH_STABLE_ONLY -DUSE_CUDA -DTORCH_API_INCLUDE_EXTENSION_H -DPy_LIMITED_API=0x030A0000 -DTORCH_EXTENSION_NAME=flash_mla_cuda -gencode arch=compute_86,code=sm_86
+<command-line>: warning: "Py_LIMITED_API" redefined
+<command-line>: note: this is the location of the previous definition
+<command-line>: warning: "Py_LIMITED_API" redefined
+<command-line>: note: this is the location of the previous definition
+/src/csrc/flash_fwd_mla_kernel_sm80_ws.h(380): warning #177-D: variable "kNWarpsN_O" was declared but never referenced
+      constexpr int kNWarpsN_O = Kernel_traits::kNWarpsN_O;
+                    ^
+          detected during:
+            instantiation of "void flash::compute_attn_1rowblock_splitkv_mla_ws<Kernel_traits,Is_causal,Split,SharedStorage>(const Flash_fwd_mla_params &, int, int, int, int, int, int, int, SharedStorage &) [with Kernel_traits=Flash_fwd_kernel_traits_mla_ws<576, 32, 32, 8, 4, cutlass::bfloat16_t, 512>, Is_causal=true, Split=true, SharedStorage=flash::SharedStorageMLA_WS<Flash_fwd_kernel_traits_mla_ws<576, 32, 32, 8, 4, cutlass::bfloat16_t, 512>>]" at line 874
+            instantiation of "void flash::flash_fwd_splitkv_mla_ws_kernel<Kernel_traits,Is_causal,SharedStorage>(Flash_fwd_mla_params) [with Kernel_traits=Flash_fwd_kernel_traits_mla_ws<576, 32, 32, 8, 4, cutlass::bfloat16_t, 512>, Is_causal=true, SharedStorage=flash::SharedStorageMLA_WS<Flash_fwd_kernel_traits_mla_ws<576, 32, 32, 8, 4, cutlass::bfloat16_t, 512>>]" at line 11 of /src/csrc/flash_fwd_mla_bf16_ws_sm80.cu
+            instantiation of "void run_flash_splitkv_fwd_mla_ws<Kernel_traits,SharedStorage>(Flash_fwd_mla_params &, cudaStream_t) [with Kernel_traits=Flash_fwd_kernel_traits_mla_ws<576, 32, 32, 8, 4, cutlass::bfloat16_t, 512>, SharedStorage=flash::SharedStorageMLA_WS<Flash_fwd_kernel_traits_mla_ws<576, 32, 32, 8, 4, cutlass::bfloat16_t, 512>>]" at line 52 of /src/csrc/flash_fwd_mla_bf16_ws_sm80.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+ptxas info    : 111 bytes gmem, 120 bytes cmem[4]
+ptxas info    : Compiling entry function '_ZN5flash31flash_fwd_splitkv_mla_ws_kernelI30Flash_fwd_kernel_traits_mla_wsILi576ELi32ELi32ELi8ELi4EN7cutlass10bfloat16_tELi512EELb0ENS_19SharedStorageMLA_WSIS4_EEEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash31flash_fwd_splitkv_mla_ws_kernelI30Flash_fwd_kernel_traits_mla_wsILi576ELi32ELi32ELi8ELi4EN7cutlass10bfloat16_tELi512EELb0ENS_19SharedStorageMLA_WSIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 168 registers, used 6 barriers, 624 bytes cmem[0]
+ptxas info    : Compile time = 1705.653 ms
+ptxas info    : Compiling entry function '_ZN5flash31flash_fwd_splitkv_mla_ws_kernelI30Flash_fwd_kernel_traits_mla_wsILi576ELi32ELi32ELi8ELi4EN7cutlass10bfloat16_tELi512EELb1ENS_19SharedStorageMLA_WSIS4_EEEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash31flash_fwd_splitkv_mla_ws_kernelI30Flash_fwd_kernel_traits_mla_wsILi576ELi32ELi32ELi8ELi4EN7cutlass10bfloat16_tELi512EELb1ENS_19SharedStorageMLA_WSIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 168 registers, used 6 barriers, 624 bytes cmem[0]
+ptxas info    : Compile time = 2494.552 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi576ELi1EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi576ELi1EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 244 registers, used 1 barriers, 624 bytes cmem[0]
+ptxas info    : Compile time = 674.275 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi576ELi1EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi576ELi1EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 246 registers, used 1 barriers, 624 bytes cmem[0]
+ptxas info    : Compile time = 848.848 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi576ELi160EEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi576ELi160EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 38 registers, used 1 barriers, 24 bytes cumulative stack size, 640 bytes smem, 624 bytes cmem[0]
+ptxas info    : Compile time = 32.063 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi576ELi128EEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi576ELi128EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 38 registers, used 1 barriers, 24 bytes cumulative stack size, 512 bytes smem, 624 bytes cmem[0]
+ptxas info    : Compile time = 30.455 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi576ELi96EEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi576ELi96EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 38 registers, used 1 barriers, 24 bytes cumulative stack size, 384 bytes smem, 624 bytes cmem[0]
+ptxas info    : Compile time = 29.231 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi576ELi64EEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi576ELi64EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 38 registers, used 1 barriers, 24 bytes cumulative stack size, 256 bytes smem, 624 bytes cmem[0]
+ptxas info    : Compile time = 28.028 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi576ELi32EEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi576ELi32EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 38 registers, used 1 barriers, 24 bytes cumulative stack size, 128 bytes smem, 624 bytes cmem[0]
+ptxas info    : Compile time = 26.784 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi576ELi2EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi576ELi2EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 172 registers, used 1 barriers, 624 bytes cmem[0]
+ptxas info    : Compile time = 743.583 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi576ELi2EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi576ELi2EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 174 registers, used 1 barriers, 624 bytes cmem[0]
+ptxas info    : Compile time = 1163.770 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi1EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi1EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 232 registers, used 1 barriers, 624 bytes cmem[0]
+ptxas info    : Compile time = 673.654 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi1EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi1EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 240 registers, used 1 barriers, 624 bytes cmem[0]
+ptxas info    : Compile time = 834.004 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi160EEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi160EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 36 registers, used 1 barriers, 24 bytes cumulative stack size, 640 bytes smem, 624 bytes cmem[0]
+ptxas info    : Compile time = 26.386 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi128EEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi128EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 36 registers, used 1 barriers, 24 bytes cumulative stack size, 512 bytes smem, 624 bytes cmem[0]
+ptxas info    : Compile time = 24.865 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi96EEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi96EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 36 registers, used 1 barriers, 24 bytes cumulative stack size, 384 bytes smem, 624 bytes cmem[0]
+ptxas info    : Compile time = 23.856 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi64EEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi64EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 36 registers, used 1 barriers, 24 bytes cumulative stack size, 256 bytes smem, 624 bytes cmem[0]
+ptxas info    : Compile time = 22.343 ms
+ptxas info    : Compiling entry function '_ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi32EEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash36flash_fwd_splitkv_mla_combine_kernelIN7cutlass10bfloat16_tEflLi512ELi32EEEv20Flash_fwd_mla_params
+    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 36 registers, used 1 barriers, 24 bytes cumulative stack size, 128 bytes smem, 624 bytes cmem[0]
+ptxas info    : Compile time = 21.300 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi2EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi2EELb0ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 168 registers, used 1 barriers, 624 bytes cmem[0]
+ptxas info    : Compile time = 715.871 ms
+ptxas info    : Compiling entry function '_ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi2EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params' for 'sm_86'
+ptxas info    : Function properties for _ZN5flash28flash_fwd_splitkv_mla_kernelI27Flash_fwd_kernel_traits_mlaILi576ELi32ELi32ELi8EN7cutlass10bfloat16_tELi512ELi2EELb1ENS_16SharedStorageMLAIS4_EEEEv20Flash_fwd_mla_params
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 172 registers, used 1 barriers, 624 bytes cmem[0]
+ptxas info    : Compile time = 1109.021 ms
+x86_64-linux-gnu-g++ -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -shared -Wl,-O1 -Wl,-Bsymbolic-functions /src/build/temp.linux-x86_64-cpython-312/csrc/debug_imma_sm80.o /src/build/temp.linux-x86_64-cpython-312/csrc/flash_api.o /src/build/temp.linux-x86_64-cpython-312/csrc/flash_api_dispatch.o /src/build/temp.linux-x86_64-cpython-312/csrc/flash_fwd_mla_bf16_sm80.o /src/build/temp.linux-x86_64-cpython-312/csrc/flash_fwd_mla_bf16_sm90.o /src/build/temp.linux-x86_64-cpython-312/csrc/flash_fwd_mla_bf16_ws_sm80.o /src/build/temp.linux-x86_64-cpython-312/csrc/flash_fwd_mla_fp16_sm90.o /src/build/temp.linux-x86_64-cpython-312/csrc/flash_fwd_mla_metadata.o /src/build/temp.linux-x86_64-cpython-312/csrc/flash_sparse_mla_decode_sm80.o /src/build/temp.linux-x86_64-cpython-312/csrc/flash_sparse_mla_prefill_fused_sm80.o -L/opt/venv/lib/python3.12/site-packages/torch/lib -L/usr/local/cuda/lib64 -L/usr/lib/x86_64-linux-gnu -lc10 -ltorch -ltorch_cpu -lcudart -lc10_cuda -ltorch_cuda -o build/lib.linux-x86_64-cpython-312/flash_mla_cuda.abi3.so
+installing to build/bdist.linux-x86_64/wheel
+running install
+running install_lib
+creating build/bdist.linux-x86_64/wheel
+creating build/bdist.linux-x86_64/wheel/flash_mla
+copying build/lib.linux-x86_64-cpython-312/flash_mla/flash_mla_interface.py -> build/bdist.linux-x86_64/wheel/./flash_mla
+copying build/lib.linux-x86_64-cpython-312/flash_mla/int8_sparse_mla.py -> build/bdist.linux-x86_64/wheel/./flash_mla
+copying build/lib.linux-x86_64-cpython-312/flash_mla/__init__.py -> build/bdist.linux-x86_64/wheel/./flash_mla
+copying build/lib.linux-x86_64-cpython-312/flash_mla_cuda.abi3.so -> build/bdist.linux-x86_64/wheel/.
+running install_egg_info
+running egg_info
+creating flash_mla.egg-info
+writing flash_mla.egg-info/PKG-INFO
+writing dependency_links to flash_mla.egg-info/dependency_links.txt
+writing top-level names to flash_mla.egg-info/top_level.txt
+writing manifest file 'flash_mla.egg-info/SOURCES.txt'
+reading manifest file 'flash_mla.egg-info/SOURCES.txt'
+adding license file 'LICENSE'
+writing manifest file 'flash_mla.egg-info/SOURCES.txt'
+Copying flash_mla.egg-info to build/bdist.linux-x86_64/wheel/./flash_mla-2.0.0-py3.12.egg-info
+running install_scripts
+creating build/bdist.linux-x86_64/wheel/flash_mla-2.0.0.dist-info/WHEEL
+creating '/src/dist/.tmp-_0zmsy4f/flash_mla-2.0.0-cp39-abi3-linux_x86_64.whl' and adding 'build/bdist.linux-x86_64/wheel' to it
+adding 'flash_mla_cuda.abi3.so'
+adding 'flash_mla/__init__.py'
+adding 'flash_mla/flash_mla_interface.py'
+adding 'flash_mla/int8_sparse_mla.py'
+adding 'flash_mla-2.0.0.dist-info/licenses/LICENSE'
+adding 'flash_mla-2.0.0.dist-info/METADATA'
+adding 'flash_mla-2.0.0.dist-info/WHEEL'
+adding 'flash_mla-2.0.0.dist-info/top_level.txt'
+adding 'flash_mla-2.0.0.dist-info/RECORD'
+removing build/bdist.linux-x86_64/wheel
+Successfully built dist/flash_mla-2.0.0-cp39-abi3-linux_x86_64.whl
