@@ -1,0 +1,37 @@
+schema_version: 1
+id: deepseek-v4-flash-0731
+display_name: DeepSeek-V4-Flash-0731 (284B MoE)
+family: deepseek4-moe
+# Official architecture values verified from the model and GGUF metadata.
+hidden_size: 4096
+num_hidden_layers: 43
+num_attn_heads: 64
+num_kv_heads: 1
+head_dim_attn: 512
+attention_k_eq_v: true
+num_experts: 256
+num_experts_per_tok: 6
+num_shared_experts: 1
+max_ctx_supported: 1048576
+vision_capable: false
+
+# Canonical llama.cpp contract: four homogeneous sm_86 GPUs, Antirez's
+# imatrix-calibrated IQ2_XXS/Q2_K artifact, and the ds4-longctx Q8 repair.
+default_weight_variant: antirez-iq2-xxs
+valid_tp: [4]
+compatible_drafters: []
+kv_calc_supported: false
+
+weights:
+  antirez-iq2-xxs:
+    path: deepseek-v4-antirez-iq2-xxs
+    local_subdir: deepseek-v4-antirez-iq2-xxs
+    size_gb: 87
+    format: gguf
+    status: production
+    hf_repo: antirez/deepseek-v4-gguf
+    revision: e7f04037032990db0346398d249baf9fb9df1ccc
+    files:
+      - DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf
+    verify_glob: "DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf"
+    manual_note: "Canonical DeepSeek V4 Flash llama.cpp artifact. Use only with the digest-pinned llama-cpp-ds4-longctx engine, matching q8_0 K/V, LLAMA_ATTN_ROT_DISABLE=1, and the mandatory full-context warm-up. Validated at 430080 reserved context with exact recall at 395282 tokens; CTX_SIZE=200000 is the higher-margin fallback. Unsloth CPU-offload and IQ1_M experiments were retired because they were slower, less validated, or incompatible with the fast MMQ capture path."

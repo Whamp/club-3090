@@ -1,0 +1,36 @@
+Running STRESS / boundary test against http://127.0.0.1:8034
+  model=deepseek-v4-flash-0731-gguf-tp  container=dsv4-gguf-tp-fp4  engine=vllm
+  This script does the heavy stuff (longctx needle ladder + ~25K-token tool prefill).
+  For the fast functional smoke (~2 min), use verify-full.sh instead.
+
+[1/8] Long-context needle small rungs (10K / 30K) ...
+    [32m✓[0m   9212 tokens: recalled 'silver falcon 48' (got: silver falcon 48 )  prefill=516.8 t/s (18s)
+    [32m✓[0m  27513 tokens: recalled 'violet iguana 53' (got: violet iguana 53 )  prefill=621.0 t/s (44s)
+  [32m✓[0m all long-ctx depths recalled secret correctly
+[2/8] Tool response prefill OOM (~25K-token mock tool response) ...
+  [32m✓[0m tool prefill OK — text response (1125 chars, finish=stop)
+[3/8] IDE-agent one-shot prompt (sys + tool schemas + user request) ...
+  [32m✓[0m IDE-agent one-shot OK — 50 completion tokens (2 chars), finish=stop
+[4/8] Multi-turn agent prompt (sys + tools + 4-turn history) ...
+  [32m✓[0m multi-turn agent OK
+[5/8] LCB-coding shape (LeetCode-style problem + structured plan) ...
+  [32m✓[0m LCB-coding shape OK
+[6/8] Reasoning-heavy (math problem + max_tokens=8192) ...
+  [32m✓[0m reasoning-heavy OK — 2045 completion tokens
+[7/8] Long-context needle large rungs (60K / 90K — Cliff 2 territory) ...
+  [33m⊘[0m STRESS_FAST=1 — large fresh needles skipped (depth coverage via ceiling rungs) (skipped)
+[8/8] Context ceiling ladder (staggered NIAH from ~95000 → ~0.92 × n_ctx) ...
+    STRESS_FAST=1 — ladder capped (start=95000, step=41161); full-mode gates use the fine ladder
+    n_ctx=148000  ladder: 95000 → 136160 (2 rungs)
+    calibrated: scale=100 → 6107 tokens (tok/scale_unit=61.07)
+    VRAM free (ladder start): 39 MB
+    [32m✓[0m rung 1/2: target=95K  actual=94K tok (64%)  recalled 'silver otter 58'  prefill=539.1 t/s (176s)  VRAM_free=39MB
+    [32m✓[0m rung 2/2: target=136K  actual=136K tok (91%)  recalled 'silver otter 58'  prefill=497.2 t/s (274s)  VRAM_free=31MB
+
+  [32m✓[0m ceiling ladder: all 2 rungs passed — fillable to 136031 tok (91% of n_ctx=148000)
+    \033[33m⚠\033[0m VRAM margin thin at ceiling: 31 MB free < 1024 MB threshold
+      Recall succeeded at 91% fill, but sustained agent load also carries
+      prompt-cache + context-checkpoint overhead (~292 MiB, see #197).
+      Agent users should target a CTX_SIZE where margin ≥ 1024 MB at this depth.
+
+[31m1 stress check(s) failed.[0m See hints above.

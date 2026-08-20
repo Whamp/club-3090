@@ -1,0 +1,260 @@
+# ===========================================================================
+# Profile (at-a-glance):
+#   Model:     Qwen3.6-27B NVFP4 (nvidia modelopt v0.45 MIXED_PRECISION:
+#              NVFP4 gs16 FFN + FP8-static attention/linear_attn + FP8 KV scales
+#              baked + UNQUANTIZED mtp.* head — 21.9 GB)
+#   Topology:  Single Hopper/Blackwell card, 32 GB+ — 5090 is the primary
+#              target; H100 / RTX 6000 Pro / GB10 also qualify. required_sm=9.0
+#              (native); fallback_sm=7.5 — sub-9.0 cards RUN it via the Marlin
+#              W4A16 weight-only fallback (vLLM v0.24+, confirmed on sm_86
+#              2026-07-11; no native-FP4 speed edge), though this single-card
+#              config needs >24 GB VRAM regardless.
+#   Drafter:   MTP n=3 (built-in — the checkpoint keeps mtp.* unquantized;
+#              SPEC=off disables it — tight-RAM / spec-dec-fails mitigation, #617)
+#   KV:        fp8 → e4m3 at scale=1.0 (hf_quant_config DECLARES FP8 KV but
+#              ships NO k_scale/v_scale tensors — index-verified 2026-07-06;
+#              hybrid disables calculate_kv_scales → the #594-tied regime).
+#              NVFP4 *KV* not used ON A STOCK PIN: consumer Blackwell has no
+#              FP4 FMHA on the trtllm-gen route (rtx-5090.yml, vllm#43562) —
+#              a STOCK-IMAGE property, not a silicon one. A community FA2+XQA
+#              route reaches real FP4 KV on sm_120 (vllm#49011 / #44851) and
+#              needs vllm#46329 for the V-scale write layout or it degrades
+#              SILENTLY (pre-fix 8-pack 116/150, BELOW its own fp8 control,
+#              with every functional gate green). Stay on fp8 until #46329 is
+#              in the pin.
+#              (stock-pin property — see the reframed KV block below; vllm#43562.)
+#              TurboQuant *KV* (turbo4_nc) NOT viable either: it fits more ctx
+#              (160K + MTP boots where fp8 caps ~98K) but CRATERS recall — every
+#              NIAH depth misses with token-repetition on this scale-less
+#              checkpoint (#617 @paulp83 2026-07-15). 4-bit KV needs the
+#              k_scale/v_scale this checkpoint doesn't ship (the #594 regime);
+#              fp8/e4m3 tolerates scale=1.0, 4-bit does not. Stay on fp8.
+#   Vision:    yes (full VLM)
+#   Max ctx:   65K default (65536 = 8×8192) + util 0.85 on 5090 32 GB — the config
+#              that keeps MTP AND fits. #613: MTP-on OOMed at 98K (the KV
+#              reservation left no room for the draft head + cudagraphs + GDN
+#              prefill scratch); dropping ctx to 65K frees that room. Confirmed on
+#              two 5090s (@guybrush01 + @paulp83): verify-stress all-pass, 131/155
+#              TPS decode, MTP accept ~3.2, ~1.4 GB VRAM free. SPEC=off trades MTP
+#              for more ctx (81K/98K @ 71 TPS).
+#              ⤷ CEILING DE-BLIND 2026-07-12 (#617 @paulp83, headless 32 GB 5090):
+#                MTP-on (SPEC=on) verify-stress ALL-PASS + NIAH-clean to 91K at
+#                MAX_MODEL_LEN up to 98K; 100K = the boot-fit edge (600s timeout,
+#                KV pool + cudagraphs hit the 32 GB wall). So the MTP-on ceiling is
+#                ~98K on a HEADLESS 5090 — #613's "MTP-on OOMs at 98K" was the
+#                tighter desktop/system-RAM condition; freeing VRAM (headless)
+#                lifts MTP-on to the SPEC=off ceiling. 65K stays the conservative
+#                fits-anywhere default; SPEC=off remains the tight-RAM fallback.
+#              Bigger cards raise via env (MTP on):
+#                GB10 (128 GB unified): MAX_MODEL_LEN=262144 → the single-card home.
+#                H100 (80 GB) / RTX 6000 Pro (96 GB): 262144 fits similarly.
+#              ⤷ THE 65K PIN IS FP8-KV-CONSEQUENT, NOT A HARD LIMIT (2026-07-28,
+#                #765/#613 @seanyourhighness, 1x 5090 32 GB, PATCHED image):
+#                the KV reservation is that large because fp8 is the assumed KV
+#                floor. On a build carrying the sm_120 NVFP4-KV route + the
+#                V-scale write fix (vllm#46329), 98K — the exact context #613
+#                OOMed at — boots WITH MTP and benches at full speed (100.94 vs
+#                100.60 narrative at 65K), and 131K runs too (93.60/111.27, i.e.
+#                BETTER than the shipped 65K default's 89.08/101.29 at 2x the
+#                ctx). Tell: warm-free VRAM is 4,656 MiB at 65K, 98K AND 131K
+#                alike — the constraint stopped applying, it did not merely
+#                loosen. Same envelope, only --kv-cache-dtype changed: +12.9%
+#                narrative, +12.3% code, 1.44x pool, MTP acceptance FLAT (56.6
+#                vs 57.2%) — FP4 KV does not disturb spec-decode.
+#                ⚠️ DEFAULT UNCHANGED, deliberately: vllm#46329 is UNMERGED, so
+#                this needs a patched local image — a stock pinned image still
+#                crashes on nvfp4 KV (vllm#43562). Not first-party reproducible
+#                (no SM120 on the maintainer rig). RE-TEST TRIGGER: vllm#46329
+#                lands in the vllm-stable pin -> re-derate this pin. See
+#                docs/UPSTREAM.md (#46329 row) + docs/DTYPE_MATRIX.md.
+#                NOT YET QUALIFIED at 98K/131K: throughput + boot only — no
+#                needle ladder and no 8-pack were run at those contexts.
+#   Genesis:   none — intentionally Genesis-free
+#   Status:    ⚠️ Production w/ caveats
+#   Caveats:   MTP drafter exposed to OPEN vllm#50021 (GDN spec-decode crash
+#              class, quant-independent). Mitigate: SPEC=off. v0.26.0 predates
+#              the fix. Detail: Upstream-risk below + docs/UPSTREAM.md row.
+#              Carried from 🧪: native-W4A4 quality bound is locally-measured
+#              (W4A16 fallback) only; headless-5090 ceiling 98K (#617).
+#   Upstream-risk:  • ⚠️ MTP × hybrid-GDN wild write — vllm#50021, OPEN and LIVE IN THIS PIN.
+#                The GDN spec-decode path builds a state-block index from an UNBOUNDED
+#                accepted-token count; a zero/stale count dereferences a wild address →
+#                `CUDA error: unspecified launch failure` + Xid 13/31 and a dead worker,
+#                typically after minutes of agent-shaped traffic rather than at boot. Not
+#                quant-, topology- or depth-specific: hit on Ampere+Ada (#758) and on
+#                2× 5090 across NVFP4 AND W4A8 alike (#838). The vendored pr48375 fixes
+#                vllm#43559 (corruption) and does NOT cover this fault.
+#                MITIGATION: run the drafter off — SPEC=off. Lower n cuts
+#                frequency, NOT exposure (#758 called n=3 stable; #838 crashed AT n=3). Clears when
+#                #50021 merges and a pin bump inherits it — v0.26.0 PREDATES it.
+#                Detail + re-test trigger: docs/UPSTREAM.md.
+#              ⤷ Status flip TAKEN 2026-08-01 (maintainer call): moved to ⚠️
+#                while vllm#50021 is open; the summary now lives on the
+#                required `Caveats:` line above. Reverts to the prior status
+#                when a fix-carrying pin bump lands (trigger on the
+#                docs/UPSTREAM.md row).
+#   Best for:  27B-class Qwen with vision+tools on ONE Blackwell/Hopper card —
+#              5090 default 65K keeps MTP's ~2x (131/155 TPS); SPEC=off for max ctx
+# ---------------------------------------------------------------------------
+# ⚠️ AUTHORED BLIND — READ THIS FIRST.
+# NVFP4 runs on the sm_86 maintainer rig via the Marlin W4A16 fallback
+# (confirmed 2026-07-11 on the dual sibling), but this 21.9 GB single-card
+# config exceeds a 24 GB card — so it remains community-validated only. Two 5090s (#613 @guybrush01, #617 @paulp83) swept the
+# config space: MTP-on OOMs at 98K but PASSES at 65K + util 0.85 (verify-stress
+# all-pass, 131/155 TPS, MTP accept 3.2) — that's now the default. SPEC=off is the
+# max-ctx fallback (81K/98K @ 71 TPS) and the tight-system-RAM path (MTP's draft
+# load OOM-kills a 28 GB host — #617). If you have a 5090 / H100 / GB10, YOU are
+# the validation:
+#   1. bash scripts/switch.sh vllm/qwen-27b-single-nvfp4
+#   2. bash scripts/verify-full.sh   (+ verify-stress + rebench-full)
+#   3. Report via the numbers-from-your-rig template (or the c3 funnel).
+# Still owed: an 8-pack quality run (stays 🧪 until it lands).
+#
+# Run (Blackwell/Hopper only):
+#   cd <repo>/models/qwen3.6-27b/vllm/compose
+#   docker compose -f single/nvfp4/mtp.yml up -d
+# ===========================================================================
+# Hardware metadata (parsed by scripts/preflight.sh):
+# Requires-min-vram-gb: 32
+# Engine-profile: vllm-stable
+# Requires-min-gpu-count: 1
+# Tensor-parallel: 1
+services:
+  vllm-qwen36-27b-single-nvfp4:
+    # Pinned to a vLLM STABLE release (immutable, #407); the launchers inject
+    # the engine-profile image over this default (#254).
+    image: ${VLLM_IMAGE:-vllm/vllm-openai:v0.25.1}
+    container_name: "${ESTATE_CONTAINER:-vllm-qwen36-27b-single-nvfp4}"
+    restart: ${CLUB3090_RESTART:-unless-stopped}
+    ports:
+      - "${BIND_HOST:-0.0.0.0}:${ESTATE_PORT:-${PORT:-8076}}:8000"
+    volumes:
+      - ${MODEL_DIR:-../../../../../../models-cache}:/root/.cache/huggingface
+      # torch.compile + Triton kernel caches — warm-start across boots.
+      - ../../../cache/torch_compile:/root/.cache/vllm/torch_compile_cache
+      - ../../../cache/triton:/root/.triton/cache
+      # froggeric/Qwen-Fixed-Chat-Templates qwen3.6 — fixes 7 default-template
+      # bugs. See docs/UPSTREAM.md "Community templates / model assets".
+      - ../../../patches/froggeric-chat-template/chat_template.jinja:/etc/qwen-froggeric-chat-template.jinja:ro
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=${ESTATE_GPUS:-${NVIDIA_VISIBLE_DEVICES:-all}}
+      # CUDA-level GPU mask — the runtime-agnostic half of GPU selection
+      # (#610): launch.sh --gpus exports GPU UUIDs here. CDI runtimes (NixOS,
+      # nvidia-ctk cdi) IGNORE NVIDIA_VISIBLE_DEVICES, so this mask is what
+      # actually pins cards there; on the classic runtime the UUID form is
+      # renumbering-proof. Unset → absent (no masking).
+      - CUDA_VISIBLE_DEVICES
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
+      - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-${OFFLINE:-0}}
+      - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-${OFFLINE:-0}}
+      - VLLM_WORKER_MULTIPROC_METHOD=spawn
+      - VLLM_NO_USAGE_STATS=1
+      - VLLM_USE_FLASHINFER_SAMPLER=1
+      - OMP_NUM_THREADS=1
+      # DeepGEMM: no recipe on consumer Blackwell (5090/GB10 sm_120/121) —
+      # launchers auto-inject VLLM_USE_DEEP_GEMM=0 there (disc #571); raw
+      # `docker compose` users on those cards set it themselves.
+      - VLLM_USE_DEEP_GEMM
+      # SPEC=off disables the built-in MTP drafter at boot (bare passthrough —
+      # set via `SPEC=off bash scripts/switch.sh …` or compose/.env). The
+      # mitigation for tight system-RAM rigs (laptop / consumer 5090) where the
+      # extra draft-model load OOMs during boot (#617). Default = MTP on.
+      - SPEC
+      # ⚠️ WSL/WDDM: set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:False.
+      # Expandable segments use CUDA VMM (cuMemCreate/cuMemMap), unsupported
+      # under WDDM — every boot dies with "RuntimeError: CUDA driver error:
+      # device not ready" in nvfp4_marlin_process -> _nvfp4_compute_scale_factor
+      # right after weights load 100%, with nvidia-smi perfectly clean (no
+      # throttle, no ECC, full VRAM free). Reads like dead silicon or a corrupt
+      # checkpoint; it is neither. True is correct on native Linux, so this is
+      # an override, not a fix: prefix the env on switch.sh — no edit needed.
+      # (#617/#765 @seanyourhighness — cost five failed boots + a wrong
+      # "the GPU is degraded" diagnosis.)
+      - PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True,max_split_size_mb:512}
+    shm_size: "16gb"
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    entrypoint:
+      - bash
+      - -c
+      - |
+        # SPEC=off drops the built-in MTP drafter (--speculative-config) — the
+        # tight-system-RAM mitigation (#617: on a 28 GB laptop 5090 the extra
+        # MTP draft-model load OOM'd during boot; the MTP-off 35B booted fine on
+        # the same rig). Default on (spec-dec active). Also honors
+        # VLLM_ENFORCE_EAGER=1 (Cliff-2 mitigation at >50K single-prompt).
+        SPEC_ARGS=()
+        if [ "$${SPEC:-on}" != "off" ]; then
+          SPEC_ARGS=(--speculative-config '{"method":"mtp","num_speculative_tokens":3}')
+        else
+          echo "[nvfp4] SPEC=off — MTP drafter disabled (loads lighter; no spec-dec)" >&2
+        fi
+        exec vllm serve $${VLLM_ENFORCE_EAGER:+--enforce-eager} "$$@" "$${SPEC_ARGS[@]}"
+      - --
+    command:
+      - --model
+      - /root/.cache/huggingface/qwen3.6-27b-nvfp4
+      - --served-model-name
+      - qwen3.6-27b
+      - qwen3.6-27b-autoround
+      - qwen3.6-27b-nvfp4
+      # NVIDIA model-card recipe: modelopt quantization.
+      # ⚠ This flag matches NVIDIA's export (nvidia/Qwen3.6-27B-NVFP4) ONLY.
+      # Serving unsloth/Qwen3.6-27B-NVFP4 instead? Its config declares
+      # compressed-tensors → DELETE the two lines below (vLLM auto-detects;
+      # keeping them errors: "Quantization method ... (compressed-tensors)
+      # does not match ... (modelopt)"). Provider A/B 2026-07-11: quality/TPS tie.
+      - --quantization
+      - modelopt
+      - --dtype
+      - bfloat16
+      - --tensor-parallel-size
+      - "${TP:-1}"
+      - --max-model-len
+      - "${MAX_MODEL_LEN:-65536}"
+      - --gpu-memory-utilization
+      - "${GPU_MEMORY_UTILIZATION:-0.85}"
+      - --max-num-seqs
+      - "1"
+      - --max-num-batched-tokens
+      - "${MAX_NUM_BATCHED_TOKENS:-8192}"
+      # fp8 (= e4m3) at scale=1.0 — FP8 KV is DECLARED in hf_quant_config but
+      # no k_scale/v_scale tensors ship (the #594-tied regime). NOT fp8_e5m2
+      # (rejected with fp8 checkpoints), NOT nvfp4 KV (no FP4 FMHA on consumer
+      # Blackwell).
+      - --kv-cache-dtype
+      - "${KV_CACHE_DTYPE:-fp8}"
+      - --trust-remote-code
+      - --chat-template
+      - /etc/qwen-froggeric-chat-template.jinja
+      - --reasoning-parser
+      - qwen3
+      - --default-chat-template-kwargs
+      - '{"enable_thinking": false}'
+      - --enable-auto-tool-choice
+      - --tool-call-parser
+      - qwen3_coder
+      # ⚠️ Prefix caching defaults OFF here BY POLICY (#810, maintainer ruling
+      # 2026-08-02): this slug injects MTP via SPEC_ARGS by default, and MTP +
+      # prefix caching is the vllm#43559 DeltaNet corruption pair. This slug
+      # does NOT vendor pr48375 and will not — no new patch vendoring; the
+      # pair-safety clears only when a pinned release contains the merged
+      # upstream fix (trigger on the docs/UPSTREAM.md #43559/#48375 row).
+      # Re-enable at your own risk: PREFIX_CACHE_ARG=--enable-prefix-caching
+      - "${PREFIX_CACHE_ARG:---no-enable-prefix-caching}"
+      - --enable-chunked-prefill
+      # MTP n=3 — mtp.* is unquantized in the checkpoint. Applied by the
+      # entrypoint unless SPEC=off (see the environment block + entrypoint):
+      # drop it on tight-RAM rigs where the draft-model load OOMs at boot (#617).
+      - --override-generation-config
+      - '{"temperature":${TEMP:-${TEMPERATURE:-0.6}},"top_p":${TOP_P:-0.95},"top_k":${TOP_K:-20},"min_p":${MIN_P:-0.0},"repetition_penalty":${REPEAT_PENALTY:-1.0}}'
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"

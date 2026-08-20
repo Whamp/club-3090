@@ -1,0 +1,63 @@
+{"id":"chatcmpl-8d889cc12ad9288e","object":"chat.completion","created":1787239588,"model":"deepseek-v4-flash-0731-gguf-tp","choices":[{"index":0,"message":{"role":"assistant","content":"The capital of France is Paris.","refusal":null,"annotations":null,"audio":null,"function_call":null,"reasoning":null},"logprobs":null,"finish_reason":"stop","stop_reason":null,"token_ids":null,"routed_experts":null}],"service_tier":null,"system_fingerprint":"vllm-0.1.dev4+g2a3dd2ea7-tp4-e941e692","usage":{"prompt_tokens":15,"total_tokens":23,"completion_tokens":8,"prompt_tokens_details":null},"prompt_logprobs":null,"prompt_token_ids":null,"prompt_text":null,"kv_transfer_params":null,"ec_transfer_params":null,"metrics":null}
+HTTP=200
+running healthy 0
+(Worker_TP3 pid=231) INFO 08-20 15:26:00 [gpu_worker.py:726] CUDA graph pool memory: 0.06 GiB (actual), 0.18 GiB (estimated), difference: 0.12 GiB (193.8%).
+(Worker_TP2 pid=230) INFO 08-20 15:26:00 [gpu_worker.py:726] CUDA graph pool memory: 0.06 GiB (actual), 0.18 GiB (estimated), difference: 0.12 GiB (193.8%).
+(Worker_TP3 pid=231) INFO 08-20 15:26:00 [gpu_worker.py:789] Free memory on device (23.12/23.56 GiB) on startup. Desired GPU memory utilization is (0.98, 23.09 GiB). Actual usage is 22.01 GiB for consumed memory (weights + non-torch), 0.27 GiB for peak activation, and 0.06 GiB for CUDAGraph memory. Replace gpu_memory_utilization config with `--kv-cache-memory=639101502` (0.6 GiB) to fit into requested memory, or `--kv-cache-memory=667770880` (0.62 GiB) to fully utilize gpu memory. Current kv cache memory in use is 0.8 GiB.
+(Worker_TP2 pid=230) INFO 08-20 15:26:00 [gpu_worker.py:789] Free memory on device (23.12/23.56 GiB) on startup. Desired GPU memory utilization is (0.98, 23.09 GiB). Actual usage is 22.01 GiB for consumed memory (weights + non-torch), 0.27 GiB for peak activation, and 0.06 GiB for CUDAGraph memory. Replace gpu_memory_utilization config with `--kv-cache-memory=638844601` (0.59 GiB) to fit into requested memory, or `--kv-cache-memory=667508736` (0.62 GiB) to fully utilize gpu memory. Current kv cache memory in use is 0.8 GiB.
+(Worker_TP0 pid=228) INFO 08-20 15:26:00 [gpu_model_runner.py:6905] Graph capturing finished in 2 secs, took 0.06 GiB
+(Worker_TP0 pid=228) INFO 08-20 15:26:00 [gpu_worker.py:726] CUDA graph pool memory: 0.06 GiB (actual), 0.18 GiB (estimated), difference: 0.12 GiB (193.8%).
+(Worker_TP0 pid=228) INFO 08-20 15:26:00 [gpu_worker.py:789] Free memory on device (23.12/23.56 GiB) on startup. Desired GPU memory utilization is (0.98, 23.09 GiB). Actual usage is 22.01 GiB for consumed memory (weights + non-torch), 0.27 GiB for peak activation, and 0.06 GiB for CUDAGraph memory. Replace gpu_memory_utilization config with `--kv-cache-memory=638844601` (0.59 GiB) to fit into requested memory, or `--kv-cache-memory=667508736` (0.62 GiB) to fully utilize gpu memory. Current kv cache memory in use is 0.8 GiB.
+(Worker_TP1 pid=229) INFO 08-20 15:26:00 [jit_monitor.py:79] Kernel JIT monitor activated; monitored JIT compilations during inference will use mode=warn.
+(Worker_TP3 pid=231) INFO 08-20 15:26:00 [jit_monitor.py:79] Kernel JIT monitor activated; monitored JIT compilations during inference will use mode=warn.
+(Worker_TP2 pid=230) INFO 08-20 15:26:00 [jit_monitor.py:79] Kernel JIT monitor activated; monitored JIT compilations during inference will use mode=warn.
+(Worker_TP0 pid=228) INFO 08-20 15:26:00 [jit_monitor.py:79] Kernel JIT monitor activated; monitored JIT compilations during inference will use mode=warn.
+(EngineCore pid=207) INFO 08-20 15:26:01 [core.py:355] init engine (profile, create kv cache, warmup model) took 174.00 s
+(EngineCore pid=207) WARNING 08-20 15:26:06 [vllm.py:1237] VLLM_USE_BREAKABLE_CUDAGRAPH is set, disabling vLLM's torch.compile pipeline. Equivalent to -cc.mode=none.
+(EngineCore pid=207) WARNING 08-20 15:26:06 [vllm.py:1247] Inductor compilation was disabled by user settings, optimizations settings that are only active during inductor compilation will be ignored.
+(EngineCore pid=207) INFO 08-20 15:26:06 [kernel.py:306] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['vllm_c', 'native'], fused_add_rms_norm=['vllm_c', 'native'])
+(EngineCore pid=207) INFO 08-20 15:26:06 [compilation.py:329] Enabled custom fusions: norm_quant, act_quant
+(APIServer pid=1) INFO 08-20 15:26:06 [api_server.py:678] Supported tasks: ['generate']
+(APIServer pid=1) INFO 08-20 15:26:07 [parser_manager.py:37] "auto" tool choice has been enabled.
+(APIServer pid=1) WARNING 08-20 15:26:07 [model.py:1633] Default vLLM sampling parameters have been overridden by the model's `generation_config.json`: `{'temperature': 1.0, 'top_p': 1.0}`. If this is not intended, please relaunch vLLM instance with `--generation-config vllm`.
+(APIServer pid=1) INFO 08-20 15:26:07 [api_server.py:682] Starting vLLM server on http://0.0.0.0:8000
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:37] Available routes are:
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /openapi.json, Methods: GET, HEAD
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /docs, Methods: GET, HEAD
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /docs/oauth2-redirect, Methods: GET, HEAD
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /redoc, Methods: GET, HEAD
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /load, Methods: GET
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /version, Methods: GET
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /health, Methods: GET
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /metrics, Methods: GET
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /tokenize, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /detokenize, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/models, Methods: GET
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /ping, Methods: GET
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /ping, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /invocations, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/chat/completions, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/chat/completions/batch, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/responses, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/responses/{response_id}, Methods: GET
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/responses/{response_id}/cancel, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/completions, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/messages, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/messages/count_tokens, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /generative_scoring, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /scale_elastic_ep, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /is_scaling_elastic_ep, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/chat/completions/render, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/completions/render, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/chat/completions/derender, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /v1/completions/derender, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:07 [launcher.py:46] Route: /inference/v1/generate, Methods: POST
+(APIServer pid=1) INFO 08-20 15:26:08 [launcher.py:99] API server: waiting for HTTP server to start
+(APIServer pid=1) INFO:     Started server process [1]
+(APIServer pid=1) INFO:     Waiting for application startup.
+(APIServer pid=1) INFO:     Application startup complete.
+(APIServer pid=1) INFO 08-20 15:26:11 [launcher.py:105] API server: HTTP server started
+(APIServer pid=1) INFO:     127.0.0.1:41592 - "GET /health HTTP/1.1" 200 OK
+(Worker_TP0 pid=228) WARNING 08-20 15:26:28 [jit_monitor.py:135] Triton kernel JIT compilation during inference: _build_c128a_topk_metadata_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_TP0 pid=228) WARNING 08-20 15:26:28 [jit_monitor.py:135] Triton kernel JIT compilation during inference: _compute_global_topk_indices_and_lens_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(APIServer pid=1) INFO:     192.168.160.1:36256 - "POST /v1/chat/completions HTTP/1.1" 200 OK

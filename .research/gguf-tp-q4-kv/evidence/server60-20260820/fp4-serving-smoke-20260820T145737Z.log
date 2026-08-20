@@ -1,0 +1,18 @@
+state=running health=healthy restarts=0 restart_policy=no image=sha256:35bb8630b9f9ac2188e9233ce586f96333062f72bdaee7a6efaa00366e9f0dc0
+
+{"object":"list","data":[{"id":"deepseek-v4-flash-0731-gguf-tp","object":"model","created":1787237857,"owned_by":"vllm","root":"/runtime-model","parent":null,"max_model_len":148000,"permission":[{"id":"modelperm-82974f23a1347701","object":"model_permission","created":1787237857,"allow_create_engine":false,"allow_sampling":true,"allow_logprobs":true,"allow_search_indices":false,"allow_view":true,"allow_fine_tuning":false,"organization":"*","group":null,"is_blocking":false}]}]}
+GPU_STATE
+0, 230.00, 2100, 24028, 99
+1, 230.00, 2100, 24028, 99
+2, 230.00, 2130, 24028, 99
+3, 230.00, 2115, 24028, 100
+WORKER_SWAP
+Name:	python
+Pid:	2079348
+Name:	python
+Pid:	2079573
+VmSwap:	       0 kB
+Name:	VLLM::EngineCor
+Pid:	2079574
+VmSwap:	       0 kB
+REQUEST

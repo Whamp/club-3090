@@ -1,0 +1,227 @@
+# ===========================================================================
+# Profile (at-a-glance):
+#   Model:     Qwen3.6-35B-A3B NVFP4 (nvidia modelopt MIXED_PRECISION MoE:
+#              NVFP4 gs16 expert FFNs + FP8-static attention/linear_attn +
+#              UNQUANTIZED mtp.* head — 23.4 GB, 3B active params)
+#   Topology:  Single Hopper/Blackwell card, 32 GB+ — required_sm=9.0 (native;
+#              fallback_sm=7.5 — sub-9.0 runs via the Marlin W4A16 fallback,
+#              validated on the 27B sibling 2026-07-11, but a 24 GB Ampere card
+#              can't VRAM-fit this config anyway). THE GB10 / DGX-Spark
+#              slug: a 3B-active MoE is the right shape for big-capacity,
+#              lower-bandwidth unified-memory parts.
+#   Drafter:   none — DELIBERATE. On this MoE the built-in MTP head shares the
+#              MoE forward and is NET-NEGATIVE (-51% measured on the AutoRound
+#              tier; drafter type matters — learnings/qwen3.6-35b-a3b.md).
+#              Do not "add MTP back" without a fresh A/B on your arch.
+#   KV:        fp8 → e4m3 at scale=1.0 — SAME as the 27B NVFP4 (both DECLARE
+#              FP8 KV in hf_quant_config; NEITHER ships k_scale/v_scale
+#              tensors, index-verified 2026-07-06), and calculate_kv_scales is
+#              disabled on Qwen3-Next hybrid. Same regime our production 27B
+#              fp8 tier quality-TIED at (#594).
+#   Vision:    yes (image only — audio off via --limit-mm-per-prompt)
+#   Max ctx:   131K default — sized for the smallest target card (5090 32 GB:
+#              kv-calc 27.4/29.4 GB @ util 0.92 = PASS at 93%; MoE KV is tiny,
+#              ~1.3 GB). Bigger cards raise via env — kv-calc'd:
+#                GB10 (128 GB unified): MAX_MODEL_LEN=262144 → 29.1 GB (25%
+#                  of budget) — full ctx is trivial here; the primary home.
+#                H100 (80 GB) / RTX 6000 Pro (96 GB): 262144 fits similarly.
+#   Genesis:   none — intentionally Genesis-free
+#   Status:    ⚠️ Production w/ caveats
+#   Caveats:   8-pack quality NOT yet cross-rig-measured — operationally validated on
+#   Caveats:   • DO NOT SET --compilation-config / cudagraph_mode — the absence
+#              of a compilation config here is DELIBERATE (see the block below).
+#              TWO independent 5090s (#619 @paulp83 + #612/#652 @guybrush01: verify-full
+#              9/9, verify-stress to ~120K, soak PASS ~311 TPS), quality run pending (#492).
+#              NVFP4 = experimental nvidia-modelopt format; Blackwell/Hopper only (sm_90+).
+#   Best for:  fast MoE chat/agents with vision on ONE Blackwell/Hopper card —
+#              unified-memory (GB10) first; single-5090 community-validated
+# ---------------------------------------------------------------------------
+# ✅ FIRST COMMUNITY VALIDATION — single RTX 5090, #619 (@paulp83), 2026-07-07.
+# Authored on the sm_86 dev rig, first booted + gated
+# on a 5090: vLLM v0.24.0 (quant=modelopt_mixed), verify-full 9/9, verify-
+# stress needle-clean (9.8K + 29K), soak-continuous PASS (15 MiB growth /
+# 100% retention / 0 err / p50 311 TPS). Decode 255.8 narr / 257.9 code TPS
+# @ 60 ms TTFT — ~2.5-3x our 2x3090 AutoRound tier (native FP4 GEMM). MTP
+# loaded OFF as shipped. VRAM 30.6/32 GB @131K — TIGHT but flat through soak
+#              ⚠️ AGENT WORKLOADS AT FULL CTX: use MAX_MODEL_LEN=98304.
+#              At 131K/util 0.92 on a 32 GB card, recall is CORRECT to the
+#              ceiling (needles clean to 120,320 tok = 91% of n_ctx) but the
+#              agent-safety margin fails: 957 MB free < the 1024 MB threshold,
+#              and sustained agent load carries ~292 MiB more of prompt-cache
+#              + context-checkpoint overhead (#197). So 131K is fine for chat
+#              and long-context retrieval, NOT for sustained agent traffic at
+#              full context. Measured #619 (@seanyourhighness, verify-stress
+#              ceiling ladder) — this is the measurement behind what used to
+#              be a generic OOM fallback. NB the check that fails is an
+#              ADVISORY on headroom, not a recall failure; @paulp83's "TIGHT
+#              but flat through soak" (#619) was the same observation without
+#              a threshold to hang it on — flat is real (0 MiB growth over
+#              200 turns), tight is also real.
+# ✅ 8-PACK CLOSED 2026-07-28 (#619 @seanyourhighness, 1x 5090 32 GB, WSL2,
+# 575 W stock): thinking-on 123 + 121 (mean 122.0/150), thinking-off 115/150 —
+# at the FULL 131K envelope with the compose's own fp8 KV, not a bounded one.
+# Full chain same session: verify-full 7/7, verify-stress needles clean to
+# 120,320 tok (1 advisory — see the ceiling-margin note above), soak-continuous
+# PASS (0 MiB growth / 200 turns, 0 errors, VRAM flat 31,231 MiB), bench
+# 240.21/244.10 = 94-95% of @paulp83's v0.24.0 row (his was measured before the
+# 2026-07-16 v0.25.1 pin bump — the delta is engine version, unisolated).
+# Provenance: COMMUNITY BUILD — vLLM v0.25.1 (752a3a5) self-built + FlashInfer
+# 0.6.15.post1, checkpoint snapshot 491c2f1e, benchlocal-cli v0.9.9 (c5a88ec).
+# Not the official pinned image; recorded as community-validated, not first-party.
+# built). More Blackwell/Hopper reports still welcome (GB10 @262K especially):
+#   1. bash scripts/switch.sh vllm/qwen-35b-a3b-single-nvfp4
+#   2. bash scripts/verify-full.sh MODEL=qwen3.6-35b-a3b
+#   3. bash scripts/rebench-full.sh   (build the benchlocal sandboxes first for the 8-pack)
+#   4. Report via the numbers-from-your-rig template (or the c3 funnel).
+# Still-open: 8-pack quality on this checkpoint; MoE routing throughput on
+# unified memory (GB10).
+#
+# Run (Blackwell/Hopper only):
+#   cd <repo>/models/qwen3.6-35b-a3b/vllm/compose
+#   docker compose -f single/nvfp4/fp8.yml up -d
+# ===========================================================================
+# Hardware metadata (parsed by scripts/preflight.sh):
+# Requires-min-vram-gb: 32
+# Engine-profile: vllm-stable
+# Requires-min-gpu-count: 1
+# Tensor-parallel: 1
+services:
+  vllm-qwen36-35b-a3b-single-nvfp4:
+    # Pinned to a vLLM STABLE release (immutable, #407); the launchers inject
+    # the engine-profile image over this default (#254).
+    image: ${VLLM_IMAGE:-vllm/vllm-openai:v0.25.1}
+    container_name: "${ESTATE_CONTAINER:-vllm-qwen36-35b-a3b-single-nvfp4}"
+    restart: ${CLUB3090_RESTART:-unless-stopped}
+    ports:
+      - "${BIND_HOST:-0.0.0.0}:${ESTATE_PORT:-${PORT:-8078}}:8000"
+    volumes:
+      - ${MODEL_DIR:-../../../../../../models-cache}:/root/.cache/huggingface
+      # froggeric family chat template (pinned; version + gate history in the
+      # patch PROVENANCE) — SHARED from the qwen3.6-27b tree. Wired 2026-07-18
+      # after the 35B template A/B (froggeric ≥ stock: toolcall 15/15 vs 14/15,
+      # hermes tie, verify-full pass) + the #671 arc's lesson that the stock
+      # template's client-shape breaks (VSCode ≥1.126) don't show on bench packs.
+      - ../../../../../qwen3.6-27b/vllm/patches/froggeric-chat-template/chat_template.jinja:/etc/qwen-froggeric-chat-template.jinja:ro
+      # torch.compile + Triton kernel caches — warm-start across boots.
+      - ../../../cache/torch_compile:/root/.cache/vllm/torch_compile_cache
+      - ../../../cache/triton:/root/.triton/cache
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=${ESTATE_GPUS:-${NVIDIA_VISIBLE_DEVICES:-all}}
+      # CUDA-level GPU mask — the runtime-agnostic half of GPU selection
+      # (#610): launch.sh --gpus exports GPU UUIDs here. CDI runtimes (NixOS,
+      # nvidia-ctk cdi) IGNORE NVIDIA_VISIBLE_DEVICES, so this mask is what
+      # actually pins cards there; on the classic runtime the UUID form is
+      # renumbering-proof. Unset → absent (no masking).
+      - CUDA_VISIBLE_DEVICES
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
+      - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-${OFFLINE:-0}}
+      - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-${OFFLINE:-0}}
+      - VLLM_WORKER_MULTIPROC_METHOD=spawn
+      - VLLM_NO_USAGE_STATS=1
+      - OMP_NUM_THREADS=1
+      # DeepGEMM (vLLM's fp8-GEMM path — this checkpoint's ATTENTION layers
+      # are FP8): no recipe on consumer Blackwell (5090/GB10 sm_120/121) —
+      # launchers auto-inject VLLM_USE_DEEP_GEMM=0 there (disc #571); raw
+      # `docker compose` users on those cards set it themselves.
+      - VLLM_USE_DEEP_GEMM
+      # ⚠️ WSL/WDDM: set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:False.
+      # Expandable segments use CUDA VMM (cuMemCreate/cuMemMap), unsupported
+      # under WDDM — every boot dies with "RuntimeError: CUDA driver error:
+      # device not ready" in nvfp4_marlin_process -> _nvfp4_compute_scale_factor
+      # right after weights load 100%, with nvidia-smi perfectly clean (no
+      # throttle, no ECC, full VRAM free). Reads like dead silicon or a corrupt
+      # checkpoint; it is neither. True is correct on native Linux, so this is
+      # an override, not a fix: prefix the env on switch.sh — no edit needed.
+      # (#617/#765 @seanyourhighness — cost five failed boots + a wrong
+      # "the GPU is degraded" diagnosis.)
+      - PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
+    shm_size: "16gb"
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    command:
+      # =====================================================================
+      # ⚠️ DO NOT ADD --compilation-config. The default is deliberate.
+      # This compose sets NO compilation config, so vLLM picks full decode
+      # graphs. Overriding to cudagraph_mode=PIECEWISE at max-num-seqs 1
+      # collapses capture to cudagraph_capture_sizes: [1, 2] and breaks the
+      # decode graph at every attention op: 98.85/82.81 vs 250.06/249.89
+      # narrative/code — 2.75x, measured as a matched pair, same boot config,
+      # same 336,184-token pool (#619 @seanyourhighness, 1x 5090). Explicit
+      # FULL measures 248.96/250.15 = indistinguishable from default, so the
+      # fix is NOT OVERRIDING, not selecting a different mode.
+      # It produces NO error and NO warning: verify-full 7/7, soak clean,
+      # needles clean — at a third of the throughput. Quality-neutral too
+      # (8-pack 115/123/121 fast vs 116/121/119 slow), so the 2.6x is free.
+      # SELF-CHECK if this slug benches ~90 TPS instead of ~240-250: grep the
+      # boot log — `cudagraph_capture_sizes: [1, 2]` is the tell; a healthy
+      # boot logs `cudagraph_mode=FULL_AND_PIECEWISE`.
+      # Negative recorded so nobody re-runs it: VLLM_MARLIN_USE_ATOMIC_ADD=0
+      # measures 247.40/249.04 — inside the default band, no effect.
+      # =====================================================================
+      - --model
+      - /root/.cache/huggingface/qwen3.6-35b-a3b-nvfp4
+      - --served-model-name
+      - qwen3.6-35b-a3b
+      - qwen3.6-35b-a3b-autoround
+      - qwen3.6-35b-a3b-nvfp4
+      # NVIDIA model-card recipe: modelopt quantization (MIXED_PRECISION
+      # NVFP4 experts + FP8 attention).
+      - --quantization
+      - modelopt
+      - --dtype
+      - bfloat16
+      - --tensor-parallel-size
+      - "${TP:-1}"
+      - --max-model-len
+      - "${MAX_MODEL_LEN:-131072}"
+      - --gpu-memory-utilization
+      - "${GPU_MEMORY_UTILIZATION:-0.92}"
+      - --max-num-seqs
+      - "${MAX_NUM_SEQS:-1}"
+      - --max-num-batched-tokens
+      - "${MAX_NUM_BATCHED_TOKENS:-8192}"
+      - --limit-mm-per-prompt
+      - '{"image":2,"audio":0}'
+      # fp8 (= e4m3) at scale=1.0 — FP8 KV declared in hf_quant_config, no
+      # k_scale/v_scale tensors shipped (same as the 27B NVFP4); hybrid
+      # disables calculate_kv_scales; the 27B fp8 tier quality-TIED in this
+      # exact regime (#594). NOT fp8_e5m2 (rejected with fp8-quantized
+      # checkpoints), NOT nvfp4 KV (no FP4 FMHA on consumer Blackwell —
+      # vllm#43562).
+      #              NVFP4 *KV* not used ON A STOCK PIN (vllm#43562 = no trtllm-gen
+      #              FP4 FMHA on sm_120/121). The sm_120 FA2+XQA route + vllm#46329
+      #              reaches it on a patched image — measured 1.64x the fp8 pool at
+      #              no decode cost on this checkpoint (#619 @seanyourhighness).
+      #              Re-test when #46329 lands in the pin; fp8/e4m3 until then.
+      - --kv-cache-dtype
+      - "${KV_CACHE_DTYPE:-fp8}"
+      - --trust-remote-code
+      - --chat-template
+      - /etc/qwen-froggeric-chat-template.jinja
+      - --reasoning-parser
+      - qwen3
+      - --default-chat-template-kwargs
+      - '{"enable_thinking": false}'
+      - --enable-auto-tool-choice
+      - --tool-call-parser
+      - qwen3_coder
+      # Prefix-caching ON by default (flipped 2026-07-17, #710/#736): this
+      # compose ships NO MTP arg, so the vllm#43559 corruption pair cannot
+      # form here — the #720 off-default was pure TTFT cost (measured 7.4x on
+      # long prefixes). Opt out: PREFIX_CACHE_ARG=--no-enable-prefix-caching
+      - "${PREFIX_CACHE_ARG:---enable-prefix-caching}"
+      - --enable-chunked-prefill
+      # NO --speculative-config: built-in MTP is net-negative on this MoE
+      # (-51% measured; the head shares the MoE forward). See at-a-glance.
+      - --override-generation-config
+      - '{"temperature":${TEMP:-${TEMPERATURE:-0.6}},"top_p":${TOP_P:-0.95},"top_k":${TOP_K:-20},"min_p":${MIN_P:-0.0},"repetition_penalty":${REPEAT_PENALTY:-1.0}}'
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"

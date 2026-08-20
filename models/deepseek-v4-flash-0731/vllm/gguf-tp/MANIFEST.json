@@ -1,0 +1,146 @@
+{
+  "engine": "Whamp/vLLM incubate/gguf-tp-sm86 native GGUF tensor-parallel engine (gguf_dsv4)",
+  "images": {
+    "base": {
+      "ref": "club-3090/gguf-tp-base:b7766cfe",
+      "digest": "sha256:eb2884fc60ee332d7adb9d5e424e35acf8817dad0f93c8bb7ea7095cb8f58a0e"
+    },
+    "engine_layer": {
+      "ref": "club-3090/deepseek-v4-gguf-tp:741b3abf",
+      "parent": "sha256:4ccb214cbc5478f8d90e6f6733830faff977c863143cca86cccef1b44d24a30e",
+      "vllm_revision": "741b3abfb6970da7349c86c43e7135df17c9fb7a",
+      "vllm_tree": "610c29ce719fc14b95074d989a70e6fe30963d09"
+    },
+    "repack": {
+      "ref": "club-3090/deepseek-v4-gguf-tp:3ec20ceb",
+      "digest": "sha256:f91e8283e7ad116b8664b4a936dba88ebafcb8910a968dce2a3c34420f010adf",
+      "vllm_revision": "3ec20cebe",
+      "vllm_tree": "82a1def196062cdff17d7b997513e31ae3734abe",
+      "parent": "sha256:4ccb214cbc5478f8d90e6f6733830faff977c863143cca86cccef1b44d24a30e"
+    }
+  },
+  "stable_extension": {
+    "path": "_C_stable_libtorch.abi3.so",
+    "sha256": "9f1315be17cb27752be0eb933538148e2b503580f0712c4386f984529afa45df",
+    "build": "vLLM setup.py CMakeExtension vllm._C_stable_libtorch, nvcc -gencode arch=compute_86,code=sm_86, from csrc in vllm_revision 741b3abf (extension carries the gguf_dsv4 kernels)"
+  },
+  "overlaid_sources": {
+    "source_commit": "3ec20cebe",
+    "source_tree": "82a1def196062cdff17d7b997513e31ae3734abe",
+    "verified_byte_identical": true,
+    "files": [
+      {
+        "path": "vllm/model_executor/layers/quantization/gguf_dsv4/config.py",
+        "sha256": "0d45a1abd491241d720ccfdc18a5a83e135cf1ff8b9e2e57b450ab8c3e0ec9b0"
+      },
+      {
+        "path": "vllm/models/deepseek_v4/nvidia/model.py",
+        "sha256": "10b3a30c3a8a35f2d2c2b6cebefd565795014114028ee1abaa7b7a490b212d92"
+      },
+      {
+        "path": "vllm/config/load.py",
+        "sha256": "1979ef0e3024feaf557365939e48a5cb0868680a4e61639914d1bd8feecc8dd1"
+      },
+      {
+        "path": "vllm/model_executor/model_loader/__init__.py",
+        "sha256": "2514fd12b83fef4390239ad9c2ca8538f242cb0ac4856132078b32d261514637"
+      },
+      {
+        "path": "csrc/libtorch_stable/ops.h",
+        "sha256": "33ee42b027e038a644bb89a4d32c9fb047f605ba32ec9915b0a08135decce758"
+      },
+      {
+        "path": "vllm/model_executor/model_loader/gguf_dsv4_io.py",
+        "sha256": "4235f4d620572689ce7dbfcff01fd1be39d702400f4ab3955d1886af555a0213"
+      },
+      {
+        "path": "vllm/model_executor/model_loader/gguf_dsv4.py",
+        "sha256": "44ed9d00950c19c6e149d5ba0a420c20226b0148d66b9d560e0f70907eae60c3"
+      },
+      {
+        "path": "csrc/libtorch_stable/quantization/gguf_dsv4/q8_1_utils.cuh",
+        "sha256": "6fca47b794664bc6f67dc63aa76817b4a30b3e20f05a23722a20d994268b3fee"
+      },
+      {
+        "path": "vllm/model_executor/model_loader/gguf_dsv4_index.py",
+        "sha256": "7251c10d949808b625fac04950a8109caa7ddd78efca70f32132a7ccf8fcaab0"
+      },
+      {
+        "path": "vllm/model_executor/layers/quantization/gguf_dsv4/__init__.py",
+        "sha256": "7a7207fad8c2b8db0e943ad7a596665b69e4fe3b73bf3e9bcfe5e8fe257f55d1"
+      },
+      {
+        "path": "csrc/libtorch_stable/quantization/gguf_dsv4/iq2_xxs_matvec.cu",
+        "sha256": "81daee0ab51e1ad171f7e65876faf61c4e139ce4ec761390ba2365ead2e24e9f"
+      },
+      {
+        "path": "csrc/libtorch_stable/quantization/gguf_dsv4/swiglu_q8.cu",
+        "sha256": "85b1a9ce246b0b38e940217ec5eed12b660484ebe99fe50a8963147fcc865714"
+      },
+      {
+        "path": "csrc/libtorch_stable/quantization/gguf_dsv4/iq2_xxs_grouped.cu",
+        "sha256": "86a10a0b6fc0d7bfa1ace768fcd505fefad644fedda027af46a9df5f28f51cef"
+      },
+      {
+        "path": "csrc/libtorch_stable/torch_bindings.cpp",
+        "sha256": "8eae23b67368de22814d1411da5b5101d147faf69f6468614aa04632c8fb3f2a"
+      },
+      {
+        "path": "csrc/libtorch_stable/quantization/gguf_dsv4/q2_k_matvec.cu",
+        "sha256": "9306ffb2a164dd45e59d78d980cbf5afca78f729e84399df97b2c8353562b720"
+      },
+      {
+        "path": "csrc/libtorch_stable/quantization/gguf_dsv4/iq2_xxs_tables.cuh",
+        "sha256": "a050fefaf8ba55cdebb0f6f1d995cbfef092476dfd79d48103d79d6f661c2c68"
+      },
+      {
+        "path": "vllm/model_executor/layers/quantization/gguf_dsv4/q8_0_marlin.py",
+        "sha256": "a952ab7980ab599dfb6aa569de3335b50ee53e1bcbdbc856b5d3d24b93c1c234"
+      },
+      {
+        "path": "vllm/model_executor/model_loader/gguf_dsv4_plan.py",
+        "sha256": "ab1c1b8646c1dbde81bd9dd1bada32e5bf72c65686e7a9b91fe292558de88544"
+      },
+      {
+        "path": "vllm/model_executor/layers/quantization/__init__.py",
+        "sha256": "be54e39d1234cce7b5ef94dace79f526a9170af4076c6daa533790ef1b31864b"
+      },
+      {
+        "path": "csrc/libtorch_stable/quantization/gguf_dsv4/q2_k_grouped.cu",
+        "sha256": "e28166b373ba0e1dfd5aceafd6ed512706325b41ebdc33eab4ca37fbd6a31b3e"
+      },
+      {
+        "path": "csrc/libtorch_stable/quantization/gguf_dsv4/int8_mma.cuh",
+        "sha256": "ea5915eff56d3b862c93b8858309b3f0cfdb8002474b25a6a6c4d295ece46517"
+      }
+    ]
+  },
+  "gguf_artifact": {
+    "blob": "ca22ae2f838e14077c22bc1c1417b71b45b5e5a3687bd96c2ac6e17fdb6261c0",
+    "sha256": "ca22ae2f838e14077c22bc1c1417b71b45b5e5a3687bd96c2ac6e17fdb6261c0",
+    "file_size": 86720111488,
+    "tensor_count": 1328,
+    "source": "HF antirez/deepseek-v4-gguf"
+  },
+  "model_view": {
+    "path": "/home/will/inference/runtime/gguf-tp-m5-model-view",
+    "config_sha256": "e973e27b89f47929848a7360bd05b624fd2141f0af2451d9d67636e359c2b4cb",
+    "blob_symlinks": {
+      "LICENSE": "d62e3bef9f054f21b7fc616365850fbf879a99ff",
+      "README.md": "d11eeca20136244e643dcb26d4d3a31b979a9ba6",
+      "generation_config.json": "c56a8c5bf06ff7740b6a33ee67b38b6237a230b1",
+      "tokenizer.json": "628e3364caad11bdf9e67cea06eae7878122811d",
+      "tokenizer_config.json": "f3dad388a2bbfd6a8605bd02754acd86d9ca5112"
+    },
+    "config_derivation": "from WNA16 uniform artifact config rev 75d9286c: quantization_config -> {quant_method: gguf_dsv4}; top-level quant_method -> gguf_dsv4; club_3090_lowbit.source_quantization_method fp8 -> compressed-tensors"
+  },
+  "production_profile": {
+    "compose": "models/deepseek-v4-flash-0731/vllm/compose/multi4/gguf-tp/base.yml",
+    "max_model_len": 140000,
+    "max_num_seqs": 8,
+    "max_num_batched_tokens": 192,
+    "gpu_memory_utilization": 0.98,
+    "kv_cache_dtype": "fp8_ds_mla",
+    "kv_pool_tokens": 151330
+  }
+}
