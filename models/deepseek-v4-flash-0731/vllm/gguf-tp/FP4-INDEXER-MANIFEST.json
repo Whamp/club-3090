@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "format": {
+    "name": "mxfp4_indexer_sm86",
+    "semantic_values": 128,
+    "encoding": "E2M1 packed low-nibble first, group-32 UE8M0 scales",
+    "packed_value_bytes": 64,
+    "scale_bytes": 4,
+    "physical_row_bytes": 68
+  },
+  "runtime_base": {
+    "ref": "club-3090/deepseek-v4-gguf-tp:fp4-633815f6",
+    "digest": "sha256:eb94d5049bf4d8d55c335ac1d2445382a811b7312d28e3e73088011a8103e181"
+  },
+  "vllm": {
+    "repo": "https://github.com/Whamp/vllm.git",
+    "branch": "feat/dsv4-sm86-fp4-indexer-reviewed",
+    "commit": "ccd463e6d66f781156352b040da7440db85b2625",
+    "tree": "de72d166b53148a65505cd2972d204faaf60ac29",
+    "runtime_source_sha256": "5ecd90e95569",
+    "runtime_files": [
+      {
+        "path": "vllm/config/attention.py",
+        "sha256": "39a9f4320e7c5ea1469ee2712802b29098399b077d18657f7f1c040620d95ced"
+      },
+      {
+        "path": "vllm/model_executor/layers/sparse_attn_indexer.py",
+        "sha256": "c02dfdf44b73301da891583282914c28e524344825bdd726fd8ece0ccab8d9fd"
+      },
+      {
+        "path": "vllm/models/deepseek_v4/attention.py",
+        "sha256": "6e640649a0271ca04819d908da4bd4f58cd71c8dfea93c64d171ba67631e0b06"
+      },
+      {
+        "path": "vllm/models/deepseek_v4/common/ops/fused_compress_quant_cache.py",
+        "sha256": "8544e79077738ce7ff57dd04ceafe4628b32989241171cc385748016b10b68c6"
+      },
+      {
+        "path": "vllm/models/deepseek_v4/common/ops/fused_indexer_q.py",
+        "sha256": "ff24ddf1e3634c3bf52fa954c3a57ae8cca58c0e238a9e9979c6f6e64a766cb6"
+      },
+      {
+        "path": "vllm/models/deepseek_v4/nvidia/model.py",
+        "sha256": "55bfccbb009e00d97f4785c974847bb8466190c9886427a4321b51bbba71907b"
+      },
+      {
+        "path": "vllm/v1/attention/backends/mla/indexer.py",
+        "sha256": "90d813245e1961c4c361335f87c71cd962955861f57c48e055d257fc96fd2f5d"
+      },
+      {
+        "path": "vllm/v1/attention/ops/mqa_logits_triton.py",
+        "sha256": "d231fc6cf016c94d01e2b9118130e255de51541bf6d2910afd5ab02bcd2350b7"
+      },
+      {
+        "path": "vllm/v1/core/kv_cache_utils.py",
+        "sha256": "2a25ea32a50afe673d55cfb28cbb34a5ba18a466b4e97ba7ff6c43347c7b9987"
+      },
+      {
+        "path": "vllm/v1/kv_cache_interface.py",
+        "sha256": "506b3cb4c72a37306646fbbe0a612b77ed5c3edba2385f9c2a2a8e343f728f2b"
+      },
+      {
+        "path": "vllm/v1/worker/gpu_model_runner.py",
+        "sha256": "3f41a2b9e685144bd49f679dda6d20f108194f4e00aacf4a2eca795ebbdb5f76"
+      }
+    ]
+  },
+  "image": {
+    "tag": "club-3090/deepseek-v4-gguf-tp:mxfp4-indexer-ccd463e6",
+    "digest": "sha256:c089ee30367a0a38b62fc35943f1d8b6c2e0d131c609f3e27baa9816e57ca53c"
+  },
+  "profile": {
+    "compose": "models/deepseek-v4-flash-0731/vllm/compose/multi4/gguf-tp/fp4-indexer.yml",
+    "max_model_len": 200000,
+    "max_num_seqs": 2,
+    "max_num_batched_tokens": 256,
+    "gpu_memory_utilization": 0.98,
+    "kv_cache_dtype": "fp4_ds_mla",
+    "use_fp4_indexer_cache": true
+  },
+  "validation": {
+    "report": "benchmarks/kernels/deepseek_v4/fp4_indexer_sm86/RESULTS.md",
+    "validated_prompt_tokens": 195812,
+    "reported_kv_tokens": 199409,
+    "release_safe": false
+  }
+}

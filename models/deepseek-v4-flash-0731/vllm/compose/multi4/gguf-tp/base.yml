@@ -2,6 +2,7 @@
 # GGUF-TP cache variants:
 #   base.yml  fp8_ds_mla  584 B/token  production default; ~156K-token pool
 #   fp4.yml   fp4_ds_mla  368 B/token  validated opt-in; ~180K-token pool
+#   fp4-indexer.yml  fp4_ds_mla + MXFP4 indexer  200K capacity experiment
 # Profile (at-a-glance):
 #   Model:     DeepSeek-V4-Flash-0731 native GGUF (Antirez IQ2_XXS/Q2_K/Q8_0
 #              exact bytes, pinned sha256 ca22ae2f…; gguf_dsv4 loader)

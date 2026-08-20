@@ -35,7 +35,7 @@ def check(cond, msg):
         failures.append(msg)
 
 check(len(COMPOSE_REGISTRY) == 70, f"registry has 70 entries (got {len(COMPOSE_REGISTRY)})")
-check(len(disk_paths) == 73, f"disk has 73 compose files (got {len(disk_paths)})")
+check(len(disk_paths) == 74, f"disk has 74 compose files (got {len(disk_paths)})")
 check(registry_paths <= disk_paths, "all registry compose_path values exist on disk")
 parked_disk_only = disk_paths - registry_paths
 # Disk-only (non-registry) composes allowed: parked SGLang archives, plus direct-Compose
@@ -47,6 +47,7 @@ _DIRECT_COMPOSE_ONLY = {
     Path("models/qwen3-omni-30b-a3b/vllm-omni/compose/dual/autoround-int4/omni.yml"),
     Path("models/deepseek-v4-flash-0731/vllm/compose/multi4/gguf-tp/base.yml"),
     Path("models/deepseek-v4-flash-0731/vllm/compose/multi4/gguf-tp/fp4.yml"),
+    Path("models/deepseek-v4-flash-0731/vllm/compose/multi4/gguf-tp/fp4-indexer.yml"),
 }
 
 def _allowed_disk_only(path):

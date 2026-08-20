@@ -1,0 +1,13 @@
+# Thin MXFP4 sparse-indexer overlay over the verified FP4 DS-MLA image.
+# Build only through build-fp4-indexer-image.sh.
+ARG BASE_IMAGE=club-3090/deepseek-v4-gguf-tp:fp4-633815f6
+FROM ${BASE_IMAGE}
+COPY root/ /workspace/vllm/
+ARG VLLM_COMMIT
+ARG VLLM_TREE
+ARG SOURCE_SHA
+LABEL org.opencontainers.image.revision="${VLLM_COMMIT}" \
+      club3090.vllm.tree="${VLLM_TREE}" \
+      club3090.mxfp4_indexer_sm86="68-byte E2M1/UE8M0 sparse-indexer rows" \
+      club3090.mxfp4_indexer.source_sha256="${SOURCE_SHA}" \
+      club3090.base.image="sha256:eb94d5049bf4d8d55c335ac1d2445382a811b7312d28e3e73088011a8103e181"

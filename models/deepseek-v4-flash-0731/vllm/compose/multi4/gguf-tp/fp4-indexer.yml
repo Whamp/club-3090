@@ -1,0 +1,107 @@
+# ===========================================================================
+# GGUF-TP cache variants:
+#   base.yml  fp8_ds_mla  584 B/token  production default; ~156K-token pool
+#   fp4.yml   fp4_ds_mla  368 B/token  validated opt-in; ~180K-token pool
+#   fp4-indexer.yml  fp4_ds_mla + MXFP4 indexer  200K capacity experiment
+# Profile (at-a-glance):
+#   Model:     DeepSeek-V4-Flash-0731 native Antirez GGUF, exact bytes
+#   Engine:    Whamp/vLLM ccd463e6d, reviewed SM86 MXFP4 indexer overlay
+#   Topology:  4× RTX 3090 PCIe, TP=4, hierarchical AR 0,1;2,3
+#   KV:        fp4_ds_mla main cache; 68-byte E2M1/UE8M0 sparse-indexer rows
+#   Max ctx:   200,000 tokens; max_num_seqs=2; max_num_batched_tokens=256
+#   Capacity:  199,409 reported KV tokens; exact NIAH at 195,812 tokens
+#   Measured:  77.32 tok/s single-stream decode; 122.30 tok/s aggregate at
+#              concurrency 2; 499.84 tok/s 10K prefill; 348.35 tok/s 90K
+#              prefill. Zero serving-process swap in accepted measurements.
+#   Quality:   BenchLocal quick 26/30 pass@1, 27/30 pass@3; baseline 27/30.
+#   Status:    🧪 Explicit capacity experiment. FP8 indexer remains default.
+# Caveats:
+#   - Only 25-26 MiB/card remained under near-ceiling work, below the normal
+#     1 GiB release margin. This is a measured functional ceiling, not a
+#     release-safe sustained-agent profile.
+#   - Versus the FP8-indexer FP4 baseline: decode -3.8%, concurrency-2 -3.9%,
+#     10K prefill -4.8%, and 90K prefill -29.7% for ~13% more tested context.
+#   - The MXFP4 kernels reuse inherited FP8 autotune choices and are not tuned.
+#   - Local digest-pinned image for server60's homogeneous SM86 topology.
+#   - All four GPUs are occupied; do not co-start another GPU service.
+# Requires-homogeneous-arch: true
+# ---------------------------------------------------------------------------
+# Opt-in only: docker compose -f fp4-indexer.yml up -d
+# ===========================================================================
+services:
+  deepseek-v4-gguf-tp-sm86:
+    image: club-3090/deepseek-v4-gguf-tp@sha256:c089ee30367a0a38b62fc35943f1d8b6c2e0d131c609f3e27baa9816e57ca53c
+    container_name: "${ESTATE_CONTAINER:-dsv4-gguf-tp-fp4-indexer}"
+    restart: ${CLUB3090_RESTART:-unless-stopped}
+    ports:
+      - "${BIND_HOST:-0.0.0.0}:${PORT:-8034}:8000"
+    volumes:
+      # server60-specific absolute paths (single-machine repo; see header).
+      - /home/will/inference/runtime/gguf-tp-m5-model-view:/runtime-model:ro
+      - /home/will/models/deepseek-v4-frontier-quality-cache/hub/models--hampsonw--DeepSeek-V4-Flash-0731-WNA16/blobs:/blobs:ro
+      - /mnt/models/huggingface/hub/models--antirez--deepseek-v4-gguf/blobs/ca22ae2f838e14077c22bc1c1417b71b45b5e5a3687bd96c2ac6e17fdb6261c0:/model.gguf:ro
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      CUDA_VISIBLE_DEVICES: 0,1,2,3
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      VLLM_NO_USAGE_STATS: "1"
+      VLLM_WORKER_MULTIPROC_METHOD: spawn
+      OMP_NUM_THREADS: "1"
+      VLLM_DSV4_FLASH_MLA_DECODE: "1"
+      VLLM_HIER_ALL_REDUCE: "0,1;2,3"
+      VLLM_DSV4_WO_A_MARLIN_DIAGONAL: "1"
+      VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "64"
+      VLLM_SPARSE_DENSE_QUERY_BLOCK: "0"
+    entrypoint: ["/opt/venv/bin/vllm"]
+    command:
+      - "serve"
+      - "/runtime-model"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+      - "--served-model-name"
+      - "deepseek-v4-flash-0731-gguf-tp"
+      - "--tensor-parallel-size"
+      - "4"
+      - "--max-model-len"
+      - "200000"
+      - "--max-num-seqs"
+      - "2"
+      - "--max-num-batched-tokens"
+      - "256"
+      - "--gpu-memory-utilization"
+      - "0.98"
+      - "--kv-cache-dtype"
+      - "fp4_ds_mla"
+      - "--attention-config"
+      - '{"use_fp4_indexer_cache":true}'
+      - "--load-format"
+      - "gguf_dsv4"
+      - "--quantization"
+      - "gguf_dsv4"
+      - "--model-loader-extra-config"
+      - '{"gguf_path":"/model.gguf","sha256":"ca22ae2f838e14077c22bc1c1417b71b45b5e5a3687bd96c2ac6e17fdb6261c0","file_size":86720111488,"tensor_count":1328}'
+      - "--disable-custom-all-reduce"
+      - "--enable-auto-tool-choice"
+      - "--tool-call-parser"
+      - "deepseek_v4"
+      - "--reasoning-parser"
+      - "deepseek_v4"
+      - "--trust-remote-code"
+    shm_size: "16gb"
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: [CMD-SHELL, "curl -fsS http://127.0.0.1:8000/health >/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 600s

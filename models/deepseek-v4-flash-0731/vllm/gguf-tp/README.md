@@ -10,8 +10,9 @@ gguf_dsv4`), quantized operators run as vLLM-native CUDA kernels.
   `3ec20cebe` (tree `82a1def1…`). All engine sources are in that branch;
   nothing in this directory is a fork-vendored copy.
 - **Production profile:** `../compose/multi4/gguf-tp/base.yml` (port 8034,
-  `fp8_ds_mla`). The validated opt-in `fp4.yml` uses `fp4_ds_mla` without
-  changing the production default.
+  `fp8_ds_mla`). The validated opt-in `fp4.yml` uses `fp4_ds_mla`, and the
+  experimental `fp4-indexer.yml` also compresses the sparse-indexer cache.
+  Neither changes the production default.
 - **Status:** ✅ production default for DeepSeek V4 since 2026-08-18; the
   canonical llama.cpp profile (`models/deepseek-v4-flash-0731/llama-cpp/
   compose/multi4/antirez-iq2-xxs/fast-prefill.yml`) is the validated rollback.
@@ -86,6 +87,26 @@ release guard. The evidence and decision are under
 Whamp/vLLM `633815f68`, Whamp/forks-flash-mla-int `81a06aa6`, the SM86 stable
 extension, the FlashMLA wheel, all 14 runtime overlay files, and the final
 image digest.
+
+## Experimental MXFP4 sparse-indexer cache
+
+`compose/multi4/gguf-tp/fp4-indexer.yml` keeps the FP4 main MLA cache and
+compresses the 21 ratio-4 sparse-indexer caches from 132-byte FP8 rows to
+68-byte E2M1/UE8M0 rows. It is an explicit capacity experiment, not a default.
+
+At 200K configured context it reports 199,409 KV tokens and passed exact NIAH
+retrieval through 195,812 prompt tokens. The trade is material: versus the
+FP8-indexer FP4 profile, decode and concurrency-2 throughput fall about 4%,
+10K prefill falls about 5%, and 90K prefill falls about 30%. BenchLocal quick
+pass@3 remains 27/30. Only 25-26 MiB VRAM per card remained under near-ceiling
+work, so this is a functional ceiling below the normal 1 GiB release margin.
+
+`FP4-INDEXER-MANIFEST.json` and `build-fp4-indexer-image.sh` pin the reviewed
+Whamp/vLLM commit `ccd463e6d`, tree `de72d166…`, all 11 production overlay
+files, the FP4 base-image digest, and final image digest. Detailed allocation,
+kernel, sanitizer, quality, long-context, and performance evidence is in the
+Whamp/vLLM branch's
+`benchmarks/kernels/deepseek_v4/fp4_indexer_sm86/RESULTS.md`.
 
 ## Image build contract
 
