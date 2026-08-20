@@ -380,3 +380,23 @@ to the default production setting."
   preserve the aggregate expert-slot saving and remains a separate candidate.
   `route-offload/ROUTE-OFFLOAD.md` is the owner report. Part B starts with the
   required TP=4 Nsight layer-slice trace.
+
+## 2026-08-20: Decode fusion trace falsifies launch-gap premise
+
+- Whamp/vLLM `0ef05fe53` adds a benchmark-only CUDA profiler range around
+  indexed-decode graph replays. It does not change a kernel or runtime path.
+- Nsight Systems 2025.3.1 captured 50 TP=4 layer replays per rank with CUDA
+  Graph node tracing. The stable set excludes each rank's capture-start replay
+  and contains 196 complete 23-node layer executions.
+- Median graph span is 195.746 µs. GPU busy union is 194.561 µs, internal idle
+  is 1.184 µs, and the gap before the next graph is 4.576 µs. The expected
+  60–100 µs/layer launch/dependency gap does not exist.
+- The original F1+F2 removable nodes total only 10.432 µs/layer before fused
+  epilogue cost, a 3.4% optimistic whole-token ceiling. Do not implement that
+  package on its preregistered rationale.
+- Re-derived target: a six-node shared-expert SwiGLU pointwise chain costs
+  10.880 µs/layer, and the three-node shared-convert/routed-add/BF16-cast
+  chain costs 5.760 µs/layer. Two bounded pointwise fusions cover more measured
+  work without rewriting IQ2/Q2 matvecs.
+- Owner report: `FUSION-TRACE.md`. Compact `.nsys-rep`, SQLite export, asserted
+  analyzer, rank results, and logs live in `evidence/fusion-trace-20260820/`.
