@@ -2,7 +2,7 @@
 
 This directory owns the cold-expert offload route-skew evidence for goal `c81a9590-5605-4098-b899-86264f759b49`.
 
-Read [ROUTE-OFFLOAD.md](ROUTE-OFFLOAD.md) first. The static-routing layers already reject the proposed H=224 cache. Full dynamic-layer capture and the separate fusion trace wait for a server60 GPU window.
+Read [ROUTE-OFFLOAD.md](ROUTE-OFFLOAD.md) first. Full 43-layer capture rejects the proposed H=224 cache. The separate fusion trace is the next GPU task.
 
 ## Verify the local tools
 
@@ -73,3 +73,25 @@ Repeat `--token-ids` once per session for the 12-task corpus. The summarizer res
 ```
 
 The analyzer reports `NO-GO` as soon as any observed layer requires H99 at or above 248. It never reports `GO` unless all 43 layers are present and every workload stays at or below H99=224.
+
+## Rebuild the dynamic capture analysis
+
+```bash
+uv run --with 'torch==2.13.0+cpu' \
+  --default-index https://pypi.org/simple \
+  --extra-index-url https://download.pytorch.org/whl/cpu \
+  --index-strategy unsafe-best-match -- \
+  python extract_dynamic_route_histograms.py \
+    --snapshot-dir dynamic-capture-20260820/snapshots \
+    --baseline 00004 00005 \
+    --pilot 00022 00023 \
+    --corpus 00388 00389 \
+    --pilot-output /tmp/pilot-routes.json \
+    --corpus-output /tmp/corpus-routes.json
+
+./analyze_route_skew.py /tmp/pilot-routes.json /tmp/corpus-routes.json \
+  --output-json /tmp/analysis.json \
+  --output-markdown /tmp/analysis.md
+```
+
+The extractor requires four identical TP-rank snapshots at every boundary and equal token-row totals across all 43 layer deltas.

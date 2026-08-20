@@ -356,3 +356,27 @@ to the default production setting."
   four-GPU fusion trace remain pending because the separate user-owned
   Qwen3.8-27B service currently occupies all four server60 GPUs. It is healthy
   on port 8098 and was left untouched; GGUF-TP capture restart is disabled.
+
+## 2026-08-20: Cold-expert offload route gate final NO-GO
+
+- Will authorized taking over server60. Qwen had zero running and waiting
+  requests before its container was stopped with restart disabled.
+- Whamp/vLLM commit `7ef128567` added a validated, opt-in five-second
+  histogram interval while preserving the 300-second default. Capture image
+  `sha256:5fab8844…f09729` reached the 148K production fit gate.
+- The production-shaped capture recorded 41,987 token rows/layer from the
+  SuperJSON pilot and 926,529 token rows/layer from 12 completed coding-agent
+  sessions. All 12 requests returned HTTP 200 at 25,141–125,307 prompt tokens.
+- Four TP-rank snapshots matched at every retained boundary. The service stayed
+  at zero serving-process swap throughout accepted workload capture.
+- Full 43-layer result: pilot median/worst H99 209/250; corpus 216/251.
+  Corpus H=224 coverage falls to 92.66% in layer 0. Several activation-routed
+  layers also exceed H=224.
+- Exact static-layer temporal evidence at H=224 has a 95.3–95.7% LRU hit
+  rate, or about 0.8 misses per token in layers 0–2. All-layer histograms give
+  an oracle fixed-set result of 3.11 misses per corpus token; all-layer LRU and
+  offloaded decode speed remain unmeasured.
+- Decision: **NO-GO for uniform H=224.** A nonuniform per-layer allocation can
+  preserve the aggregate expert-slot saving and remains a separate candidate.
+  `route-offload/ROUTE-OFFLOAD.md` is the owner report. Part B starts with the
+  required TP=4 Nsight layer-slice trace.
