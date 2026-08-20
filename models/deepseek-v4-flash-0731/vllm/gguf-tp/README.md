@@ -85,7 +85,9 @@ release guard. The evidence and decision are under
 `FP4-MANIFEST.json` and `build-fp4-kv-image.sh` pin the thin-image inputs:
 Whamp/vLLM `633815f68`, Whamp/forks-flash-mla-int `81a06aa6`, the SM86 stable
 extension, the FlashMLA wheel, all 14 runtime overlay files, and the final
-image digest.
+image digest. Both dependencies are merged in their owning fork branches;
+[`docs/UPSTREAM.md`](../../../../docs/UPSTREAM.md) records the merge commits
+and retirement contract.
 
 ## Image build contract
 
