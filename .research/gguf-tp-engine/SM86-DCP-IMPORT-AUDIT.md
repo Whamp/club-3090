@@ -237,3 +237,40 @@ locally 88 passed / 9 CUDA-skipped across zeroer + manager +
 kv_cache_utils + scheduler suites; Ruff check/format clean;
 `git diff --check` clean. GPU functional validation of the widened
 zeroing happens with the next server60 window (step 3).
+
+## Step 2 COMPLETE: kv_offload robustness dedup-pass (2026-08-21)
+
+Whamp/vllm `incubate/gguf-tp-sm86` commit `85e1bcb78`. Adopted for our
+CPU 16 GiB tier:
+
+1. **SWA store-horizon fix** (their headline 996979edb fix — the bug
+   WAS live in our tree): `_build_store_jobs` fed the running storable
+   count to `is_store_reachable_swa_chunk`, so every chunked-prefill
+   step stored its frontier's trailing junk chunk per SWA group — on a
+   small CPU tier those evict useful chunks LRU-first. Horizon now
+   projected to end-of-prompt. New regression test
+   `test_swa_store_horizon_spans_the_whole_prompt` verified RED without
+   the fix (both async_scheduling params) and GREEN with it.
+2. SharedOffloadRegion: creator-failure stub cleanup + `/dev/shm`
+   free-space check + MADV_POPULATE_WRITE fallback; our creator-only
+   host-register contract (`is_creator`) preserved.
+3. CPUOffloadingSpec mmap cleanup on worker-construction failure.
+4. ARC monotonic batch-eviction scan.
+5. AsyncLookup enqueue-once invariant + deferred in-flight cleanup +
+   decided-only deletion.
+
+Dedup verdicts — NOT adopted, with reasons:
+- `mark_miss()` + JobResult partial-failure threading +
+  `_complete_promotion`: only consumed by the FS/OBJ tier managers we
+  do not run (would be dead plumbing).
+- FS/OBJ/P2P tier changes, out-of-tree policy/spec loading: N/A.
+- Connector scheduler fencing/CoW/partial-tail evolution (~377 lines):
+  feature-level, needs its own gated port if we ever need partial-tail
+  offload; recorded as follow-up, not silently dropped.
+- multiproc_executor rank-failure re-raise: adjacent engine robustness,
+  outside kv_offload scope; noted as a separate candidate.
+
+Evidence: 277 passed / 2 skipped across offloading_connector +
+shared_offload_region + async_lookup + policies suites; the 32
+test_gpu_worker failures are pre-existing GPU-required asserts
+(identical on clean tree); Ruff clean; git diff --check clean.
