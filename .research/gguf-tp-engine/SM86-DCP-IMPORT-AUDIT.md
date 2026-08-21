@@ -210,3 +210,30 @@ workloads). This matches tomylin's Inf/NaN incident under caching +
 trimming. Porting their per-group segment-table coverage fix
 (`vllm/v1/worker/utils.py` +212, plus manager/coordinator threading) is
 Tier-1 and should land before any DCP or ring-buffer work.
+
+## Step 1 COMPLETE: block-zeroing coverage port (2026-08-21)
+
+Whamp/vllm `incubate/gguf-tp-sm86` commit `d193d6aa0` (rebased onto the
+FP4 merge `81593507f`), ported from tomylin `996979edb`'s zeroing work:
+
+- Scheduler gate `SingleTypeKVCacheManager._record_new_block_ids`:
+  exact-type tuple -> `isinstance(kv_cache_spec, AttentionSpec)`.
+  SlidingWindowSpec/SlidingWindowMLASpec groups (SWA KV + fp32
+  compressor state) now record newly allocated block ids; Mamba stays
+  excluded.
+- Zeroer `KVBlockZeroer.__init__`: same widened gate; global data_ptr
+  dedup replaced with per-`(group, address)` dedup (the packed DSv4 slab
+  can alias group base addresses); payload extent switched from
+  product-of-trailing-dims + dense-interior assert to a stride span
+  asserted `0 < payload <= block step` (fail-closed at init); boot
+  census log line reports per-group segment counts.
+- Async-load skip path (`_skip_zero_block_ids`) already per-group and
+  now covers sliding-window groups correctly.
+
+Evidence: 3 new CPU zeroer coverage tests + 1 new CUDA-gated packed-slab
+zeroing test (tests/v1/worker/test_kv_block_zeroer.py), 2 new manager
+recording tests (tests/v1/core/test_single_type_kv_cache_manager.py);
+locally 88 passed / 9 CUDA-skipped across zeroer + manager +
+kv_cache_utils + scheduler suites; Ruff check/format clean;
+`git diff --check` clean. GPU functional validation of the widened
+zeroing happens with the next server60 window (step 3).
