@@ -191,3 +191,22 @@ Their four flash-mla P9 commits are now merged onto our FP4 lineage:
 Next GPU-free items from Tier 1: audit our block-zeroing exposure in
 `vllm/v1/worker/utils.py`, dedup-pass their kv_offload changes against
 our tree, and scope the vLLM-side DCP plumbing port.
+
+## Block-zeroing exposure CONFIRMED in our tree (2026-08-21)
+
+`vllm/v1/core/single_type_kv_cache_manager.py:86` gates zeroing on
+`type(kv_cache_spec) in (FullAttentionSpec, TQFullAttentionSpec,
+MLAAttentionSpec, HiddenStateCacheSpec)` — an exact-type list that
+**excludes `SlidingWindowMLASpec`**, i.e. both our SWA KV group and the
+fp32 compressor-state groups. New blocks in those groups are never
+zeroed; the worker-side `zero_block_ids` never sees them.
+
+Why production has not visibly broken: sequential first-fill writes
+cover the compressor's lookback reads within one request, so stale bytes
+surface only on reuse patterns — preemption/retraction re-admission,
+prefix-cache-hit resumes, or async-scheduling admission windows — some
+of which we do exercise (`--kv-offloading-size 16`, seq2 agent
+workloads). This matches tomylin's Inf/NaN incident under caching +
+trimming. Porting their per-group segment-table coverage fix
+(`vllm/v1/worker/utils.py` +212, plus manager/coordinator threading) is
+Tier-1 and should land before any DCP or ring-buffer work.
