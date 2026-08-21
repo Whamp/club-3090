@@ -158,3 +158,36 @@ section 10 of their ARCHITECTURE.md).
 4. **DCP milestone**: schedule after Tier-1; follow their P1→P11 order
    with our gates (numerical oracles, CUDA-Graph, sanitizer, NIAH,
    matched perf).
+
+## Integration record (2026-08-21, GPU-free port-prep)
+
+Their four flash-mla P9 commits are now merged onto our FP4 lineage:
+
+- Branch `feat/dcp-partial-fp4` in
+  `/home/will/projects/flash-mla-ampere-dsv4/.worktrees/dcp-partial-import`,
+  pushed to `Whamp/forks-flash-mla-int`. Tip `a5337e2`; history:
+  our FP4 commit `81a06aa` + their `828a35a..59b1386` replayed.
+- Merge design: unified prefill kernel template
+  `<int kBlockM, Sparse_mla_cache_format>` — their PfGeom BLOCK_M-generic
+  geometry (reproduces the M=32 mapping instruction-for-instruction) with
+  our FP8/INT8/FP4 staging and in-kernel dequant grafted as format
+  branches. `SmemFP4<kBlockM>` added alongside their templated smem
+  structs. Dispatcher: FP8 follows their narrow-tile chooser (TP=4 shards
+  H to 16 → exactly their BLOCK_M=16 case); INT8 keeps both widths as
+  they shipped; **FP4 pins to BLOCK_M=32 until GPU-validated at 16**.
+- Decode: their partial epilogue (`kPartial` template, LSE store,
+  -1e30 sentinel) auto-merged; combined paths unchanged via
+  `lse_ptr == nullptr` dispatch. The mma-prefill fast path now excludes
+  partial mode. Their new `mha_fwd_sparse_decode_mla_partial` host
+  function sets `cache_format = FP8_DS_MLA` explicitly for our unified
+  params struct.
+- Validation state: Python interface compiles; no stale `int8_cache`
+  refs; conflict-free tree. **No CUDA compile or GPU execution yet** —
+  no local nvcc, and server60 disk/GPUs are constrained. The kernel
+  merge is structural, not validated: first GPU window must run their
+  267-line DCP partial test plus our 47-test native-format suite before
+  any claim.
+
+Next GPU-free items from Tier 1: audit our block-zeroing exposure in
+`vllm/v1/worker/utils.py`, dedup-pass their kv_offload changes against
+our tree, and scope the vLLM-side DCP plumbing port.
