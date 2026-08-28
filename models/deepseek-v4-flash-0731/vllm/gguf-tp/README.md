@@ -1,14 +1,16 @@
 # DeepSeek-V4-Flash-0731 GGUF-TP engine (vLLM-native, SM86)
 
+> **Permanent home:** [Whamp/vLLM](https://github.com/Whamp/vllm/tree/6b60be60d668f7f259d6a0510c28538157878866/docs/whamp/deepseek_v4_gguf_tp) owns the engine source, research reports, and raw evidence archive. This directory only owns the club-3090 deployment files.
+
 Production DeepSeek V4 serving engine on server60's 4× RTX 3090 rig — a
 native GGUF tensor-parallel vLLM engine that loads the exact Antirez GGUF
 bytes (IQ2_XXS/Q2_K/Q8_0) with from-scratch Ampere kernels. No llama.cpp /
 ggml wrapping: weights are read directly from the GGUF file (`--load-format
 gguf_dsv4`), quantized operators run as vLLM-native CUDA kernels.
 
-- **Source:** `Whamp/vLLM` branch `incubate/gguf-tp-sm86`, promoted commit
-  `3ec20cebe` (tree `82a1def1…`). All engine sources are in that branch;
-  nothing in this directory is a fork-vendored copy.
+- **Source:** The engine is merged into `Whamp/vLLM` main. Commit
+  `3ec20cebe` (tree `82a1def1…`) is the runtime used for the original
+  promotion evidence. Nothing in this directory vendors the engine source.
 - **Production profile:** `../compose/multi4/gguf-tp/base.yml` (port 8034,
   `fp8_ds_mla`). The validated opt-in `fp4.yml` uses `fp4_ds_mla` without
   changing the production default.
