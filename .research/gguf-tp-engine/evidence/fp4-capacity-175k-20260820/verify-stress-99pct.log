@@ -1,0 +1,33 @@
+Running STRESS / boundary test against http://127.0.0.1:8034
+  model=deepseek-v4-flash-0731-gguf-tp  container=dsv4-fp4-goal-175  engine=vllm
+  This script does the heavy stuff (longctx needle ladder + ~25K-token tool prefill).
+  For the fast functional smoke (~2 min), use verify-full.sh instead.
+
+[1/8] Long-context needle small rungs (10K / 30K) ...
+    [32m✓[0m   9213 tokens: recalled 'golden chinchilla 82' (got: golden chinchilla 82 )  prefill=511.5 t/s (18s)
+    [32m✓[0m  27513 tokens: recalled 'golden chinchilla 66' (got: golden chinchilla 66 )  prefill=602.2 t/s (46s)
+  [32m✓[0m all long-ctx depths recalled secret correctly
+[2/8] Tool response prefill OOM (~25K-token mock tool response) ...
+  [32m✓[0m tool prefill OK — text response (1132 chars, finish=stop)
+[3/8] IDE-agent one-shot prompt (sys + tool schemas + user request) ...
+  [32m✓[0m IDE-agent one-shot OK — 50 completion tokens (2 chars), finish=stop
+[4/8] Multi-turn agent prompt (sys + tools + 4-turn history) ...
+  [32m✓[0m multi-turn agent OK
+[5/8] LCB-coding shape (LeetCode-style problem + structured plan) ...
+  [32m✓[0m LCB-coding shape OK
+[6/8] Reasoning-heavy (math problem + max_tokens=8192) ...
+  [32m✓[0m reasoning-heavy OK — 4070 completion tokens
+[7/8] Long-context needle large rungs (60K / 90K — Cliff 2 territory) ...
+  [33m⊘[0m STRESS_FAST=1 — large fresh needles skipped (depth coverage via ceiling rungs) (skipped)
+[8/8] Context ceiling ladder (staggered NIAH from ~95000 → ~0.99 × n_ctx) ...
+    STRESS_FAST=1 — ladder capped (start=115500, step=57751); full-mode gates use the fine ladder
+    n_ctx=175000  ladder: 115500 → 173250 (2 rungs)
+    calibrated: scale=100 → 6107 tokens (tok/scale_unit=61.07)
+    VRAM free (ladder start): 27 MB
+    [32m✓[0m rung 1/2: target=115K  actual=115K tok (65%)  recalled 'sapphire capybara 41'  prefill=506.8 t/s (228s)  VRAM_free=27MB
+    [32m✓[0m rung 2/2: target=173K  actual=173K tok (98%)  recalled 'silver otter 72'  prefill=466.4 t/s (371s)  VRAM_free=27MB
+
+  [32m✓[0m ceiling ladder: all 2 rungs passed — fillable to 173058 tok (98% of n_ctx=175000)
+    VRAM: 27 → 27 MB (Δ -0 MB across ladder, margin threshold=0 MB)
+
+[32mAll stress / boundary checks passed.[0m KV-cache and prefill paths are sound for the deployed config.

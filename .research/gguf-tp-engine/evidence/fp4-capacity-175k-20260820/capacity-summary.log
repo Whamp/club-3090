@@ -1,0 +1,7 @@
+(Worker_TP0 pid=230) INFO 08-20 19:03:07 [gpu_worker.py:563] Available KV cache memory: 0.76 GiB
+(EngineCore pid=202) INFO 08-20 19:03:07 [kv_cache_utils.py:2458] GPU KV cache size: 178,050 tokens
+(EngineCore pid=202) INFO 08-20 19:03:07 [kv_cache_utils.py:2459] Maximum concurrency for 175,000 tokens per request: 1.02x
+(Worker_TP0 pid=230) INFO 08-20 19:03:07 [gpu_model_runner.py:7674] KV cache runtime allocation: planned_storage_bytes=814687104, observed_storage_bytes=814687104, reconciliation_delta_bytes=0, torch_allocated_delta_bytes=814687232
+(Worker_TP2 pid=232) INFO 08-20 19:03:07 [gpu_model_runner.py:7674] KV cache runtime allocation: planned_storage_bytes=814687104, observed_storage_bytes=814687104, reconciliation_delta_bytes=0, torch_allocated_delta_bytes=814687232
+(Worker_TP1 pid=231) INFO 08-20 19:03:07 [gpu_model_runner.py:7674] KV cache runtime allocation: planned_storage_bytes=814687104, observed_storage_bytes=814687104, reconciliation_delta_bytes=0, torch_allocated_delta_bytes=814687232
+(Worker_TP3 pid=233) INFO 08-20 19:03:07 [gpu_model_runner.py:7674] KV cache runtime allocation: planned_storage_bytes=814687104, observed_storage_bytes=814687104, reconciliation_delta_bytes=0, torch_allocated_delta_bytes=814687232
