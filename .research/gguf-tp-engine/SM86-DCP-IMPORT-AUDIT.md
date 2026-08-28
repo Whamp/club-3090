@@ -165,8 +165,9 @@ Their four flash-mla P9 commits are now merged onto our FP4 lineage:
 
 - Branch `feat/dcp-partial-fp4` in
   `/home/will/projects/flash-mla-ampere-dsv4/.worktrees/dcp-partial-import`,
-  pushed to `Whamp/forks-flash-mla-int`. Tip `a5337e2`; history:
-  our FP4 commit `81a06aa` + their `828a35a..59b1386` replayed.
+  pushed to `Whamp/forks-flash-mla-int`. Tip `2921831`; history:
+  our FP4 commit `81a06aa` + their `828a35a..59b1386` replayed, followed by
+  the SM86 build-gate include fix.
 - Merge design: unified prefill kernel template
   `<int kBlockM, Sparse_mla_cache_format>` — their PfGeom BLOCK_M-generic
   geometry (reproduces the M=32 mapping instruction-for-instruction) with
@@ -181,12 +182,11 @@ Their four flash-mla P9 commits are now merged onto our FP4 lineage:
   partial mode. Their new `mha_fwd_sparse_decode_mla_partial` host
   function sets `cache_format = FP8_DS_MLA` explicitly for our unified
   params struct.
-- Validation state: Python interface compiles; no stale `int8_cache`
-  refs; conflict-free tree. **No CUDA compile or GPU execution yet** —
-  no local nvcc, and server60 disk/GPUs are constrained. The kernel
-  merge is structural, not validated: first GPU window must run their
-  267-line DCP partial test plus our 47-test native-format suite before
-  any claim.
+- Validation state: server60 built the final SM86 wheel from commit
+  `2921831` after the build gate caught and fixed one missing FP4 layout
+  include. The DCP partial/narrow-prefill test passed 9/9, the FP8/INT8/FP4
+  regression set passed 50/50, and Compute Sanitizer reported zero memcheck
+  errors and zero racecheck hazards. Seven SM86 cubins are packaged.
 
 Next GPU-free items from Tier 1: audit our block-zeroing exposure in
 `vllm/v1/worker/utils.py`, dedup-pass their kv_offload changes against
@@ -274,3 +274,19 @@ Evidence: 277 passed / 2 skipped across offloading_connector +
 shared_offload_region + async_lookup + policies suites; the 32
 test_gpu_worker failures are pre-existing GPU-required asserts
 (identical on clean tree); Ruff clean; git diff --check clean.
+
+## Step 3 COMPLETE: FlashMLA GPU gates and matched A/B (2026-08-21)
+
+`Whamp/forks-flash-mla-int` commit `2921831` and wheel SHA-256
+`8de43339487ebbfbb06afc95a4bf48f306e755830500aaa1e3bdbcc635d3070c`
+passed the RTX 3090 gate described above. The matched service A/B used TP=4,
+148K context, seq2, FP8 DS-MLA KV, three warmups, five measured decode runs,
+and three cache-busted 10K/90K prefill runs. Both arms had zero
+serving-process swap and remained inside the 230 W / 1650 MHz safety limits.
+
+The merged wheel changed narrative decode by -0.08%, code decode by -0.06%,
+10K prefill by -0.30%, and 90K prefill by +0.06%. This is a performance wash,
+not a speed claim. The result is expected: production uses combined FlashMLA
+decode and Triton FP8 prefill; partial decode activates only under DCP. Keep
+the branch as the validated DCP kernel prerequisite. Do not promote it as a
+standalone production optimization. Full record: `FLASH-MLA-DCP-AB.md`.

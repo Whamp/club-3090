@@ -1,0 +1,164 @@
+[autodetect] using running container=dsv4-gguf-tp-ab  (skip: PREFLIGHT_NO_AUTODETECT=1)
+
+========== CONFIG FINGERPRINT ==========
+  endpoint       : http://127.0.0.1:8034  (mode=chat)
+  model          : deepseek-v4-flash-0731-gguf-tp
+  serving pid    : 2285645
+  log source     : docker
+  KV cache type  : fp8_ds_mla (source: argv)
+  moe-cache cfg  : moe_cache_cap=<unset> RESERVE_MB=<unset> ADMIT_AFTER=<unset> THROTTLE=<unset> MAX_BATCH=<unset> STATS=<unset>
+  CPU offload    : not detected (moe-cache captures skipped)
+
+========== SYSTEM RAM ==========
+  mem_total_gib=60.4 mem_available_gib=42.1 server_rss_gib=1.0 swap_total_gib=8.0 swap_used_gib=0.0 server_swap_mib=0
+  swap check     : PASS (no serving-process pages in swap)
+[bench] narrative run 1/5: 1000 tok in 12.8s (79.73 decode TPS, ttft 273ms)
+[bench] narrative run 2/5: 1000 tok in 12.9s (79.73 decode TPS, ttft 315ms)
+[bench] narrative run 3/5: 1000 tok in 12.8s (79.83 decode TPS, ttft 230ms)
+[bench] narrative run 4/5: 1000 tok in 12.8s (79.75 decode TPS, ttft 219ms)
+[bench] narrative run 5/5: 1000 tok in 12.8s (79.78 decode TPS, ttft 285ms)
+[bench] code run 1/5: 800 tok in 10.3s (79.80 decode TPS, ttft 256ms)
+[bench] code run 2/5: 800 tok in 10.2s (79.81 decode TPS, ttft 219ms)
+[bench] code run 3/5: 800 tok in 10.3s (79.81 decode TPS, ttft 287ms)
+[bench] code run 4/5: 800 tok in 10.3s (79.80 decode TPS, ttft 227ms)
+[bench] code run 5/5: 800 tok in 10.2s (79.84 decode TPS, ttft 222ms)
+[bench] capture: tokenizer ratio 1.28 tok/word (haystacks sized by measured tokens, not words)
+[bench] prefill-10k run 1/3: 9976 prompt tok, 538.9 prefill tok/s, ttft 18513ms
+[bench] prefill-10k run 2/3: 9632 prompt tok, 541.8 prefill tok/s, ttft 17778ms
+[bench] prefill-10k run 3/3: 9976 prompt tok, 538.2 prefill tok/s, ttft 18537ms
+[bench] prefill-90k run 1/3: 86912 prompt tok, 522.4 prefill tok/s, ttft 166364ms
+[bench] prefill-90k run 2/3: 90016 prompt tok, 520.9 prefill tok/s, ttft 172825ms
+[bench] prefill-90k run 3/3: 90016 prompt tok, 519.9 prefill tok/s, ttft 173135ms
+
+========== NARRATIVE (prompt=65 chars, max_tokens=1000) ==========
+=== warmups (3) ===
+  warm-1     wall= 14.09s  ttft=  1537ms  toks=1000  wall_TPS= 70.99  decode_TPS= 79.68
+  warm-2     wall= 12.85s  ttft=   313ms  toks=1000  wall_TPS= 77.82  decode_TPS= 79.77
+  warm-3     wall= 12.76s  ttft=   219ms  toks=1000  wall_TPS= 78.34  decode_TPS= 79.71
+
+=== measured (5) ===
+  run-1      wall= 12.82s  ttft=   273ms  toks=1000  wall_TPS= 78.03  decode_TPS= 79.73
+  run-2      wall= 12.86s  ttft=   315ms  toks=1000  wall_TPS= 77.78  decode_TPS= 79.73
+  run-3      wall= 12.76s  ttft=   230ms  toks=1000  wall_TPS= 78.39  decode_TPS= 79.83
+  run-4      wall= 12.76s  ttft=   219ms  toks=1000  wall_TPS= 78.38  decode_TPS= 79.75
+  run-5      wall= 12.82s  ttft=   285ms  toks=1000  wall_TPS= 78.01  decode_TPS= 79.78
+
+=== summary [narrative] (n=5) ===
+  wall_TPS       mean=  78.12   std=  0.26   CV= 0.3%   min=77.78   max=78.39
+  decode_TPS     mean=  79.76   std=  0.04   CV= 0.1%   min=79.73   max=79.83
+  TTFT          mean=   264ms  std=   40ms  min=219ms  max=315ms
+  n-usable      5/5  (runs with >= 250 tokens, 25% of max_tokens=1000)
+  PP tok/s       n/a (engine-log scrape suppressed: prompt is 15 tok (< 1000) - the engine averages prompt throughput over a ~10 s window, and a prompt this short cannot fill one)
+                 the trustworthy prefill number is the client-side `prefill tok/s` summary (prompt_tokens/TTFT, cache-busted)
+
+========== CODE (prompt=78 chars, max_tokens=800) ==========
+=== warmups (3) ===
+  warm-1     wall= 12.93s  ttft=  2912ms  toks= 800  wall_TPS= 61.85  decode_TPS= 79.82
+  warm-2     wall= 10.22s  ttft=   202ms  toks= 800  wall_TPS= 78.26  decode_TPS= 79.84
+  warm-3     wall= 10.25s  ttft=   224ms  toks= 800  wall_TPS= 78.08  decode_TPS= 79.83
+
+=== measured (5) ===
+  run-1      wall= 10.28s  ttft=   256ms  toks= 800  wall_TPS= 77.81  decode_TPS= 79.80
+  run-2      wall= 10.24s  ttft=   219ms  toks= 800  wall_TPS= 78.10  decode_TPS= 79.81
+  run-3      wall= 10.31s  ttft=   287ms  toks= 800  wall_TPS= 77.59  decode_TPS= 79.81
+  run-4      wall= 10.25s  ttft=   227ms  toks= 800  wall_TPS= 78.04  decode_TPS= 79.80
+  run-5      wall= 10.24s  ttft=   222ms  toks= 800  wall_TPS= 78.11  decode_TPS= 79.84
+
+=== summary [code] (n=5) ===
+  wall_TPS       mean=  77.93   std=  0.23   CV= 0.3%   min=77.59   max=78.11
+  decode_TPS     mean=  79.81   std=  0.02   CV= 0.0%   min=79.80   max=79.84
+  TTFT          mean=   242ms  std=   29ms  min=219ms  max=287ms
+  n-usable      5/5  (runs with >= 200 tokens, 25% of max_tokens=800)
+  PP tok/s       n/a (engine-log scrape suppressed: prompt is 18 tok (< 1000) - the engine averages prompt throughput over a ~10 s window, and a prompt this short cannot fill one)
+                 the trustworthy prefill number is the client-side `prefill tok/s` summary (prompt_tokens/TTFT, cache-busted)
+
+========== PREFILL-10K (target=10000 prompt tokens, max_tokens=16, cache-busted: fresh haystack per run) ==========
+=== warmups (1) ===
+  warm-1     wall= 20.62s  ttft= 20597ms  prompt_toks= 10846  PP_tok/s= 526.59
+  [calibrated: 10846 tok at request=10000 → measured runs request 9219]
+
+=== measured (3) ===
+  run-1      wall= 18.53s  ttft= 18513ms  prompt_toks=  9976  PP_tok/s= 538.86
+  run-2      wall= 17.80s  ttft= 17778ms  prompt_toks=  9632  PP_tok/s= 541.78
+  run-3      wall= 18.55s  ttft= 18537ms  prompt_toks=  9976  PP_tok/s= 538.17
+
+=== summary [prefill-10k] (n=3) ===
+  prefill tok/s  mean= 539.60   std=  1.92   CV= 0.4%   min=538.17   max=541.78
+  TTFT          mean= 18276ms  std=  431ms  min=17778ms  max=18537ms
+  PP tok/s (engine log, windowed — indicative only) mean=1015.07   std= 62.63   CV= 6.2%   min=963.10   max=1084.60
+
+========== PREFILL-90K (target=90000 prompt tokens, max_tokens=16, cache-busted: fresh haystack per run) ==========
+=== warmups (1) ===
+  warm-1     wall=188.29s  ttft=188285ms  prompt_toks= 97382  PP_tok/s= 517.20
+  [calibrated: 97382 tok at request=90000 → measured runs request 83177]
+
+=== measured (3) ===
+  run-1      wall=166.37s  ttft=166364ms  prompt_toks= 86912  PP_tok/s= 522.42
+  run-2      wall=172.83s  ttft=172825ms  prompt_toks= 90016  PP_tok/s= 520.85
+  run-3      wall=173.14s  ttft=173135ms  prompt_toks= 90016  PP_tok/s= 519.92
+
+=== summary [prefill-90k] (n=3) ===
+  prefill tok/s  mean= 521.06   std=  1.26   CV= 0.2%   min=519.92   max=522.42
+  TTFT          mean=170775ms  std= 3823ms  min=166364ms  max=173135ms
+  PP tok/s (engine log, windowed — indicative only) mean=9141.27   std=540.23   CV= 5.9%   min=8685.00   max=9737.80
+
+========== CAPTURE: PCIe ==========
+  decode all rx_mean=220 rx_peak=1382 tx_mean=182 tx_peak=292 sm_mean=98.3 memctl_mean=38.7 samples=398
+  decode GPU0 rx_mean=218 rx_peak=1031 tx_mean=181 tx_peak=242 sm_mean=97.7 memctl_mean=38.6 samples=99
+  decode GPU1 rx_mean=211 rx_peak=243 tx_mean=179 tx_peak=208 sm_mean=98.2 memctl_mean=38.4 samples=99
+  decode GPU2 rx_mean=223 rx_peak=1382 tx_mean=179 tx_peak=248 sm_mean=98.6 memctl_mean=38.9 samples=100
+  decode GPU3 rx_mean=226 rx_peak=1344 tx_mean=189 tx_peak=292 sm_mean=98.9 memctl_mean=38.9 samples=100
+  prefill all rx_mean=3111 rx_peak=5016 tx_mean=1014 tx_peak=1431 sm_mean=99.1 memctl_mean=8.3 samples=1924
+  prefill GPU0 rx_mean=2402 rx_peak=2888 tx_mean=918 tx_peak=1170 sm_mean=98.5 memctl_mean=8.0 samples=481
+  prefill GPU1 rx_mean=3518 rx_peak=4615 tx_mean=1056 tx_peak=1354 sm_mean=99.5 memctl_mean=8.5 samples=481
+  prefill GPU2 rx_mean=2950 rx_peak=3525 tx_mean=985 tx_peak=1267 sm_mean=98.6 memctl_mean=8.2 samples=481
+  prefill GPU3 rx_mean=3573 rx_peak=5016 tx_mean=1095 tx_peak=1431 sm_mean=99.8 memctl_mean=8.5 samples=481
+  note: decode and prefill PCIe traffic differ by ~100x on an offloaded MoE —
+        a whole-run mean describes neither. 1 Hz under-reads bursts, so the
+        PEAK is reported next to the mean, not instead of it.
+  link (sampled under load, best observed):
+    GPU0 gen=3/3 width=4/16  ⚠ WARN: never reached gen3 x16 under load — link is training below its own maximum (check slot/riser/BIOS bifurcation)
+    GPU1 gen=3/3 width=16/16
+    GPU2 gen=3/3 width=8/16  ⚠ WARN: never reached gen3 x16 under load — link is training below its own maximum (check slot/riser/BIOS bifurcation)
+    GPU3 gen=3/3 width=16/16
+    denominator: ~3348 MB/s practical for a negotiated gen3 x4 link
+                 (per-lane raw x width x 0.85; NOT a theoretical peak)
+    decode rx peak = 1382 MB/s = 41.3% of that denominator
+
+========== CAPTURE: VRAM ==========
+  idle=96112 MiB  peak=96392 MiB  post=96392 MiB
+  leak delta (post - idle) = 280 MiB
+  GPU0 24098 MiB (post-run)
+  GPU1 24098 MiB (post-run)
+  GPU2 24098 MiB (post-run)
+  GPU3 24098 MiB (post-run)
+  host CPU busy across the run: 17.9%
+
+========== CAPTURE: DRAFT ACCEPTANCE ==========
+  no drafter output in the log (spec-dec off, or the engine does not log acceptance)
+
+========== CAPTURE: ENGINE-SIDE TIMINGS ==========
+  no print_timing lines in the log (engine may not emit them at this verbosity)
+
+========== CAPTURE: EXPERT CACHE (moe-cache) ==========
+  skipped: no CPU offload detected — nothing for an expert cache to cache.
+
+========== CAPTURE: INTEGRITY ==========
+  status: OK
+  (no capture-level defect detected — this is NOT a statement about the numbers'
+   quality, only that the measurement machinery did its job)
+  swap check   : PASS (no serving-process pages in swap)
+
+=== GPU state ===
+0, 0 %, 24098 MiB, 24576 MiB, 153.25 W, 58
+1, 0 %, 24098 MiB, 24576 MiB, 157.29 W, 59
+2, 0 %, 24098 MiB, 24576 MiB, 157.52 W, 64
+3, 0 %, 24098 MiB, 24576 MiB, 162.32 W, 54
+
+=== Interconnect (three layers) ===
+  layer 1  driver P2P grant : GRANTED over PCIe — topo -p2p reports OK on every pair; kernel module: open
+  layer 2  NCCL use         : no NCCL_P2P*/NVLINK_MODE in the serving environment (engine default)
+  layer 3  engine custom-AR : unknown — no [nvlink] boot line and no engine gate line in the log
+  verdict  : ℹ interconnect: this driver reports PCIe P2P available (patched driver / P2P-capable layout) but the serving container shows no P2P engagement signal (no [nvlink] boot line / NCCL env). Launcher boots auto-enable it; for direct docker compose set NVLINK_MODE=pcie_p2p (+10–22% code TPS measured on DUAL-card rigs, #91/#295; at >2 GPUs the gain path is NCCL-only — see docs/PCIE_P2P.md). Full guide: docs/PCIE_P2P.md
+
+=== Last 3 SpecDecoding metrics ===

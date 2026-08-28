@@ -418,3 +418,21 @@ to the default production setting."
   launch/dependency-latency gate, so no fusion kernel or production path is
   implemented. `FUSION-TRACE.md` and `evidence/fusion-trace-20260820/
   production-semantics/` are authoritative.
+
+## 2026-08-21: FlashMLA partial/narrow branch passes gates, performance neutral
+
+- Server60 built the merged FlashMLA SM86 wheel from
+  `Whamp/forks-flash-mla-int@2921831`; wheel SHA-256 is
+  `8de43339487ebbfbb06afc95a4bf48f306e755830500aaa1e3bdbcc635d3070c`.
+  The build gate caught and fixed a missing `fp4_ds_mla.cuh` include.
+- RTX 3090 gates: 9/9 partial/narrow-prefill tests, 50/50 FP8/INT8/FP4
+  regression tests, memcheck with zero errors, and racecheck with zero hazards.
+- Matched production-profile A/B: narrative decode 79.82 -> 79.76 TPS, code
+  decode 79.86 -> 79.81, 10K prefill 541.22 -> 539.60, 90K prefill 520.73 ->
+  521.06. All changes are noise; no standalone performance claim.
+- Decision: keep the branch as the DCP kernel prerequisite. Current production
+  does not invoke partial decode or native FP8 fused prefill, so the neutral A/B
+  is expected. `FLASH-MLA-DCP-AB.md` owns the full result and raw evidence.
+- Server60 restored the digest-pinned production service healthy with restart
+  `unless-stopped`, zero restarts, zero serving-process swap, and the 230 W /
+  1650 MHz safety policy active.

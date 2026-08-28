@@ -1,0 +1,18 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /opt/venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /src
+plugins: anyio-4.14.2
+collecting ... collected 9 items
+
+tests/test_sparse_mla_dcp_partial_sm86.py::test_decode_partial_matches_oracle[512-64] PASSED [ 11%]
+tests/test_sparse_mla_dcp_partial_sm86.py::test_decode_partial_matches_oracle[512-16] PASSED [ 22%]
+tests/test_sparse_mla_dcp_partial_sm86.py::test_decode_partial_merge_equals_combined[2-64] PASSED [ 33%]
+tests/test_sparse_mla_dcp_partial_sm86.py::test_decode_partial_merge_equals_combined[4-64] PASSED [ 44%]
+tests/test_sparse_mla_dcp_partial_sm86.py::test_prefill_block_m_dispatch_matches_oracle[8] PASSED [ 55%]
+tests/test_sparse_mla_dcp_partial_sm86.py::test_prefill_block_m_dispatch_matches_oracle[16] PASSED [ 66%]
+tests/test_sparse_mla_dcp_partial_sm86.py::test_prefill_block_m_dispatch_matches_oracle[32] PASSED [ 77%]
+tests/test_sparse_mla_dcp_partial_sm86.py::test_prefill_block_m_dispatch_matches_oracle[64] PASSED [ 88%]
+tests/test_sparse_mla_dcp_partial_sm86.py::test_prefill_block_m_16_and_32_agree PASSED [100%]
+
+============================== 9 passed in 9.43s ===============================
