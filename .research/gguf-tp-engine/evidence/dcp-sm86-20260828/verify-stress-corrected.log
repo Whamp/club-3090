@@ -1,0 +1,34 @@
+[autodetect] using running container=dsv4-gguf-tp-dcp  (skip: PREFLIGHT_NO_AUTODETECT=1)
+Running STRESS / boundary test against http://127.0.0.1:8034
+  model=deepseek-v4-flash-0731-gguf-tp-dcp  container=dsv4-gguf-tp-dcp  engine=vllm
+  This script does the heavy stuff (longctx needle ladder + ~25K-token tool prefill).
+  For the fast functional smoke (~2 min), use verify-full.sh instead.
+
+[1/8] Long-context needle small rungs (10K / 30K) ...
+    [32m✓[0m   9213 tokens: recalled 'turquoise chinchilla 51' (got: turquoise chinchilla 51 )  prefill=460.9 t/s (20s)
+    [32m✓[0m  27513 tokens: recalled 'turquoise iguana 52' (got: turquoise iguana 52 )  prefill=328.4 t/s (84s)
+  [32m✓[0m all long-ctx depths recalled secret correctly
+[2/8] Tool response prefill OOM (~25K-token mock tool response) ...
+  [32m✓[0m tool prefill OK — text response (1126 chars, finish=stop)
+[3/8] IDE-agent one-shot prompt (sys + tool schemas + user request) ...
+  [32m✓[0m IDE-agent one-shot OK — 50 completion tokens (2 chars), finish=stop
+[4/8] Multi-turn agent prompt (sys + tools + 4-turn history) ...
+  [32m✓[0m multi-turn agent OK
+[5/8] LCB-coding shape (LeetCode-style problem + structured plan) ...
+  [32m✓[0m LCB-coding shape OK
+[6/8] Reasoning-heavy (math problem + max_tokens=8192) ...
+  [32m✓[0m reasoning-heavy OK — 8192 completion tokens
+[7/8] Long-context needle large rungs (60K / 90K — Cliff 2 territory) ...
+  [33m⊘[0m STRESS_FAST=1 — large fresh needles skipped (depth coverage via ceiling rungs) (skipped)
+[8/8] Context ceiling ladder (staggered NIAH from ~95000 → ~0.92 × n_ctx) ...
+    STRESS_FAST=1 — ladder capped (start=95000, step=41161); full-mode gates use the fine ladder
+    n_ctx=148000  ladder: 95000 → 136160 (2 rungs)
+    calibrated: scale=100 → 6107 tokens (tok/scale_unit=61.07)
+    VRAM free (ladder start): 471 MB
+    [32m✓[0m rung 1/2: target=95K  actual=94K tok (64%)  recalled 'crimson falcon 19'  prefill=296.7 t/s (320s)  VRAM_free=469MB
+    [32m✓[0m rung 2/2: target=136K  actual=136K tok (91%)  recalled 'violet falcon 33'  prefill=332.6 t/s (409s)  VRAM_free=467MB
+
+  [32m✓[0m ceiling ladder: all 2 rungs passed — fillable to 136031 tok (91% of n_ctx=148000)
+    VRAM: 471 → 467 MB (Δ -4 MB across ladder, margin threshold=0 MB)
+
+[32mAll stress / boundary checks passed.[0m KV-cache and prefill paths are sound for the deployed config.

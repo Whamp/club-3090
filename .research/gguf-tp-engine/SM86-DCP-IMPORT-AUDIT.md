@@ -290,3 +290,25 @@ not a speed claim. The result is expected: production uses combined FlashMLA
 decode and Triton FP8 prefill; partial decode activates only under DCP. Keep
 the branch as the validated DCP kernel prerequisite. Do not promote it as a
 standalone production optimization. Full record: `FLASH-MLA-DCP-AB.md`.
+
+## Step 4 COMPLETE: GGUF-TP SM86 DCP milestone (2026-08-28)
+
+Whamp/vLLM branch `feat/gguf-tp-dcp-sm86` at `00793b3e5` contains the
+semantic DCP port. It implements compressed-entry sharding, replicated SWA and
+compressor state, deterministic global indexer top-k, byte-preserving prefill
+gather, partial FlashMLA decode, fp32 LSE merge, one-time sink application,
+and persistent decode buffers. The accepted profile pins interleave 1, FP8
+DS-MLA KV, a2a merge, prefix caching off, seq2, and FULL_DECODE_ONLY graphs.
+
+The port found and fixed two correctness blockers absent from the initial
+adaptation: replicated SWA had been counted on all four ranks, and C128 local
+entry coordinates had been passed to FlashMLA as physical slots. A 9,830-token
+DCP1/DCP4 discriminator plus an opt-in full-cache combined reference localized
+both defects. The corrected profile passes exact recall through 136K.
+
+Measured 148K result: 37.58 narrative / 37.53 code decode TPS, versus about
+79.8 production; long-prefill runs range from 296.7 to 460.9 TPS. The 262K
+profile starts with 373,421 KV tokens but has only 75 MiB idle headroom, reaches
+11 MiB during a 240K probe, and times out at the wrapper's 900-second limit.
+Decision: keep DCP experimental and restore production. Full record:
+`DCP-SM86.md` and `evidence/dcp-sm86-20260828/`.

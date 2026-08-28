@@ -436,3 +436,26 @@ to the default production setting."
 - Server60 restored the digest-pinned production service healthy with restart
   `unless-stopped`, zero restarts, zero serving-process swap, and the 230 W /
   1650 MHz safety policy active.
+
+## 2026-08-28: SM86 DCP milestone complete, experimental only
+
+- Whamp/vLLM `feat/gguf-tp-dcp-sm86@00793b3e5` implements compressed-entry
+  DCP, replicated SWA/compressor groups, global indexer top-k, byte-preserving
+  prefill gather, partial FlashMLA decode, fp32 LSE merge, graph-stable buffers,
+  and bounded indexer workspace.
+- Red-green CPU evidence and adjacent regressions pass 142 tests. Ruff check and
+  format pass; the new standalone modules pass `ty`. FlashMLA keeps its 59 GPU
+  tests plus clean memcheck/racecheck and seven SM86 cubins.
+- Diagnosis found two critical integration errors: replicated SWA was counted
+  four times, and C128 local entries skipped physical block-table translation.
+  The fixed 9,830-token prompt now returns `CRIMSON PLATYPUS 47` at DCP1 and
+  DCP4; before the C128 fix DCP4 returned `CR` with NaN logprobs.
+- Correct 148K graph profile with 400 MB KV: 155,810 KV tokens, about 467 MiB
+  free, 37.58 narrative / 37.53 code decode TPS, exact recall at 94K and 136K,
+  zero swap, no leak. This is 53% slower than production and is not promoted.
+- 262,144 context with 700 MB KV starts at 373,421 KV tokens and 1.42x declared
+  concurrency, but leaves only 75 MiB idle / 11 MiB under the 240K probe. The
+  240K request timed out at 900 seconds without crashing. No release claim.
+- Production restored healthy on digest `f91e8283...`, restart unless-stopped,
+  zero restarts and swap, fixed 230 W / 210–1650 MHz policy active. Owner report:
+  `DCP-SM86.md`; compact evidence: `evidence/dcp-sm86-20260828/`.

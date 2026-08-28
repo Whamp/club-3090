@@ -1,0 +1,26 @@
+[autodetect] using running container=dsv4-gguf-tp-dcp  (skip: PREFLIGHT_NO_AUTODETECT=1)
+Running STRESS / boundary test against http://127.0.0.1:8034
+  model=deepseek-v4-flash-0731-gguf-tp-dcp1  container=dsv4-gguf-tp-dcp  engine=vllm
+  This script does the heavy stuff (longctx needle ladder + ~25K-token tool prefill).
+  For the fast functional smoke (~2 min), use verify-full.sh instead.
+
+[1/8] Long-context needle small rungs (10K / 30K) ...
+    [32m✓[0m   9214 tokens: recalled 'crimson platypus 47' (got: crimson platypus 47 )  prefill=515.0 t/s (18s)
+    [32m✓[0m  27513 tokens: recalled 'silver platypus 98' (got: silver platypus 98 )  prefill=527.2 t/s (52s)
+  [32m✓[0m all long-ctx depths recalled secret correctly
+[2/8] Tool response prefill OOM (~25K-token mock tool response) ...
+  [32m✓[0m tool prefill OK — text response (1087 chars, finish=stop)
+[3/8] IDE-agent one-shot prompt (sys + tool schemas + user request) ...
+  [32m✓[0m IDE-agent one-shot OK — 50 completion tokens (2 chars), finish=stop
+[4/8] Multi-turn agent prompt (sys + tools + 4-turn history) ...
+  [32m✓[0m multi-turn agent OK
+[5/8] LCB-coding shape (LeetCode-style problem + structured plan) ...
+  [32m✓[0m LCB-coding shape OK
+[6/8] Reasoning-heavy (math problem + max_tokens=8192) ...
+  [32m✓[0m reasoning-heavy OK — 8192 completion tokens
+[7/8] Long-context needle large rungs (60K / 90K — Cliff 2 territory) ...
+  [33m⊘[0m STRESS_FAST=1 — large fresh needles skipped (depth coverage via ceiling rungs) (skipped)
+[8/8] Context ceiling ladder (staggered NIAH from ~95000 → ~0.92 × n_ctx) ...
+  [33m⊘[0m SKIP_CEILING=1 (skipped)
+
+[32mAll stress / boundary checks passed.[0m KV-cache and prefill paths are sound for the deployed config.

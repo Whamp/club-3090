@@ -42,6 +42,7 @@ See the platform-specific tables below for the rows these reference.
 
 | Issue / PR | Status | Why it matters | Workaround |
 |---|---|---|---|
+| [tomylin890/vllm-sm86-dsv4@996979e](https://github.com/tomylin890/vllm-sm86-dsv4/commit/996979edb) — SM86 DeepSeek V4 DCP reference | ⚫ Semantic port in Whamp/vllm | Reference for compressed-entry ownership, replicated SWA/compressor groups, global indexer top-k, LSE merge, graph-safe decode, and prefix-cache constraints. Its 8×3090 measurements do not transfer to server60. | Ported selectively to [`Whamp/vllm@00793b3`](https://github.com/Whamp/vllm/commit/00793b3e5) on `feat/gguf-tp-dcp-sm86`. Server60 result is experimental: correct through 136K at 37.5 decode TPS; not promoted. See `.research/gguf-tp-engine/DCP-SM86.md`. |
 | [#40361](https://github.com/vllm-project/vllm/pull/40361) — Marlin pad-sub-tile-n | 🟡 Open, mergeable, **stale 13d** (last update 2026-04-20) | All 4 dual-card composes + `dual-nvlink.yml` mount the patched files vendored in-repo at `models/qwen3.6-27b/vllm/patches/vllm-marlin-pad/`. Drops out as a setup dependency when this merges + propagates. | Vendored mount: see [`models/qwen3.6-27b/vllm/patches/vllm-marlin-pad/README.md`](../models/qwen3.6-27b/vllm/patches/vllm-marlin-pad/README.md). Queued for rebase + ping next week (see "Active follow-ups" table above). |
 | [#40807](https://github.com/vllm-project/vllm/issues/40807) — `.tolist()` cudagraph crash on continuation-prefill | ⚫ Local workaround | Single-card TQ3 + spec-decode + chunked-prefill blocked without it. We ship a file-edit patch. | `patch_tolist_cudagraph.py` runs in `setup.sh`. Drop when upstream fixes the sync. |
 | [#40849](https://github.com/vllm-project/vllm/pull/40849) — MTP draft online-quant propagation | 🟡 Open / Genesis backport active | Closes Cliff 1 on FP8+MTP path (`tools-text.yml`). | Genesis PN8 backport: `GENESIS_ENABLE_PN8_MTP_DRAFT_ONLINE_QUANT=1`. |
@@ -92,6 +93,15 @@ See the platform-specific tables below for the rows these reference.
 | **P103 setattr lost on `exec vllm serve`** (we filed in noonghunna/club-3090#19) | ✅ Closed in v7.69 | v7.68 P103's `setattr` ran in entrypoint shell but was lost on `exec vllm serve` worker spawn (process image replaced). v7.69 ships chunk.py self-install hook appended to end-of-file — survives any startup mechanism. | n/a — fixed in v7.69. |
 | **PN32 v1 chunked at wrong level** (we filed in noonghunna/club-3090#19) | ✅ Closed in v7.69 (PN32 v2) | PN32 v1 chunked outer-level inputs but inner FLA call still got full-prompt cu_seqlens, allocating full h tensor regardless. v7.69 PN32 v2 patches `_forward_core` directly + threads `last_recurrent_state` between chunks. | n/a — fixed in v7.69. |
 | [#18](https://github.com/Sandermage/genesis-vllm-patches/issues/18) — P103 cu_seqlens=[0,T] single-seq case is bypassed (we filed 2026-05-02 PM) | 🟡 Open / v7.70 proposal | P103's gate currently bypasses chunking for ANY non-None cu_seqlens, but `cu_seqlens.shape[0] == 2` (single sequence boundary) is semantically dense B=1, not multi-seq varlen. Fix admits the chunked path on real serving. Diagnosis: ChatGPT/Codex CLI. Cross-rig observation: P103 chunked path never engages on real config because vLLM's outer chunked-prefill caps T at `max_num_batched_tokens=4128` (well below `_MAX_T=16384`), so the gate-fix is semantically correct but doesn't independently close 60K Cliff 2 on TP=1+24GB. | n/a yet — gate fix queued for v7.70. Real Cliff 2 closure on this config comes from [vllm#35975 backport](https://github.com/vllm-project/vllm/pull/35975) + mem-util 0.93 (see vLLM section above + [`docs/CLIFFS.md`](CLIFFS.md)). |
+
+---
+
+## FlashMLA SM86 forks
+
+| Issue / PR | Status | Why it matters | Workaround |
+|---|---|---|---|
+| [AppMana/forks-flash-mla-int@7f41a5b](https://github.com/AppMana/forks-flash-mla-int/commit/7f41a5baa5cf57bfbce06458794b4b05737a162a) — SM80/SM86 sparse MLA | ⚫ Fork dependency | Provides the native Ampere FP8 DS-MLA decode base used by GGUF-TP. Packaged SM86 code alone does not prove dispatch or performance. | Pinned through the validated local runtime image and acceptance evidence. |
+| [Whamp/forks-flash-mla-int@2921831](https://github.com/Whamp/forks-flash-mla-int/commit/2921831) — FP4 plus DCP partial decode/narrow prefill | ⚫ Local fork | Adds the DCP partial output/LSE operator and preserves FP8/INT8/FP4 paths. The standalone branch is performance-neutral on the DCP=1 production path but is required by DCP. | Wheel SHA-256 `8de43339487ebbfbb06afc95a4bf48f306e755830500aaa1e3bdbcc635d3070c`; 59 GPU tests plus memcheck/racecheck pass. See `.research/gguf-tp-engine/FLASH-MLA-DCP-AB.md`. |
 
 ---
 
