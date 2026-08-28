@@ -1,0 +1,13 @@
+# Thin native Unsloth IQ1 overlay over the verified FP4-capable GGUF-TP image.
+# Build only through build-iq1-image.sh, which verifies IQ1-MANIFEST.json.
+ARG BASE_IMAGE=club-3090/deepseek-v4-gguf-tp:fp4-633815f6
+FROM ${BASE_IMAGE}
+
+COPY root/ /workspace/vllm/
+COPY _C_stable_libtorch.abi3.so /workspace/vllm/vllm/_C_stable_libtorch.abi3.so
+
+LABEL org.opencontainers.image.revision="e34fb09c712733845f913381e6a284a9c4d5d2a8" \
+      club3090.vllm.tree="411191a433131f3998c0b3316ff8eeaa4e896fdd" \
+      club3090.base.image="sha256:eb94d5049bf4d8d55c335ac1d2445382a811b7312d28e3e73088011a8103e181" \
+      club3090.stable_extension.sha256="81d459f2d0560fae37ad8e545876dc34c27b38e5b7608b9d73f1dd2bc132ebb8" \
+      club3090.gguf.formats="IQ1_S,IQ1_M,IQ3_XXS,MXFP4,Q4_K,Q5_K,Q6_K"
